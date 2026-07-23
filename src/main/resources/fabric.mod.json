@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "name": "Meteor Seed Explorer",
+  "id": "meteor-seed-explorer",
+  "version": "${version}",
+  "description": "A seed mapping and exploration addon for Meteor Client.",
+  "authors": [
+    "SeedExplorer Team"
+  ],
+  "contact": {
+    "sources": "https://github.com/SeedExplorer/meteor-seed-explorer"
+  },
+  "license": "GPL-3.0",
+  "environment": "client",
+  "entrypoints": {
+    "meteor": [
+      "me.seedexplorer.addon.SeedExplorerAddon"
+    ]
+  },
+  "mixins": [
+    "meteor-seed-explorer.mixins.json"
+  ],
+  "custom": {
+    "meteor-client:color": "45,180,90",
+    "meteor-client:commit": ""
+  },
+  "depends": {
+    "java": ">=${jdk_version}",
+    "minecraft": "${minecraft_version}",
+    "fabricloader": ">=${loader_version}",
+    "meteor-client": "*"
+  }
+}

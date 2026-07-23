@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "package": "me.seedexplorer.addon.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "ChatScreenPredictedMineMixin",
+    "ClientPacketListenerPredictedMineMixin",
+    "ContainerScreenOverlayMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
