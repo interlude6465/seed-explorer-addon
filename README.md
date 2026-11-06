@@ -24,6 +24,37 @@ build tree and the Gradle cache — no Fabric Loom plugin required.
 
 ---
 
+## Experimental Terrain Sampler
+
+The Horizon-inspired far-terrain sampler is isolated from the default generator
+and has no UI control. To try it in a Minecraft launch, add
+`-Dseedexplorer.terrainMode=horizon` to the JVM arguments. It only replaces
+Overworld surface samples at LOD steps 4, 8, and 16; close terrain, other
+dimensions, caves, and the default mode continue to use the existing path. The
+experiment approximates biome surface materials and is not a vanilla-parity
+mode. Remove the JVM argument to return to the normal generator.
+
+The headless comparison probe is:
+
+```powershell
+.\gradlew horizonTerrainSamplerProbe -Pseed=42 -PchunkX=-2 -PchunkZ=-2 -PchunksPerSide=4 -Pstep=8 --console=plain
+```
+
+## Natural Feature Search Prototype
+
+The standalone search code is not connected to the add-on UI. Its first query
+looks for a roughly circular elevated ridge around a lower center in a river
+biome. Search a square around an origin with:
+
+```powershell
+.\gradlew naturalFeatureSearchProbe -Pseed=42 -PoriginX=0 -PoriginZ=0 -PradiusBlocks=512 --console=plain
+```
+
+To require a deep nearby cave as well, add
+`-PrequireDeepCave=true -PminimumCaveDepth=80`. To scan a seed interval, add
+`-PlastSeed=1000`. The query and scoring are in `NaturalFeatureFinder`; cave
+checks use carved vanilla chunks and are an experimental refinement.
+
 ## Verification Tasks
 
 All tasks are registered under the `verification` Gradle group.

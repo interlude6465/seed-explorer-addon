@@ -12,6 +12,7 @@ import me.seedexplorer.addon.structures.StructureType;
 import me.seedexplorer.addon.waypoints.SeedWaypoint;
 import me.seedexplorer.addon.worldgen.WorldgenEngine;
 import me.seedexplorer.addon.worldgen.GeneratedTerrainHeightmap;
+import me.seedexplorer.addon.worldgen.HorizonTerrainSampler;
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
@@ -2822,7 +2823,8 @@ public final class Terrain3DRenderer {
                     // The expanding background rings eventually leave the in-memory
                     // window. Persist them anyway so moving the free camera there can
                     // reuse the completed prediction instead of regenerating it.
-                    if (generated.observedSnapshot == null) {
+                    if (generated.observedSnapshot == null
+                        && generated.accuracy != TerrainAccuracy.EXPERIMENTAL_HORIZON) {
                         diskCache.storeAsync(streamWorldIdentity, seed, dimension,
                             toCachedChunk(generated));
                     }
@@ -3203,6 +3205,18 @@ public final class Terrain3DRenderer {
             return generateObservedChunkData(snapshot);
         }
         if (snapshot != null) rejectObservedSnapshot(seed, dimension, snapshot);
+
+        // Keep the Horizon-style experiment isolated from the normal persistent
+        // cache: the approximate material and density profile must never be
+        // restored later as if it were a vanilla surface.
+        if (dimension == 0 && generatedStep >= 4
+            && TerrainGenerationMode.usesHorizonSampling()) {
+            HorizonTerrainSampler.SampledChunk sampled = HorizonTerrainSampler.sampleChunk(
+                seed, cx, cz, generatedStep);
+            return new ChunkData(cx, cz, sampled.heights(), sampled.states(),
+                sampled.fluidHeights(), sampled.fluidStates(), null, 0L,
+                generatedStep, TerrainAccuracy.EXPERIMENTAL_HORIZON, List.of(), true);
+        }
 
         var cached = diskCache.load(streamWorldIdentity, seed, dimension, cx, cz, generatedStep);
         if (cached.isPresent() && (generatedStep != 1 || cached.get().exactSurface())) {
@@ -5862,6 +5876,8 @@ public final class Terrain3DRenderer {
         UNAVAILABLE,
         /** Base noise/aquifer density only; surface rules, carvers, and features are not claimed. */
         PREDICTED_BASE_DENSITY,
+        /** Experimental coarse density sampling with approximate biome materials. */
+        EXPERIMENTAL_HORIZON,
         /** Vanilla noise, surface rules and carvers; decoration features are not claimed. */
         PREDICTED_VANILLA_SURFACE,
         /** Captured directly from the client's loaded chunk snapshot. */

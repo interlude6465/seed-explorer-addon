@@ -683,6 +683,38 @@ tasks {
         classpath = sourceSets.main.get().runtimeClasspath + sourceSets.main.get().compileClasspath
     }
 
+    register<JavaExec>("horizonTerrainSamplerProbe") {
+        group = "verification"
+        description = "Benchmarks experimental Horizon-style density sampling against base columns."
+        dependsOn(classes)
+        mainClass.set("me.seedexplorer.addon.tools.HorizonTerrainSamplerProbe")
+        classpath = sourceSets.main.get().runtimeClasspath + sourceSets.main.get().compileClasspath
+        args(
+            providers.gradleProperty("seed").orElse("42").get(),
+            providers.gradleProperty("chunkX").orElse("-2").get(),
+            providers.gradleProperty("chunkZ").orElse("-2").get(),
+            providers.gradleProperty("chunksPerSide").orElse("4").get(),
+            providers.gradleProperty("step").orElse("8").get()
+        )
+    }
+
+    register<JavaExec>("naturalFeatureSearchProbe") {
+        group = "verification"
+        description = "Searches one seed region for a circular ridge around a river-biome center."
+        dependsOn(classes)
+        mainClass.set("me.seedexplorer.addon.tools.NaturalFeatureSearchProbe")
+        classpath = sourceSets.main.get().runtimeClasspath + sourceSets.main.get().compileClasspath
+        args(
+            providers.gradleProperty("seed").orElse("0").get(),
+            providers.gradleProperty("originX").orElse("0").get(),
+            providers.gradleProperty("originZ").orElse("0").get(),
+            providers.gradleProperty("radiusBlocks").orElse("512").get(),
+            providers.gradleProperty("lastSeed").orElse("").get(),
+            providers.gradleProperty("requireDeepCave").orElse("false").get(),
+            providers.gradleProperty("minimumCaveDepth").orElse("80").get()
+        )
+    }
+
     register<JavaExec>("endCityShipPredictionSmoke") {
         group = "verification"
         description = "Checks End City predictions distinguish ship and no-ship variants."
