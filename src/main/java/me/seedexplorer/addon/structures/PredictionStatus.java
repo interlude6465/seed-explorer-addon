@@ -25,7 +25,7 @@ public final class PredictionStatus {
             live("Ancient Cities"),
             live("Strongholds"),
             live("Mineshafts"),
-            planned("Dungeons", "monster rooms are carver/feature attempts, not structure sets"),
+            live("Dungeons"),
             live("Ocean Monuments"),
             live("Shipwrecks"),
             live("Ocean Ruins"),

@@ -15,6 +15,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 
+import java.nio.file.Files;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -26,6 +27,7 @@ public final class LiveChunkRecorder {
 
     private final Map<ChunkKey, LiveChunkSnapshot> snapshots = new ConcurrentHashMap<>();
     private final Set<ChunkKey> loading = ConcurrentHashMap.newKeySet();
+    private final Set<ChunkKey> rejectedSnapshots = ConcurrentHashMap.newKeySet();
     private final Set<ChunkKey> saving = ConcurrentHashMap.newKeySet();
     private final Set<ChunkKey> dirtyWhileSaving = ConcurrentHashMap.newKeySet();
 
@@ -45,14 +47,21 @@ public final class LiveChunkRecorder {
         ChunkKey key = new ChunkKey(profile, dimension, chunkX, chunkZ);
         LiveChunkSnapshot snapshot = snapshots.get(key);
         if (snapshot != null) return snapshot;
+        if (rejectedSnapshots.contains(key)) return null;
 
         if (loading.add(key)) {
             WorkerManager.get().submit(() -> {
                 try {
-                    LiveChunkSnapshot loaded = LiveChunkStore.get().load(profile, dimension, chunkX, chunkZ);
-                    if (loaded != null) {
+                    LiveChunkStore store = LiveChunkStore.get();
+                    boolean storedFileExists = Files.isRegularFile(
+                        store.chunkPath(profile, dimension, chunkX, chunkZ));
+                    LiveChunkSnapshot loaded = store.load(profile, dimension, chunkX, chunkZ);
+                    if (loaded != null && loaded.usableForTerrainOverride()) {
+                        rejectedSnapshots.remove(key);
                         snapshots.put(key, loaded);
                         pruneSnapshotCache();
+                    } else if (storedFileExists) {
+                        rejectedSnapshots.add(key);
                     }
                 } finally {
                     loading.remove(key);
@@ -60,6 +69,18 @@ public final class LiveChunkRecorder {
             });
         }
         return null;
+    }
+
+    /** Returns only an already captured/loaded snapshot without starting disk IO. */
+    public LiveChunkSnapshot peekSnapshot(int dimension, int chunkX, int chunkZ) {
+        String profile = SeedManager.get().getActiveProfileKey();
+        return snapshots.get(new ChunkKey(profile, dimension, chunkX, chunkZ));
+    }
+
+    /** Reports a stored snapshot that was present but unsafe as a terrain override. */
+    public boolean isStoredSnapshotRejected(int dimension, int chunkX, int chunkZ) {
+        String profile = SeedManager.get().getActiveProfileKey();
+        return rejectedSnapshots.contains(new ChunkKey(profile, dimension, chunkX, chunkZ));
     }
 
     @EventHandler
@@ -71,6 +92,11 @@ public final class LiveChunkRecorder {
         ChunkKey key = new ChunkKey(profile, dimension, chunk.getPos().x(), chunk.getPos().z());
 
         LiveChunkSnapshot snapshot = captureChunk(chunk, dimension);
+        if (!snapshot.usableForTerrainOverride()) {
+            rejectedSnapshots.add(key);
+            return;
+        }
+        rejectedSnapshots.remove(key);
         snapshots.put(key, snapshot);
         pruneSnapshotCache();
         queueSave(key, snapshot);
@@ -87,8 +113,11 @@ public final class LiveChunkRecorder {
         String profile = SeedManager.get().getActiveProfileKey();
         ChunkKey key = new ChunkKey(profile, dimension, chunkX, chunkZ);
 
-        LiveChunkSnapshot snapshot = snapshots.computeIfAbsent(key,
-            ignored -> new LiveChunkSnapshot(dimension, chunkX, chunkZ, mc.level.getMinY(), mc.level.getMaxY()));
+        // A block update is not a chunk snapshot. Creating a new snapshot here
+        // persisted one or two blocks as if they represented the entire chunk,
+        // which later erased the valid predicted surface around the player.
+        LiveChunkSnapshot snapshot = snapshots.get(key);
+        if (snapshot == null) return;
         snapshot.setBlock(event.pos.getX() & 15, event.pos.getY(), event.pos.getZ() & 15, event.newState);
         pruneSnapshotCache();
         queueSave(key, snapshot);
@@ -98,7 +127,9 @@ public final class LiveChunkRecorder {
     private void onGameLeft(GameLeftEvent event) {
         snapshots.clear();
         loading.clear();
+        rejectedSnapshots.clear();
         saving.clear();
+        dirtyWhileSaving.clear();
     }
 
     private LiveChunkSnapshot captureChunk(LevelChunk chunk, int dimension) {

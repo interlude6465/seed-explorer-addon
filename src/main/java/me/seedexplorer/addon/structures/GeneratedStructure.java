@@ -10,7 +10,9 @@ package me.seedexplorer.addon.structures;
  * Contains position, type, and whether it has been verified.
  */
 public class GeneratedStructure {
-    public final int x, z;
+    public static final int UNKNOWN_Y = Integer.MIN_VALUE;
+
+    public final int x, y, z;
     public final int startChunkX, startChunkZ;
     public final StructureType type;
     public final String variant;
@@ -31,7 +33,13 @@ public class GeneratedStructure {
 
     public GeneratedStructure(int x, int z, int startChunkX, int startChunkZ,
                               StructureType type, String variant, boolean hasShip) {
+        this(x, UNKNOWN_Y, z, startChunkX, startChunkZ, type, variant, hasShip);
+    }
+
+    public GeneratedStructure(int x, int y, int z, int startChunkX, int startChunkZ,
+                              StructureType type, String variant, boolean hasShip) {
         this.x = x;
+        this.y = y;
         this.z = z;
         this.startChunkX = startChunkX;
         this.startChunkZ = startChunkZ;
@@ -42,11 +50,15 @@ public class GeneratedStructure {
     }
 
     public String getCoordsString() {
-        return x + ", " + z;
+        return y == UNKNOWN_Y ? x + ", " + z : x + ", " + y + ", " + z;
     }
 
     public String displayName() {
         if (type == StructureType.END_CITY && hasShip) return type.displayName + " (Ship)";
+        if (type == StructureType.DUNGEON && variant.startsWith("minecraft:")) {
+            String mob = variant.substring("minecraft:".length()).replace('_', ' ');
+            return type.displayName + " (" + Character.toUpperCase(mob.charAt(0)) + mob.substring(1) + " Spawner)";
+        }
         if (variant.startsWith("minecraft:")) return type.displayName;
         if (!variant.isBlank()) return type.displayName + " (" + variant + ")";
         return type.displayName;

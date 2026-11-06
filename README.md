@@ -4,8 +4,12 @@ Offline Minecraft loot prediction for Meteor Client. Simulates vanilla worldgen
 deterministically from a world seed to predict chest contents in structures
 **without** loading any chunks or connecting to a server.
 
-**Currently validated:** desert pyramids (4 seeds, 16/16 chests, zero differences
-against Paper 26.1.2-74). Stronghold loot-seed parity is in advanced research.
+**Currently validated (strict, oracle-pinned):** desert pyramids (4 oracles,
+16/16 chests), strongholds, shipwrecks, pillager outposts, jungle temples,
+buried treasure, bastion remnants, and dungeons — all with zero differences
+against Paper 26.1.2-74. Mineshaft loot is supported but non-strict (minecart
+entities can move). Other structure types stay gated until they pass a strict
+oracle comparison.
 
 ---
 
@@ -26,7 +30,7 @@ All tasks are registered under the `verification` Gradle group.
 
 | Task | Class | What it checks |
 |---|---|---|
-| `predictionRegressionSuite` | `PredictionRegressionSuite` | **Fail-fast gate.** Runs all accepted oracles (4 desert + 1 stronghold), checks vanilla terrain height SHA-256, carver-replaceable tag count (52), critical carved height — exits 2 on any mismatch. |
+| `predictionRegressionSuite` | `PredictionRegressionSuite` | **Fail-fast gate.** Runs all accepted oracles (4 desert, stronghold, shipwreck, outpost, buried treasure, jungle temple, bastion), the mineshaft saved-entity cart pin, vanilla terrain height SHA-256, carver-replaceable tag count (52), and critical carved height — exits 2 on any mismatch. |
 | `validateLootProbeOracle` | `LootProbeOracleValidator` | Diffs a single desert-pyramid prediction against a LootProbe JSON capture (positions, loot-table IDs, seeds, aggregated items). |
 | `offlineLootSimulation` | `LootSimulationReport` | Runs the desert-pyramid simulator for a given seed/chunk and prints every chest, loot seed, and item. |
 | `simulateStronghold` | `SimulateStronghold` | Auto-discovers stronghold positions for a seed and prints piece/chest layout. |
@@ -48,35 +52,102 @@ Run the full gate with:
 .\gradlew predictionRegressionSuite --console=plain
 ```
 
+## In-Game Structure Audit
+
+With the seed set and cheats/commands available, run this in a loaded world:
+
+```text
+.seed-explorer test-tp audit-all 3
+```
+
+This visits one predicted instance of every loot-capable structure variant in
+the Overworld, Nether, and End. It opens every predicted chest/container,
+compares the generated inventory, force-loads each structure piece for a final
+container scan, and reports both missing predicted containers and unexpected
+containers. `all-structures` is an equivalent command name. Use
+`.seed-explorer test-tp status` while running, `.seed-explorer test-tp stop` to
+cancel, and `.seed-explorer test-tp last` to re-save the latest report.
+
+The detailed report is written to a timestamped file such as
+`seed-explorer-reports/loot-tp-complete-20260808-123456.txt` (or
+`loot-tp-stopped-<timestamp>.txt`), and per-chest prediction/open/scan events are
+appended to `seed-explorer-reports/prediction-debug.log` for diagnosing and
+improving prediction code.
+
+## Enchanting Table Queries
+
+When an enchanting table screen is open, Seed Explorer adds a prediction panel
+beside the vanilla interface. Place an item in the table slot and the panel
+will crack the full XP seed from the server's masked seed plus the vanilla
+cost/clue data. The first observation scans the 2^20 possible seeds; replace
+the item with another enchantable item to add another observation and narrow
+the candidates until the seed resolves. The panel lists every compatible
+table enchantment, the exact current offers, the recovered seed, and the
+detected bookshelf count. While the crack is running, offers are deliberately
+withheld instead of showing unverified guesses. Click an enchantment to select
+it, then use the `-` and `+` controls to choose its level; a green `MATCH`
+marks an offer containing all selected enchantments at those levels.
+
+With one or more targets selected, the panel searches every bookshelf count
+from zero through the table's supported bookshelf power and tells you which
+bookshelf count and offer slot will produce the target for the current seed.
+After two consecutive real enchantments, Seed Explorer recovers the player's
+Java RNG state. It can then search future states in action order and report the
+minimal sequence: drop N items, perform one dummy enchantment, set the required
+bookshelf power, and click the indicated offer. Each vanilla item drop consumes
+four player-RNG calls, so drops must be made normally and no other random player
+actions should be performed while following the plan.
+Scroll the list when the item has more compatible enchantments. The panel is
+read-only and does not click offers, throw items, or place bookshelves for you.
+
+Open an enchanting table, hold the item to inspect in the main hand, then run:
+
+```text
+.seed-explorer enchant find sharpness 2, unbreaking 3
+```
+
+The command reports the three vanilla offers and only marks a match when the
+requested enchantment levels are exact. Name-only requests (for example,
+`.seed-explorer enchant find sharpness`) continue to match any level. Inventory
+slots can be queried with `.seed-explorer enchant item <slot> <enchantments>`.
+
 ---
 
 ## Project Structure
 
 ```
 src/main/java/me/seedexplorer/addon/
-  loot/          Core prediction engine: structure simulation, loot-table
-                 loading, deterministic item generation, and the product-facing
-                 ChestLootPredictor API (desert pyramid + stronghold only).
-  worldgen/      Offline worldgen: noise-based terrain heightmap, biome source,
-                 vanilla registry access, structure-start generation.
-  structures/    Structure-type enum (StructureType), prediction status,
-                 in-memory structure cache.
-  ore/           Ore-vein prediction (based on density functions).
-  seed/          Seed manager, seed cracking from world spawn chunks.
-  cache/         On-disk seed cache for repeated predictions.
-  map/           Minimap biome generation and tile management.
-  render/        Overlays (minimap, ore, structure markers), 3D viewer
-                 rendering, UI icons and structure textures.
-  gui/           Minecraft screens: seed-explorer main screen, 3D structure
-                 viewer with orbit/zoom camera and sidebar loot panel.
-  commands/      In-game chat commands (/seed, /locate, /loot, etc.).
-  events/        Event bus types for seed-analysis lifecycle.
-  mixin/         Client-side mixins for predicted-mine chat integration.
-  modules/       Meteor Client module registration.
-  tools/         Headless verification tools (all Gradle task entry points).
-  waypoints/     Structure waypoints tied to a seed.
-  workers/       Background chunk-scan and seed-analysis workers.
-  utils/         Shared utility helpers.
+   loot/          Core prediction engine: structure simulation, loot-table
+                  loading, deterministic item generation, and the product-facing
+                  ChestLootPredictor API.
+   worldgen/      Offline worldgen: noise-based terrain heightmap, biome source,
+                  vanilla registry access, structure-start generation.
+   structures/    Structure-type enum (StructureType), prediction status,
+                  in-memory structure cache, dungeon predictor.
+   enchant/       Enchanting-table XP-seed cracking, player RNG tracking,
+                  offer prediction and target planning.
+   ore/           Ore-vein prediction (based on density functions).
+   seed/          Seed manager, seed cracking from world spawn chunks.
+   search/        Loot search term parsing for item/enchanted-book queries.
+   preview/       Offline structure preview extraction from vanilla templates.
+   live/          Recording of observed chunk snapshots for comparison with
+                  predictions.
+   cache/         On-disk seed cache for repeated predictions.
+   map/           Minimap biome generation and tile management.
+   render/        Overlays (minimap, ore, structure markers), 3D terrain/viewer
+                  rendering, streaming policies, UI icons and structure textures.
+   gui/           Minecraft screens: seed-explorer main screen, 3D structure
+                  viewer with orbit/zoom camera and sidebar loot panel.
+   commands/      In-game chat commands (/seed, /locate, /loot, etc.).
+   events/        Event bus types for seed-analysis lifecycle.
+   mixin/         Client-side mixins (enchanting seed sync/RNG, predicted-mine
+                  chat integration, container overlays).
+   modules/       Meteor Client module registration.
+   tools/         Headless verification tools (all Gradle task entry points).
+   waypoints/     Structure waypoints tied to a seed.
+   workers/       Background chunk-scan and seed-analysis workers.
+   debug/         Prediction debug logging.
+   utils/         Shared utility helpers.
 ```
 
 **Validation evidence** lives in `validation/oracles/` (Paper-captured JSON

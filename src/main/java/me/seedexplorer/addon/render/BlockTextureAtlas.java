@@ -5,7 +5,16 @@ import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.textures.TextureFormat;
 import meteordevelopment.meteorclient.gui.renderer.packer.TextureRegion;
 import meteordevelopment.meteorclient.renderer.Texture;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.block.dispatch.BlockStateModel;
+import net.minecraft.client.renderer.block.dispatch.BlockStateModelPart;
+import net.minecraft.client.resources.model.geometry.BakedQuad;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.stb.STBImage;
 import org.lwjgl.system.MemoryStack;
@@ -13,6 +22,8 @@ import org.lwjgl.system.MemoryUtil;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
 import java.nio.Buffer;
 import java.nio.ByteBuffer;
@@ -21,6 +32,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.Set;
 
 /**
  * Stitches the Minecraft block textures the 3D terrain map needs into a single
@@ -29,9 +42,9 @@ import java.util.Map;
  * <p>Textures are read from the addon's packaged resources
  * ({@code /assets/meteor-seed-explorer/textures/blocks/*.png}), copied verbatim
  * from a local 26.1.2 install so the map shows real block textures without
- * depending on the live block-texture atlas. Only the small set of surface
- * blocks {@code Terrain3DRenderer} queries is actually stitched; every other
- * block resolves to a neutral stone fallback.</p>
+ * depending on the live block-texture atlas. The generated texture index is
+ * stitched in full; blocks whose models do not map to a standalone texture
+ * still resolve to a neutral stone fallback.</p>
  */
 public final class BlockTextureAtlas {
     private static final String ROOT = "/assets/meteor-seed-explorer/textures/blocks/";
@@ -45,6 +58,8 @@ public final class BlockTextureAtlas {
     private final int loadedCount;
     private final int requestedCount;
     private final String status;
+    private final Map<String, TextureRegion> modelRegions = new ConcurrentHashMap<>();
+    private final Set<String> unresolvedModelRegions = ConcurrentHashMap.newKeySet();
 
     private BlockTextureAtlas() {
         List<LoadedImage> images = new ArrayList<>();
@@ -75,7 +90,7 @@ public final class BlockTextureAtlas {
             this.texture = pack(images);
             this.loadedCount = regions.size();
             int missing = Math.max(0, requestedCount - loadedCount);
-            this.status = loadedCount + "/" + requestedCount + " packaged block textures stitched"
+            this.status = loadedCount + "/" + requestedCount + " official block textures stitched"
                 + (missing == 0 ? "" : " (" + missing + " missing)");
         }
     }
@@ -114,6 +129,8 @@ public final class BlockTextureAtlas {
         if (region != null) return region;
         TextureRegion byId = regions.get(blockIdFileName(state));
         if (byId != null) return byId;
+        TextureRegion baked = modelRegion(state, Direction.UP);
+        if (baked != null) return baked;
         return fallback;
     }
 
@@ -121,7 +138,8 @@ public final class BlockTextureAtlas {
     public boolean usesFallback(BlockState state) {
         String fileName = topFaceFileName(state);
         if (regions.containsKey(fileName)) return false;
-        return !regions.containsKey(blockIdFileName(state));
+        if (regions.containsKey(blockIdFileName(state))) return false;
+        return modelRegion(state, Direction.UP) == null;
     }
 
     /** The UV region for a block's side face, or the top/fallback texture if unknown. */
@@ -129,14 +147,71 @@ public final class BlockTextureAtlas {
         String fileName = sideFaceFileName(state);
         TextureRegion region = regions.get(fileName);
         if (region != null) return region;
-        return region(state);
+        TextureRegion baked = modelRegion(state, Direction.NORTH);
+        return baked != null ? baked : region(state);
+    }
+
+    /** Direct access to a stitched sprite, used for vanilla's grass side overlay. */
+    public TextureRegion regionFile(String fileName) {
+        if (fileName == null || fileName.isBlank()) return fallback;
+        TextureRegion region = regions.get(fileName.endsWith(".png") ? fileName : fileName + ".png");
+        return region != null ? region : fallback;
+    }
+
+    public boolean hasFile(String fileName) {
+        return fileName != null && regions.containsKey(fileName.endsWith(".png") ? fileName : fileName + ".png");
+    }
+
+    /** Resolves a vanilla baked-model sprite (minecraft:block/foo) into this
+     * atlas. Model geometry can therefore use the official sprite selected by
+     * Minecraft instead of guessing a top/side filename. */
+    public TextureRegion region(Identifier spriteId) {
+        if (spriteId == null) return fallback;
+        String path = spriteId.getPath();
+        if (path.startsWith("block/")) path = path.substring("block/".length());
+        TextureRegion region = regions.get(path.endsWith(".png") ? path : path + ".png");
+        return region != null ? region : fallback;
     }
 
     /** True when a side face has no direct side/top texture and falls through to fallback. */
     public boolean sideUsesFallback(BlockState state) {
         String fileName = sideFaceFileName(state);
         if (regions.containsKey(fileName)) return false;
-        return usesFallback(state);
+        return modelRegion(state, Direction.NORTH) == null && usesFallback(state);
+    }
+
+    /** Uses the same baked state model Minecraft selected for this block. */
+    private TextureRegion modelRegion(BlockState state, Direction face) {
+        if (state == null) return null;
+        String key = blockId(state) + "|" + state + "|" + face;
+        if (modelRegions.containsKey(key)) return modelRegions.get(key);
+        if (unresolvedModelRegions.contains(key)) return null;
+        try {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.getModelManager() == null) return null;
+            BlockStateModel model = mc.getModelManager().getBlockStateModelSet().get(state);
+            if (model == null) return null;
+            List<BlockStateModelPart> parts = new ArrayList<>();
+            model.collectParts(RandomSource.create(BlockPos.asLong(0, 0, 0)), parts);
+            for (BlockStateModelPart part : parts) {
+                List<BakedQuad> quads = part.getQuads(face);
+                for (BakedQuad quad : quads) {
+                    if (quad.materialInfo() == null || quad.materialInfo().sprite() == null) continue;
+                    var contents = quad.materialInfo().sprite().contents();
+                    if (contents == null || contents.name() == null) continue;
+                    TextureRegion resolved = region(contents.name());
+                    if (resolved != null && resolved != fallback) {
+                        modelRegions.put(key, resolved);
+                        return resolved;
+                    }
+                }
+            }
+        } catch (Throwable ignored) {
+            // The atlas singleton is rebuilt with the client, so a miss is stable
+            // for this session and must not become a per-block hot-path retry.
+        }
+        unresolvedModelRegions.add(key);
+        return null;
     }
 
     /** Resolves the top-face texture filename for a block, applying aliases. */
@@ -155,9 +230,18 @@ public final class BlockTextureAtlas {
 
     private static String sideFaceFileName(BlockState state) {
         String id = blockId(state);
+        if (id.equals("grass_block") && state.hasProperty(BlockStateProperties.SNOWY)
+            && state.getValue(BlockStateProperties.SNOWY)) {
+            return "grass_block_snow.png";
+        }
         String alias = SIDE_FACE_ALIASES.get(id);
         if (alias != null) return alias + ".png";
         return id + ".png";
+    }
+
+    /** The grass model uses a dirt/grass base plus a separate tinted overlay. */
+    public TextureRegion grassSideBase() {
+        return regions.getOrDefault("grass_block_side.png", fallback);
     }
 
     private static String blockId(BlockState state) {
@@ -246,12 +330,27 @@ public final class BlockTextureAtlas {
     /** All packaged block textures, with stone first as the fallback texture. */
     private static List<String> textureFiles() {
         List<String> indexed = indexedTextureFiles();
+        // The bundled index is intentionally conservative. Merge every sprite
+        // from the installed 26.1.2 block directory so new or uncommon blocks
+        // never silently become the stone fallback.
+        List<String> official = officialTextureFileNames();
+        if (!official.isEmpty()) {
+            java.util.LinkedHashSet<String> merged = new java.util.LinkedHashSet<>(indexed);
+            merged.addAll(official);
+            if (!merged.contains("stone.png")) merged.add("stone.png");
+            return List.copyOf(merged);
+        }
         if (!indexed.isEmpty()) return indexed;
 
         List<String> files = new ArrayList<>();
         files.add("stone.png");
         for (String name : new String[] {
-            "grass_block_top", "sand", "red_sand", "dirt", "coarse_dirt", "gravel",
+            // Grass is a three-sprite model in vanilla: the dirt/grass side
+            // base and its biome-tinted overlay are separate files. Keeping
+            // only grass_block_top here silently fell back to the green top
+            // sprite for every side face when no generated index was bundled.
+            "grass_block_top", "grass_block_side", "grass_block_side_overlay",
+            "grass_block_snow", "sand", "red_sand", "dirt", "coarse_dirt", "gravel",
             "podzol_top", "mycelium_top", "dirt_path_top",
             "andesite", "diorite", "granite", "cobblestone", "mossy_cobblestone",
             "oak_planks", "birch_planks", "spruce_planks", "mud",
@@ -266,6 +365,24 @@ public final class BlockTextureAtlas {
             if (!name.equals("stone")) files.add(name + ".png");
         }
         return files;
+    }
+
+    private static List<String> officialTextureFileNames() {
+        try {
+            String userHome = System.getProperty("user.home", "");
+            Path dir = Path.of(userHome, "AppData", "Roaming", ".minecraft", "versions",
+                "26.1.2", "26.1.2", "assets", "minecraft", "textures", "block");
+            if (!Files.isDirectory(dir)) return List.of();
+            try (var stream = Files.list(dir)) {
+                return stream.filter(Files::isRegularFile)
+                    .map(path -> path.getFileName().toString())
+                    .filter(name -> name.endsWith(".png"))
+                    .sorted()
+                    .toList();
+            }
+        } catch (IOException | RuntimeException ignored) {
+            return List.of();
+        }
     }
 
     private static List<String> indexedTextureFiles() {
@@ -286,7 +403,7 @@ public final class BlockTextureAtlas {
     }
 
     private static TextureRegion load(List<LoadedImage> into, String fileName) {
-        try (InputStream in = BlockTextureAtlas.class.getResourceAsStream(ROOT + fileName)) {
+        try (InputStream in = officialTextureStream(fileName)) {
             if (in == null) return null;
             ByteBuffer raw = TextureUtil.readResource(in);
             ((Buffer) raw).rewind();
@@ -305,6 +422,58 @@ public final class BlockTextureAtlas {
             }
         } catch (IOException e) {
             return null;
+        }
+    }
+
+    /**
+     * Prefer the exact vanilla 26.1.2 asset tree when it is present on this
+     * client, while retaining packaged copies for servers/other installations.
+     * This keeps the map on the same PNGs as the live renderer, including future
+     * block additions that are not in the addon's bundled snapshot.
+     */
+    private static InputStream officialTextureStream(String fileName) throws IOException {
+        String gameDir = System.getProperty("user.dir", "");
+        Path external = Path.of(gameDir, "assets", "minecraft", "textures", "block", fileName);
+        if (Files.isRegularFile(external)) return Files.newInputStream(external);
+
+        String userHome = System.getProperty("user.home", "");
+        Path versioned = Path.of(userHome, "AppData", "Roaming", ".minecraft", "versions",
+            "26.1.2", "26.1.2", "assets", "minecraft", "textures", "block", fileName);
+        if (Files.isRegularFile(versioned)) return Files.newInputStream(versioned);
+
+        return BlockTextureAtlas.class.getResourceAsStream(ROOT + fileName);
+    }
+
+    /**
+     * The map stores only the highest surface per column, so transparent leaf
+     * pixels otherwise reveal the clear buffer rather than the ground below. Use
+     * Minecraft's opaque/fast-leaves appearance for the terrain atlas.
+     */
+    private static void makeLeavesOpaque(ByteBuffer image, int width, int height) {
+        long red = 0;
+        long green = 0;
+        long blue = 0;
+        int opaque = 0;
+        int pixels = width * height;
+        for (int pixel = 0; pixel < pixels; pixel++) {
+            int index = pixel * 4;
+            if ((image.get(index + 3) & 0xFF) < 128) continue;
+            red += image.get(index) & 0xFF;
+            green += image.get(index + 1) & 0xFF;
+            blue += image.get(index + 2) & 0xFF;
+            opaque++;
+        }
+        int fillRed = opaque == 0 ? 96 : (int) (red / opaque);
+        int fillGreen = opaque == 0 ? 128 : (int) (green / opaque);
+        int fillBlue = opaque == 0 ? 80 : (int) (blue / opaque);
+        for (int pixel = 0; pixel < pixels; pixel++) {
+            int index = pixel * 4;
+            if ((image.get(index + 3) & 0xFF) < 128) {
+                image.put(index, (byte) fillRed);
+                image.put(index + 1, (byte) fillGreen);
+                image.put(index + 2, (byte) fillBlue);
+            }
+            image.put(index + 3, (byte) 0xFF);
         }
     }
 

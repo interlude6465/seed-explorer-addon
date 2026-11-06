@@ -281,6 +281,12 @@ public final class BroadStructureAudit {
         if (structure.type == StructureType.RUINED_PORTAL) {
             return BuiltinStructures.RUINED_PORTAL_STANDARD;
         }
+        if (structure.type == StructureType.SHIPWRECK) {
+            String biomeId = WorldgenEngine.getBiome(seed, structure.type.dimension, structure.x, 64, structure.z).id();
+            return biomeId.equals("minecraft:beach") || biomeId.equals("minecraft:snowy_beach")
+                ? BuiltinStructures.SHIPWRECK_BEACHED
+                : BuiltinStructures.SHIPWRECK;
+        }
         if (structure.type == StructureType.OCEAN_RUIN) {
             String biomeId = WorldgenEngine.getBiome(seed, structure.type.dimension, structure.x, 64, structure.z).id();
             return biomeId.contains("warm") ? BuiltinStructures.OCEAN_RUIN_WARM : BuiltinStructures.OCEAN_RUIN_COLD;

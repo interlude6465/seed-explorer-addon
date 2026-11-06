@@ -10,10 +10,12 @@ import me.seedexplorer.addon.commands.PredictedMineChatBridge;
 import me.seedexplorer.addon.commands.SeedCommand;
 import me.seedexplorer.addon.commands.SeedExplorerCommand;
 import me.seedexplorer.addon.commands.WaypointCommand;
+import me.seedexplorer.addon.enchant.EnchantingPlayerRng;
 import me.seedexplorer.addon.live.LiveChunkRecorder;
 import me.seedexplorer.addon.loot.PredictedChestOverlay;
 import me.seedexplorer.addon.loot.VanillaLootTables;
 import me.seedexplorer.addon.modules.SeedExplorerModule;
+import me.seedexplorer.addon.modules.SeedExplorerKeybindHandler;
 import me.seedexplorer.addon.seed.SeedManager;
 import meteordevelopment.meteorclient.addons.GithubRepo;
 import meteordevelopment.meteorclient.addons.MeteorAddon;
@@ -28,6 +30,7 @@ public class SeedExplorerAddon extends MeteorAddon {
 
     @Override
     public void onInitialize() {
+        EnchantingPlayerRng.registerEvents();
         // Initialize seed manager
         SeedManager seedManager = new SeedManager();
         Systems.add(seedManager);
@@ -37,7 +40,9 @@ public class SeedExplorerAddon extends MeteorAddon {
         VanillaLootTables.loadAllFromBundled();
 
         // Register modules
-        Modules.get().add(new SeedExplorerModule());
+        SeedExplorerModule seedExplorerModule = new SeedExplorerModule();
+        Modules.get().add(seedExplorerModule);
+        new SeedExplorerKeybindHandler(seedExplorerModule);
 
         // Register commands
         SeedExplorerCommand seedExplorerCommand = new SeedExplorerCommand();

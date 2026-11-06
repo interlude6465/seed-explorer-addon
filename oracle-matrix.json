@@ -1,0 +1,28 @@
+{
+  "minecraftVersion": "26.1.2",
+  "structures": [
+    {"id": "minecraft:village", "dimension": "minecraft:overworld"},
+    {"id": "minecraft:desert_pyramid", "dimension": "minecraft:overworld"},
+    {"id": "minecraft:jungle_pyramid", "dimension": "minecraft:overworld"},
+    {"id": "minecraft:swamp_hut", "dimension": "minecraft:overworld"},
+    {"id": "minecraft:igloo", "dimension": "minecraft:overworld"},
+    {"id": "minecraft:pillager_outpost", "dimension": "minecraft:overworld"},
+    {"id": "minecraft:monument", "dimension": "minecraft:overworld"},
+    {"id": "minecraft:mansion", "dimension": "minecraft:overworld"},
+    {"id": "minecraft:ancient_city", "dimension": "minecraft:overworld"},
+    {"id": "minecraft:trial_chambers", "dimension": "minecraft:overworld"},
+    {"id": "minecraft:trail_ruins", "dimension": "minecraft:overworld"},
+    {"id": "minecraft:stronghold", "dimension": "minecraft:overworld"},
+    {"id": "minecraft:ruined_portal", "dimension": "minecraft:overworld"},
+    {"id": "minecraft:shipwreck", "dimension": "minecraft:overworld"},
+    {"id": "minecraft:ocean_ruin", "dimension": "minecraft:overworld"},
+    {"id": "minecraft:mineshaft", "dimension": "minecraft:overworld"},
+    {"id": "minecraft:buried_treasure", "dimension": "minecraft:overworld"},
+    {"id": "minecraft:fortress", "dimension": "minecraft:the_nether"},
+    {"id": "minecraft:bastion_remnant", "dimension": "minecraft:the_nether"},
+    {"id": "minecraft:ruined_portal", "dimension": "minecraft:the_nether"},
+    {"id": "minecraft:nether_fossil", "dimension": "minecraft:the_nether"},
+    {"id": "minecraft:end_city", "dimension": "minecraft:the_end"},
+    {"id": "minecraft:end_gateway", "dimension": "minecraft:the_end"}
+  ]
+}

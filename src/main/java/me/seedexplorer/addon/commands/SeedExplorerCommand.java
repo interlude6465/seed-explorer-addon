@@ -9,6 +9,8 @@ import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import me.seedexplorer.addon.debug.PredictionDebugLogger;
+import me.seedexplorer.addon.enchant.EnchantingTablePredictor;
+import me.seedexplorer.addon.enchant.EnchantingSeedCracker;
 import me.seedexplorer.addon.loot.ChestLootOutput;
 import me.seedexplorer.addon.loot.ChestLootPredictor;
 import me.seedexplorer.addon.loot.ItemLoot;
@@ -18,8 +20,10 @@ import me.seedexplorer.addon.ore.OrePredictor;
 import me.seedexplorer.addon.ore.OreType;
 import me.seedexplorer.addon.render.BlockTextureAtlas;
 import me.seedexplorer.addon.seed.SeedManager;
+import me.seedexplorer.addon.structures.DungeonPredictor;
 import me.seedexplorer.addon.structures.GeneratedStructure;
 import me.seedexplorer.addon.structures.PredictionStatus;
+import me.seedexplorer.addon.structures.StructureType;
 import me.seedexplorer.addon.workers.WorkerManager;
 import me.seedexplorer.addon.worldgen.PredictedBiome;
 import me.seedexplorer.addon.worldgen.VanillaStructurePredictor;
@@ -39,6 +43,7 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.vehicle.minecart.MinecartChest;
 import net.minecraft.world.Container;
 import net.minecraft.world.RandomizableContainer;
 import net.minecraft.world.item.Item;
@@ -54,8 +59,10 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.entity.EntityTypeTest;
 import net.minecraft.world.level.levelgen.structure.BuiltinStructures;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
@@ -96,10 +103,16 @@ public class SeedExplorerCommand extends Command {
     private static final int TP_LOOT_MAX_OPEN_ATTEMPTS = 3;
     private static final int TP_LOOT_CHAT_INTERVAL_TICKS = 20;
     private static final int TP_LOOT_RETP_INTERVAL_TICKS = 20 * 5;
+    private static final int TP_LOOT_CONTAINER_SCAN_WAIT_TICKS = 20 * 10;
     private static final int TP_LOOT_FULL_MAX_STRUCTURE_PROBES = 24;
     private static final int TP_LOOT_ANCIENT_CITY_SAMPLE_CHESTS = 5;
     private static final int TP_LOOT_END_CITY_SHIP_TARGETS = 2;
     private static final int TP_LOOT_END_CITY_NO_SHIP_TARGETS = 2;
+    private static final int TP_LOOT_DUNGEON_RADIUS_CHUNKS = 4;
+    private static final int TP_LOOT_DUNGEON_TARGETS = 3;
+    /** Prevent a bad prediction run from scanning an entire large End radius. */
+    private static final int TP_LOOT_END_CITY_MAX_ATTEMPTS = 128;
+    private static final long TP_LOOT_BUILD_CHAT_INTERVAL_MS = 1_000L;
 
     private final AtomicInteger minePredictionJobIds = new AtomicInteger();
     private final AtomicInteger tpLootPrepareJobIds = new AtomicInteger();
@@ -138,6 +151,17 @@ public class SeedExplorerCommand extends Command {
     private int tpLootOpenedCount;
     private int tpLootSkipped;
     private int tpLootUnverified;
+    private int tpLootMissingContainers;
+    private int tpLootUnexpectedContainers;
+    private int tpLootMinecartCoordinateMatches;
+    private int tpLootMinecartCoordinateMismatches;
+    private int tpLootMinecartSeedsChecked;
+    private int tpLootMinecartSeedMatches;
+    private final Set<Long> tpLootMissingContainerPositions = new HashSet<>();
+    private final Set<Integer> tpLootMinecartValidatedTargets = new HashSet<>();
+    private TpLootTarget tpLootPendingContainerScan;
+    private Set<Long> tpLootForcedStructureChunks = Set.of();
+    private int tpLootContainerScanWaitTicks;
     private boolean tpLootRunning;
     private volatile boolean tpLootTargetsComplete;
     private volatile boolean tpLootStartRequested;
@@ -150,6 +174,7 @@ public class SeedExplorerCommand extends Command {
     private volatile boolean tpLootPreparing;
     private volatile String tpLootPrepareStatus = "";
     private volatile long tpLootPrepareLastNoticeMs;
+    private volatile long tpLootLastBuildAnnouncementMs;
     private StringBuilder tpLootReport = new StringBuilder();
     private long tpLootStartSeed;
     private String tpLootMode = "";
@@ -194,6 +219,16 @@ public class SeedExplorerCommand extends Command {
             info("Seed Explorer addon loaded. Use sub-commands for specific functionality.");
             return SINGLE_SUCCESS;
         });
+
+        builder.then(literal("open").executes(context -> {
+            if (mc.player == null || mc.level == null) {
+                error("Join a world first.");
+                return SINGLE_SUCCESS;
+            }
+            mc.setScreen(new me.seedexplorer.addon.gui.SeedExplorerScreen(
+                meteordevelopment.meteorclient.gui.GuiThemes.get()));
+            return SINGLE_SUCCESS;
+        }));
 
         builder.then(literal("biome-debug").executes(context -> {
             if (mc.player == null || mc.level == null) {
@@ -383,6 +418,24 @@ public class SeedExplorerCommand extends Command {
             )
         );
 
+        builder.then(literal("enchant")
+            .executes(context -> runEnchantPrediction(""))
+            .then(literal("status")
+                .executes(context -> runEnchantPrediction("")))
+            .then(literal("find")
+                .then(argument("enchantments", StringArgumentType.greedyString())
+                    .executes(context -> runEnchantPrediction(
+                        StringArgumentType.getString(context, "enchantments")))))
+            .then(literal("item")
+                .then(argument("slot", IntegerArgumentType.integer(0, 35))
+                    .executes(context -> runEnchantInventoryPrediction(
+                        IntegerArgumentType.getInteger(context, "slot"), ""))
+                    .then(argument("enchantments", StringArgumentType.greedyString())
+                        .executes(context -> runEnchantInventoryPrediction(
+                            IntegerArgumentType.getInteger(context, "slot"),
+                            StringArgumentType.getString(context, "enchantments"))))))
+        );
+
         builder.then(literal("test-tp")
             .executes(context -> runTeleportLootTest(3, List.of(0, -1, 1), true, true, "full"))
             .then(literal("start")
@@ -415,6 +468,12 @@ public class SeedExplorerCommand extends Command {
                     .executes(context -> runTeleportLootTest(IntegerArgumentType.getInteger(context, "level"), List.of(0, -1, 1), true, true, true, "all-structures"))
                 )
             )
+            .then(literal("audit-all")
+                .executes(context -> runTeleportLootTest(3, List.of(0, -1, 1), true, true, true, "audit-all"))
+                .then(argument("level", IntegerArgumentType.integer(1, 3))
+                    .executes(context -> runTeleportLootTest(IntegerArgumentType.getInteger(context, "level"), List.of(0, -1, 1), true, true, true, "audit-all"))
+                )
+            )
             .then(literal("overworld")
                 .executes(context -> runTeleportLootTest(3, List.of(0), false, "overworld"))
                 .then(argument("level", IntegerArgumentType.integer(1, 3))
@@ -431,6 +490,13 @@ public class SeedExplorerCommand extends Command {
                 .executes(context -> runTeleportLootTest(3, List.of(1), true, "end"))
                 .then(argument("level", IntegerArgumentType.integer(1, 3))
                     .executes(context -> runTeleportLootTest(IntegerArgumentType.getInteger(context, "level"), List.of(1), true, "end"))
+                )
+            )
+            .then(literal("minecarts")
+                .executes(context -> runTeleportLootTest(3, List.of(0), false, false, "minecarts"))
+                .then(argument("level", IntegerArgumentType.integer(1, 3))
+                    .executes(context -> runTeleportLootTest(IntegerArgumentType.getInteger(context, "level"),
+                        List.of(0), false, false, "minecarts"))
                 )
             )
             .then(literal("status")
@@ -451,6 +517,175 @@ public class SeedExplorerCommand extends Command {
         builder.then(literal("3d-status")
             .executes(context -> run3dStatus())
         );
+    }
+
+    private int runEnchantPrediction(String requestedText) {
+        if (mc.player == null || mc.level == null) {
+            error("Join a world first.");
+            return SINGLE_SUCCESS;
+        }
+
+        EnchantingTablePredictor.Report report;
+        try {
+            report = EnchantingTablePredictor.current(mc.level, mc.player);
+        } catch (Throwable throwable) {
+            error("Could not read the enchanting table: %s.", throwable.getClass().getSimpleName());
+            PredictionDebugLogger.exception("event=enchant_prediction_error", throwable);
+            return SINGLE_SUCCESS;
+        }
+        if (report == null) {
+            error("Open an enchanting table first.");
+            return SINGLE_SUCCESS;
+        }
+        if (!report.exact()) {
+            warning("The enchanting XP seed is still being cracked (%d candidates); change the table item to add another observation.",
+                EnchantingSeedCracker.candidateCount());
+            return SINGLE_SUCCESS;
+        }
+
+        boolean heldItemQuery = requestedText != null && !requestedText.isBlank();
+        if (heldItemQuery) {
+            ItemStack heldItem = mc.player.getMainHandItem();
+            if (heldItem == null || heldItem.isEmpty()) {
+                error("Hold the item you want to test in your main hand.");
+                return SINGLE_SUCCESS;
+            }
+            if (report.bookshelfCount() < 0) {
+                error("The enchanting table position could not be located; keep the table open and nearby.");
+                return SINGLE_SUCCESS;
+            }
+            EnchantingTablePredictor.Report heldReport = EnchantingTablePredictor.predictForItem(
+                heldItem, report.enchantmentSeed(), report.bookshelfCount(), mc.level.registryAccess());
+            if (heldReport == null) {
+                error("That held item cannot be predicted by the enchanting-table helper.");
+                return SINGLE_SUCCESS;
+            }
+            report = heldReport;
+        }
+
+        ItemStack item = report.item();
+        String itemId = item.isEmpty()
+            ? "empty"
+            : BuiltInRegistries.ITEM.getKey(item.getItem()).toString();
+        StringBuilder saved = new StringBuilder();
+        appendLine(saved, "Seed Explorer enchanting-table prediction");
+        appendLine(saved, "item=" + itemId);
+        appendLine(saved, "enchantmentSeed=" + report.enchantmentSeed());
+        appendLine(saved, "bookshelves=" + report.bookshelfCount());
+        info("Enchanting table: %s item (highlight)%s(default), player enchantment seed (highlight)%d(default), bookshelves %d.",
+            heldItemQuery ? "held" : "slot", itemId, report.enchantmentSeed(), report.bookshelfCount());
+
+        for (EnchantingTablePredictor.Offer offer : report.offers()) {
+            String summary = offer.summary();
+            info("Offer %d: cost %d, %s.", offer.slot() + 1, offer.cost(), summary);
+            appendLine(saved, "offer=" + (offer.slot() + 1) + " cost=" + offer.cost() + " enchantments=" + summary);
+        }
+
+        List<EnchantingTablePredictor.RequestedEnchantment> requested;
+        try {
+            requested = EnchantingTablePredictor.parseRequested(requestedText);
+        } catch (IllegalArgumentException exception) {
+            error("Invalid enchantment request: %s.", exception.getMessage());
+            return SINGLE_SUCCESS;
+        }
+        if (!requested.isEmpty()) {
+            String wanted = requested.stream()
+                .map(EnchantingTablePredictor.RequestedEnchantment::display)
+                .collect(java.util.stream.Collectors.joining(", "));
+            List<EnchantingTablePredictor.Offer> matching = report.offers().stream()
+                .filter(offer -> offer.hasAll(requested))
+                .toList();
+            if (matching.isEmpty()) {
+                warning("No current offer contains all requested enchantments: %s.", wanted);
+                info("The table cannot be forced to an arbitrary set; rerolling requires enchanting an item and advancing the player seed.");
+                appendLine(saved, "requested=" + wanted + " result=not-present");
+            } else {
+                info("Requested enchantments are available in offer(s): %s.",
+                    matching.stream().map(offer -> String.valueOf(offer.slot() + 1)).collect(java.util.stream.Collectors.joining(", ")));
+                appendLine(saved, "requested=" + wanted + " result=present");
+            }
+        }
+        PredictionDebugLogger.append("event=enchant_prediction source=" + (heldItemQuery ? "held" : "table")
+            + " item=" + itemId
+            + " seed=" + report.enchantmentSeed()
+            + " bookshelves=" + report.bookshelfCount()
+            + " requested=\"" + requested.stream()
+                .map(EnchantingTablePredictor.RequestedEnchantment::display)
+                .collect(java.util.stream.Collectors.joining(","))
+                .replace("\"", "\\\"") + "\"\n");
+        DebugReportWriter.copyAndSave("enchant-prediction", saved.toString());
+        return SINGLE_SUCCESS;
+    }
+
+    private int runEnchantInventoryPrediction(int inventorySlot, String requestedText) {
+        if (mc.player == null || mc.level == null) {
+            error("Join a world first.");
+            return SINGLE_SUCCESS;
+        }
+        EnchantingTablePredictor.Report active = EnchantingTablePredictor.current(mc.level, mc.player);
+        if (active == null) {
+            error("Open an enchanting table first so its player seed and bookshelves can be read.");
+            return SINGLE_SUCCESS;
+        }
+        if (!active.exact()) {
+            warning("The enchanting XP seed is still being cracked (%d candidates); change the table item to add another observation.",
+                EnchantingSeedCracker.candidateCount());
+            return SINGLE_SUCCESS;
+        }
+        if (active.bookshelfCount() < 0) {
+            error("The enchanting table position could not be located; keep the table open and nearby.");
+            return SINGLE_SUCCESS;
+        }
+
+        ItemStack item = mc.player.getInventory().getItem(inventorySlot);
+        if (item == null || item.isEmpty()) {
+            error("Inventory slot %d is empty.", inventorySlot);
+            return SINGLE_SUCCESS;
+        }
+        EnchantingTablePredictor.Report report = EnchantingTablePredictor.predictForItem(
+            item, active.enchantmentSeed(), active.bookshelfCount(), mc.level.registryAccess());
+        if (report == null) {
+            error("That item cannot be predicted by the enchanting-table helper.");
+            return SINGLE_SUCCESS;
+        }
+
+        String itemId = BuiltInRegistries.ITEM.getKey(item.getItem()).toString();
+        info("Inventory slot %d: %s. Using player enchantment seed %d and %d bookshelves.",
+            inventorySlot, itemId, report.enchantmentSeed(), report.bookshelfCount());
+        for (EnchantingTablePredictor.Offer offer : report.offers()) {
+            info("Offer %d: cost %d, %s.", offer.slot() + 1, offer.cost(), offer.summary());
+        }
+        List<EnchantingTablePredictor.RequestedEnchantment> requested;
+        try {
+            requested = EnchantingTablePredictor.parseRequested(requestedText);
+        } catch (IllegalArgumentException exception) {
+            error("Invalid enchantment request: %s.", exception.getMessage());
+            return SINGLE_SUCCESS;
+        }
+        if (!requested.isEmpty()) {
+            String wanted = requested.stream()
+                .map(EnchantingTablePredictor.RequestedEnchantment::display)
+                .collect(java.util.stream.Collectors.joining(", "));
+            List<EnchantingTablePredictor.Offer> matching = report.offers().stream()
+                .filter(offer -> offer.hasAll(requested))
+                .toList();
+            if (matching.isEmpty()) {
+                warning("No current offer for slot %d contains all requested enchantments: %s.", inventorySlot, wanted);
+            } else {
+                info("Requested enchantments are available in offer(s): %s.",
+                    matching.stream().map(offer -> String.valueOf(offer.slot() + 1))
+                        .collect(java.util.stream.Collectors.joining(", ")));
+            }
+        }
+        PredictionDebugLogger.append("event=enchant_inventory_prediction"
+            + " slot=" + inventorySlot + " item=" + itemId
+            + " seed=" + report.enchantmentSeed()
+            + " bookshelves=" + report.bookshelfCount()
+            + " requested=\"" + requested.stream()
+                .map(EnchantingTablePredictor.RequestedEnchantment::display)
+                .collect(java.util.stream.Collectors.joining(","))
+                .replace("\"", "\\\"") + "\"\n");
+        return SINGLE_SUCCESS;
     }
 
     private int run3dStatus() {
@@ -1187,6 +1422,21 @@ public class SeedExplorerCommand extends Command {
         if (mc.level == null) return false;
         if (isChestLootBlock(mc.level.getBlockState(pos))) return true;
         return mc.level.getBlockEntity(pos) instanceof RandomizableContainer;
+    }
+
+    private MinecartChest findMinecartChest(BlockPos predictedPos) {
+        if (mc.level == null) return null;
+        AABB search = new AABB(
+            predictedPos.getX(), predictedPos.getY(), predictedPos.getZ(),
+            predictedPos.getX() + 1.0, predictedPos.getY() + 1.0, predictedPos.getZ() + 1.0)
+            .inflate(2.0, 1.5, 2.0);
+        List<MinecartChest> carts = mc.level.getEntities(
+            EntityTypeTest.forClass(MinecartChest.class), search,
+            cart -> !cart.isRemoved());
+        return carts.stream()
+            .min(Comparator.comparingDouble(cart -> cart.distanceToSqr(
+                predictedPos.getX() + 0.5, predictedPos.getY() + 0.5, predictedPos.getZ() + 0.5)))
+            .orElse(null);
     }
 
     private boolean shouldProbePredictedTarget(BlockState state) {
@@ -2233,6 +2483,7 @@ public class SeedExplorerCommand extends Command {
         tpLootStartRequested = false;
         tpLootPrepareStatus = "starting target build";
         tpLootPrepareLastNoticeMs = 0L;
+        tpLootLastBuildAnnouncementMs = 0L;
         int prepareJobId = tpLootPrepareJobIds.incrementAndGet();
         tpLootTargets = new CopyOnWriteArrayList<>();
         tpLootReport = new StringBuilder();
@@ -2284,9 +2535,46 @@ public class SeedExplorerCommand extends Command {
             int before = tpLootTargets.size();
             int added = addTeleportLootTargetsForDimension(seed, dimension, dimCenterChunkX, dimCenterChunkZ, dimRadius,
                 maxStructuresPerDimension, endCityQuota && dimension == 1, fullCoverage, exhaustive, prepareJobId, modeLabel);
+            if (dimension == 0 && level == 3 && modeLabel.equals("all")
+                && prepareJobId == tpLootPrepareJobIds.get() && tpLootPreparing) {
+                added += addTeleportDungeonTargets(seed, dimCenterChunkX, dimCenterChunkZ, prepareJobId, modeLabel);
+            }
             updateTpLootPrepareStatus("finished " + dimensionName(dimension) + " target build, added "
                 + added + " chest targets (" + tpLootTargets.size() + " total)");
         }
+    }
+
+    private int addTeleportDungeonTargets(long seed, int centerChunkX, int centerChunkZ,
+                                           int prepareJobId, String modeLabel) {
+        updateTpLootPrepareStatus("scanning exact dungeons near chunk " + centerChunkX + "," + centerChunkZ);
+        DungeonPredictor.ScanResult scan = DungeonPredictor.scanAround(seed, centerChunkX, centerChunkZ,
+            TP_LOOT_DUNGEON_RADIUS_CHUNKS, 0,
+            dungeon -> !dungeon.simulated().containers().isEmpty(),
+            () -> prepareJobId != tpLootPrepareJobIds.get() || !tpLootPreparing,
+            checked -> {
+                if (checked == 1 || checked % 8 == 0) {
+                    updateTpLootPrepareStatus("scanning exact dungeons " + checked + "/"
+                        + ((TP_LOOT_DUNGEON_RADIUS_CHUNKS * 2 + 1)
+                        * (TP_LOOT_DUNGEON_RADIUS_CHUNKS * 2 + 1)) + " chunks");
+                }
+            });
+        if (scan.cancelled() || prepareJobId != tpLootPrepareJobIds.get() || !tpLootPreparing) return 0;
+
+        int rooms = 0;
+        int added = 0;
+        for (DungeonPredictor.PredictedDungeon dungeon : scan.dungeons()) {
+            if (rooms >= TP_LOOT_DUNGEON_TARGETS) break;
+            if (dungeon.simulated().containers().isEmpty()) continue;
+            int roomAdded = addAllPredictedChests(seed, 0, dungeon.structure(), prepareJobId, modeLabel);
+            if (roomAdded <= 0) continue;
+            rooms++;
+            added += roomAdded;
+        }
+        appendLine(tpLootReport, "DUNGEON_SCAN checkedChunks=" + scan.checkedChunks()
+            + " rooms=" + rooms + " chestTargets=" + added);
+        updateTpLootPrepareStatus("selected " + rooms + " exact dungeon"
+            + (rooms == 1 ? "" : "s") + " with " + added + " chest targets");
+        return added;
     }
 
     private int fullCoverageRadiusChunks(int level, int dimension) {
@@ -2328,6 +2616,7 @@ public class SeedExplorerCommand extends Command {
             true
         ).stream()
             .filter(s -> ChestLootPredictor.canPredict(s.type))
+            .filter(s -> !modeLabel.equals("minecarts") || s.type == StructureType.MINESHAFT)
             .sorted(Comparator.comparingLong(s -> distanceSquared(centerChunkX * 16, centerChunkZ * 16, s.x, s.z)))
             .toList();
 
@@ -2346,11 +2635,13 @@ public class SeedExplorerCommand extends Command {
             for (GeneratedStructure structure : structures) {
                 if (structure.type != me.seedexplorer.addon.structures.StructureType.END_CITY) continue;
                 checked++;
+                if (checked > TP_LOOT_END_CITY_MAX_ATTEMPTS) break;
                 if (structure.hasShip && ships >= TP_LOOT_END_CITY_SHIP_TARGETS) continue;
                 if (!structure.hasShip && normal >= TP_LOOT_END_CITY_NO_SHIP_TARGETS) continue;
-                updateTpLootPrepareStatus("predicting End City " + checked + ": "
-                    + (structure.hasShip ? "ship" : "no ship")
-                    + " at " + structure.x + "," + structure.z);
+                if (checked == 1 || checked % 10 == 0) {
+                    updateTpLootPrepareStatus("checking End City candidates (" + checked + "/"
+                        + Math.min(structures.size(), TP_LOOT_END_CITY_MAX_ATTEMPTS) + ")");
+                }
                 int structureAdded = addAllPredictedChests(seed, dimension, structure, prepareJobId, modeLabel);
                 added += structureAdded;
                 if (structureAdded > 0) {
@@ -2363,51 +2654,23 @@ public class SeedExplorerCommand extends Command {
         }
 
         if (exhaustive) {
-            if (dimension == 1) {
-                int ships = 0;
-                int normal = 0;
-                int added = 0;
-                int totalChecked = 0;
-                // Hard cap: stop after checking this many End Cities so the build phase never
-                // runs indefinitely when predictions return empty or one variant is rare.
-                final int MAX_END_CITY_CHECKS = 30;
-                for (GeneratedStructure structure : structures) {
-                    if (totalChecked >= MAX_END_CITY_CHECKS) break;
-                    if (structure.type != me.seedexplorer.addon.structures.StructureType.END_CITY) continue;
-                    if (structure.hasShip && ships >= 3) continue;
-                    if (!structure.hasShip && normal >= 2) continue;
-                    totalChecked++;
-                    updateTpLootPrepareStatus("predicting End City "
-                        + (structure.hasShip ? "ship" : "no ship")
-                        + " at " + structure.x + "," + structure.z
-                        + " (" + totalChecked + "/" + MAX_END_CITY_CHECKS + ")");
-                    int structureAdded = addAllPredictedChests(seed, dimension, structure, prepareJobId, modeLabel);
-                    added += structureAdded;
-                    if (structureAdded > 0) {
-                        if (structure.hasShip) ships++;
-                        else normal++;
-                    }
-                    if (ships >= 3 && normal >= 2) break;
-                }
-                return added;
-            } else {
-                Map<String, GeneratedStructure> selected = new LinkedHashMap<>();
-                for (GeneratedStructure structure : structures) {
-                    selected.putIfAbsent(exhaustiveStructureKey(structure), structure);
-                }
-                updateTpLootPrepareStatus("selected " + selected.size() + " unique structure variants in "
-                    + dimensionName(dimension));
-                int checked = 0;
-                int added = 0;
-                for (GeneratedStructure structure : selected.values()) {
-                    checked++;
-                    updateTpLootPrepareStatus("predicting loot for " + dimensionName(dimension)
-                        + " variant " + checked + "/" + selected.size()
-                        + ": " + structure.displayName() + " at " + structure.x + "," + structure.z);
-                    added += addAllPredictedChests(seed, dimension, structure, prepareJobId, modeLabel);
-                }
-                return added;
+            Map<String, GeneratedStructure> selected = new LinkedHashMap<>();
+            for (GeneratedStructure structure : structures) {
+                selected.putIfAbsent(exhaustiveStructureKey(structure), structure);
             }
+            appendExhaustiveTypeCoverage(dimension, structures, selected.values());
+            updateTpLootPrepareStatus("selected " + selected.size() + " unique structure variants in "
+                + dimensionName(dimension));
+            int checked = 0;
+            int added = 0;
+            for (GeneratedStructure structure : selected.values()) {
+                checked++;
+                updateTpLootPrepareStatus("predicting loot for " + dimensionName(dimension)
+                    + " variant " + checked + "/" + selected.size()
+                    + ": " + structure.displayName() + " at " + structure.x + "," + structure.z);
+                added += addAllPredictedChests(seed, dimension, structure, prepareJobId, modeLabel, true);
+            }
+            return added;
         }
 
         int checked = 0;
@@ -2433,6 +2696,13 @@ public class SeedExplorerCommand extends Command {
     }
 
     private void announceTpLootBuild(String message) {
+        long now = System.currentTimeMillis();
+        boolean important = message.startsWith("found ")
+            || message.startsWith("finished ")
+            || message.startsWith("selected ")
+            || message.startsWith("no predicted");
+        if (!important && now - tpLootLastBuildAnnouncementMs < TP_LOOT_BUILD_CHAT_INTERVAL_MS) return;
+        tpLootLastBuildAnnouncementMs = now;
         MeteorClient.mc.execute(() -> {
             if (tpLootPreparing) info("Seed Explorer TP test: " + message + ".");
         });
@@ -2444,12 +2714,35 @@ public class SeedExplorerCommand extends Command {
         announceTpLootBuild(message);
     }
 
+    private void appendExhaustiveTypeCoverage(int dimension, List<GeneratedStructure> candidates,
+                                              java.util.Collection<GeneratedStructure> selected) {
+        Set<StructureType> candidateTypes = new HashSet<>();
+        candidates.forEach(structure -> candidateTypes.add(structure.type));
+        Set<StructureType> selectedTypes = new HashSet<>();
+        selected.forEach(structure -> selectedTypes.add(structure.type));
+        appendLine(tpLootReport, "TYPE_COVERAGE dimension=" + dimension);
+        for (StructureType type : StructureType.values()) {
+            if (type.dimension != dimension) continue;
+            String status;
+            if (!ChestLootPredictor.canPredict(type)) status = "unsupported-by-loot-predictor";
+            else if (!candidateTypes.contains(type)) status = "no-predicted-structure-in-radius";
+            else if (!selectedTypes.contains(type)) status = "not-selected";
+            else status = "selected";
+            appendLine(tpLootReport, "TYPE " + type.name() + " status=" + status);
+        }
+    }
+
     private int addAllPredictedChests(long seed, int dimension, GeneratedStructure structure, int prepareJobId, String modeLabel) {
+        return addAllPredictedChests(seed, dimension, structure, prepareJobId, modeLabel, false);
+    }
+
+    private int addAllPredictedChests(long seed, int dimension, GeneratedStructure structure, int prepareJobId,
+                                      String modeLabel, boolean exhaustive) {
         long startNanos = System.nanoTime();
         try {
             updateTpLootPrepareStatus("predicting loot for " + dimensionName(dimension)
                 + " " + structure.displayName() + " at " + structure.x + "," + structure.z);
-            boolean sampledAncientCity = structure.type == me.seedexplorer.addon.structures.StructureType.ANCIENT_CITY;
+            boolean sampledAncientCity = structure.type == StructureType.ANCIENT_CITY && !exhaustive;
             List<ChestLootOutput> chests = sampledAncientCity
                 ? ChestLootPredictor.predictTemplateContainerSample(structure, TP_LOOT_ANCIENT_CITY_SAMPLE_CHESTS, 64)
                 : ChestLootPredictor.predictForStructure(structure);
@@ -2484,7 +2777,10 @@ public class SeedExplorerCommand extends Command {
                 if (!isTargetableLootChest(chest)) continue;
                 tpLootTargets.add(new TpLootTarget(dimension, structure, chest, structureChestIndex++, targetable));
                 added++;
-                maybeRequestTeleportLootStart(seed, modeLabel, prepareJobId);
+                // Target building runs off-thread. Starting the test here races with the
+                // worker and can replace this mutable list with List.of() while it is
+                // still being populated. The completion callback starts the run once
+                // all dimensions have finished building.
             }
             return added;
         } catch (Throwable throwable) {
@@ -2501,11 +2797,13 @@ public class SeedExplorerCommand extends Command {
                 + " error=\"" + throwable.getClass().getName() + ": "
                 + String.valueOf(throwable.getMessage()).replace("\"", "\\\"") + "\""
                 + "\n");
+            PredictionDebugLogger.exception("event=loot_tp_test_prediction_stack", throwable);
             return 0;
         }
     }
 
     private void maybeRequestTeleportLootStart(long seed, String modeLabel, int prepareJobId) {
+        if (tpLootPreparing) return;
         if (tpLootStartRequested || tpLootRunning || tpLootTargets.isEmpty()) return;
         tpLootStartRequested = true;
         MeteorClient.mc.execute(() -> {
@@ -2525,6 +2823,17 @@ public class SeedExplorerCommand extends Command {
         tpLootOpenedCount = 0;
         tpLootSkipped = 0;
         tpLootUnverified = 0;
+        tpLootMissingContainers = 0;
+        tpLootUnexpectedContainers = 0;
+        tpLootMinecartCoordinateMatches = 0;
+        tpLootMinecartCoordinateMismatches = 0;
+        tpLootMinecartSeedsChecked = 0;
+        tpLootMinecartSeedMatches = 0;
+        tpLootMissingContainerPositions.clear();
+        tpLootMinecartValidatedTargets.clear();
+        tpLootPendingContainerScan = null;
+        tpLootContainerScanWaitTicks = 0;
+        releaseForcedStructureChunks();
         tpLootOpened = false;
         tpLootClearedAbove = false;
         tpLootRetryNudgeAway = false;
@@ -2551,16 +2860,23 @@ public class SeedExplorerCommand extends Command {
         String table = chest.lootTableId();
         if (table == null || table.isBlank()) return false;
         return !table.startsWith("minecraft:dispensers/")
-            && !table.startsWith("minecraft:pots/")
-            && !"minecraft:chests/trial_chambers/intersection_barrel".equals(table)
-            && !"minecraft:chests/trial_chambers/corridor".equals(table)
-            && !table.contains("barrel");
+            && !table.startsWith("minecraft:pots/");
     }
 
     private void tickTeleportLootTest() {
         if (!tpLootRunning) return;
         if (mc.player == null || mc.level == null || mc.player.connection == null) {
             stopTeleportLootTest(false);
+            return;
+        }
+        if (tpLootPendingContainerScan != null) {
+            TpLootTarget scanTarget = tpLootPendingContainerScan;
+            if (scanUnexpectedContainersForStructure(scanTarget)) {
+                tpLootPendingContainerScan = null;
+                tpLootContainerScanWaitTicks = 0;
+                releaseForcedStructureChunks();
+                advanceTeleportLootTarget();
+            }
             return;
         }
         if (tpLootIndex < 0 || tpLootIndex >= tpLootTargets.size()) {
@@ -2657,7 +2973,7 @@ public class SeedExplorerCommand extends Command {
                     tpLootIndex + 1, tpLootTargets.size(), result.actualSummary());
             }
             mc.player.closeContainer();
-            if (isLastPredictedChest(target)) scanUnexpectedContainersForStructure(target);
+            if (isLastPredictedChest(target) && !scanUnexpectedContainersForStructure(target)) return;
             advanceTeleportLootTarget();
             return;
         }
@@ -2665,7 +2981,9 @@ public class SeedExplorerCommand extends Command {
         if (!tpLootOpened || tpLootOpenTicks >= TP_LOOT_OPEN_WAIT_TICKS) {
             BlockState state = mc.level.getBlockState(pos);
             String block = blockStateId(state);
-            if (!isChestLootBlock(state)) {
+            boolean minecartTarget = target.structure().type == StructureType.MINESHAFT;
+            MinecartChest minecart = minecartTarget ? findMinecartChest(pos) : null;
+            if (!isChestLootBlock(state) && minecart == null) {
                 // Distinguish two cases:
                 // 1. void_air — the chunk section hasn't generated on the client yet (genuinely
                 //    unloaded). Wait the full budget and keep nudging.
@@ -2673,7 +2991,8 @@ public class SeedExplorerCommand extends Command {
                 //    but the predicted position is wrong. Fail fast (≤1 re-teleport, ~5 s) so
                 //    the player doesn't get trapped re-teleporting to a wrong location for 60 s.
                 boolean sectionUnloaded = state.is(Blocks.VOID_AIR);
-                int settleLimit = sectionUnloaded ? waitLimit : Math.min(waitLimit, TP_LOOT_RETP_INTERVAL_TICKS + 5);
+                int settleLimit = minecartTarget || sectionUnloaded
+                    ? waitLimit : Math.min(waitLimit, TP_LOOT_RETP_INTERVAL_TICKS + 5);
                 if (!isChestBlockPresent(pos) && tpLootWaitTicks < settleLimit) {
                     if (shouldAnnounceTpLootWait()) {
                         info("Seed Explorer TP test: chunk loaded but chest block not settled for target (highlight)%d/%d(default), waited %d/%d ticks. Found %s at %d,%d,%d.",
@@ -2693,12 +3012,34 @@ public class SeedExplorerCommand extends Command {
                     maybeResendTeleport(target, pos, "block-not-settled");
                     return;
                 }
+                String found = minecartTarget ? block + "; minecartChest=none" : block;
                 warning("Seed Explorer TP test: target %d/%d is not a container. Found %s at %d,%d,%d.",
-                    tpLootIndex + 1, tpLootTargets.size(), block, pos.getX(), pos.getY(), pos.getZ());
-                logTeleportLootChest(target, false, false, "not-container:" + block, false);
+                    tpLootIndex + 1, tpLootTargets.size(), found, pos.getX(), pos.getY(), pos.getZ());
+                recordMissingPredictedContainer(target, found);
+                logTeleportLootChest(target, false, false, "not-container:" + found, false);
                 tpLootSkipped++;
-                if (isLastPredictedChest(target)) scanUnexpectedContainersForStructure(target);
+                if (isLastPredictedChest(target) && !scanUnexpectedContainersForStructure(target)) return;
                 advanceTeleportLootTarget();
+                return;
+            }
+            if (minecart != null) {
+                if (tpLootOpenAttempts >= TP_LOOT_MAX_OPEN_ATTEMPTS) {
+                    warning("Seed Explorer TP test: minecart target %d/%d open timed out after %d attempts at %d,%d,%d.",
+                        tpLootIndex + 1, tpLootTargets.size(), tpLootOpenAttempts,
+                        pos.getX(), pos.getY(), pos.getZ());
+                    logTeleportLootChest(target, false, false, "open-timeout:minecart-chest", false);
+                    tpLootUnverified++;
+                    if (isLastPredictedChest(target) && !scanUnexpectedContainersForStructure(target)) return;
+                    advanceTeleportLootTarget();
+                    return;
+                }
+                info("Seed Explorer TP test: opening minecart chest target (highlight)%d/%d(default), attempt %d/%d.",
+                    tpLootIndex + 1, tpLootTargets.size(), tpLootOpenAttempts + 1, TP_LOOT_MAX_OPEN_ATTEMPTS);
+                logPreOpenMinecartState(target, pos, minecart);
+                openPredictedMinecart(minecart);
+                tpLootOpened = true;
+                tpLootOpenAttempts++;
+                tpLootOpenTicks = 0;
                 return;
             }
             if (isContainerBlockedAbove(pos) && !tpLootClearedAbove) {
@@ -2714,7 +3055,7 @@ public class SeedExplorerCommand extends Command {
                     tpLootIndex + 1, tpLootTargets.size(), tpLootOpenAttempts, pos.getX(), pos.getY(), pos.getZ());
                 logTeleportLootChest(target, false, false, "open-timeout:" + block, false);
                 tpLootUnverified++;
-                if (isLastPredictedChest(target)) scanUnexpectedContainersForStructure(target);
+                if (isLastPredictedChest(target) && !scanUnexpectedContainersForStructure(target)) return;
                 advanceTeleportLootTarget();
                 return;
             }
@@ -2879,6 +3220,26 @@ public class SeedExplorerCommand extends Command {
         tpLootForcedChunkZ = Integer.MIN_VALUE;
     }
 
+    private void releaseForcedStructureChunks() {
+        if (tpLootForcedStructureChunks.isEmpty()) return;
+        if (mc.player != null && mc.player.connection != null) {
+            int dimension = tpLootPendingContainerScan == null
+                ? dimensionId() : tpLootPendingContainerScan.dimension();
+            for (long chunkKey : tpLootForcedStructureChunks) {
+                int chunkX = (int) (chunkKey >> 32);
+                int chunkZ = (int) chunkKey;
+                String command = "execute in " + dimensionCommandId(dimension)
+                    + " run forceload remove " + (chunkX * 16) + " " + (chunkZ * 16);
+                mc.player.connection.sendCommand(command);
+                PredictionDebugLogger.append("event=loot_tp_test_structure_forceload_remove"
+                    + " dimension=" + dimension
+                    + " chunk=" + chunkX + "," + chunkZ
+                    + " command=\"" + command + "\"\n");
+            }
+        }
+        tpLootForcedStructureChunks = Set.of();
+    }
+
     private void openPredictedChest(BlockPos pos) {
         if (mc.gameMode == null || mc.player == null) return;
         BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(pos), Direction.UP, pos, false);
@@ -2887,6 +3248,19 @@ public class SeedExplorerCommand extends Command {
         PredictionDebugLogger.append("event=loot_tp_test_open_attempt"
             + " index=" + tpLootIndex + "/" + tpLootTargets.size()
             + " pos=" + pos.getX() + "," + pos.getY() + "," + pos.getZ()
+            + " attempt=" + (tpLootOpenAttempts + 1)
+            + "\n");
+    }
+
+    private void openPredictedMinecart(MinecartChest minecart) {
+        if (mc.gameMode == null || mc.player == null || minecart == null) return;
+        EntityHitResult hit = new EntityHitResult(minecart, minecart.position());
+        mc.gameMode.interact(mc.player, minecart, hit, InteractionHand.MAIN_HAND);
+        mc.player.swing(InteractionHand.MAIN_HAND);
+        PredictionDebugLogger.append("event=loot_tp_test_open_minecart_attempt"
+            + " index=" + tpLootIndex + "/" + tpLootTargets.size()
+            + " entityId=" + minecart.getId()
+            + " pos=" + minecart.getX() + "," + minecart.getY() + "," + minecart.getZ()
             + " attempt=" + (tpLootOpenAttempts + 1)
             + "\n");
     }
@@ -2921,6 +3295,45 @@ public class SeedExplorerCommand extends Command {
             + " actualSeed=" + (actualSeed == Long.MIN_VALUE ? "unknown" : String.valueOf(actualSeed)));
     }
 
+    private void logPreOpenMinecartState(TpLootTarget target, BlockPos predictedPos, MinecartChest minecart) {
+        String actualTable = minecart.getContainerLootTable() == null
+            ? "" : minecart.getContainerLootTable().identifier().toString();
+        long actualSeed = minecart.getContainerLootTable() == null
+            ? Long.MIN_VALUE : minecart.getContainerLootTableSeed();
+        BlockPos actualPos = minecart.blockPosition();
+        boolean coordinateMatch = actualPos.equals(predictedPos);
+        boolean seedMatch = actualSeed != Long.MIN_VALUE && actualSeed == target.chest().seed();
+        if (tpLootMinecartValidatedTargets.add(tpLootIndex)) {
+            if (coordinateMatch) tpLootMinecartCoordinateMatches++;
+            else tpLootMinecartCoordinateMismatches++;
+            if (actualSeed != Long.MIN_VALUE) {
+                tpLootMinecartSeedsChecked++;
+                if (seedMatch) tpLootMinecartSeedMatches++;
+            }
+        }
+        PredictionDebugLogger.append("event=loot_tp_test_preopen_minecart"
+            + " index=" + tpLootIndex + "/" + tpLootTargets.size()
+            + " dimension=" + target.dimension()
+            + " type=" + target.structure().type
+            + " predicted=" + predictedPos.getX() + "," + predictedPos.getY() + "," + predictedPos.getZ()
+            + " entityId=" + minecart.getId()
+            + " entity=" + minecart.getX() + "," + minecart.getY() + "," + minecart.getZ()
+            + " predictedTable=" + target.chest().lootTableId()
+            + " predictedSeed=" + target.chest().seed()
+            + " actualTable=" + actualTable
+            + " actualSeed=" + actualSeed
+            + " coordinateMatch=" + coordinateMatch
+            + " seedMatch=" + (actualSeed == Long.MIN_VALUE ? "unknown" : seedMatch)
+            + "\n");
+        appendLine(tpLootReport, "PREOPEN_MINECART " + (tpLootIndex + 1) + "/" + tpLootTargets.size()
+            + " predicted=" + predictedPos.getX() + "," + predictedPos.getY() + "," + predictedPos.getZ()
+            + " entity=" + minecart.getX() + "," + minecart.getY() + "," + minecart.getZ()
+            + " actualTable=" + (actualTable.isBlank() ? "unknown" : actualTable)
+            + " actualSeed=" + (actualSeed == Long.MIN_VALUE ? "unknown" : String.valueOf(actualSeed))
+            + " coordinateMatch=" + coordinateMatch
+            + " seedMatch=" + (actualSeed == Long.MIN_VALUE ? "unknown" : seedMatch));
+    }
+
     private ChestCompareResult compareOpenContainerMenu(TpLootTarget target) {
         Map<String, Integer> predicted = predictedCountsForOpenedContainer(target);
         String predictedSummary = countSummary(predicted);
@@ -2936,34 +3349,9 @@ public class SeedExplorerCommand extends Command {
     }
 
     private Map<String, Integer> predictedCountsForOpenedContainer(TpLootTarget target) {
-        Map<String, Integer> counts = new LinkedHashMap<>(predictedCounts(target.chest()));
-        if (mc.level == null) return counts;
-
-        BlockPos pos = new BlockPos(target.chest().blockX(), target.chest().blockY(), target.chest().blockZ());
-        BlockState state = mc.level.getBlockState(pos);
-        String block = blockStateId(state);
-        if (!block.contains("chest")) return counts;
-
-        String structureKey = structureRunKey(target.dimension(), target.structure());
-        for (TpLootTarget candidate : tpLootTargets) {
-            if (candidate == target) continue;
-            if (!structureRunKey(candidate.dimension(), candidate.structure()).equals(structureKey)) continue;
-            ChestLootOutput other = candidate.chest();
-            if (!sameLikelyDoubleChest(pos, other)) continue;
-            mergeCounts(counts, predictedCounts(other));
-        }
-        return counts;
-    }
-
-    private boolean sameLikelyDoubleChest(BlockPos pos, ChestLootOutput other) {
-        if (other.blockY() != pos.getY()) return false;
-        int dx = Math.abs(other.blockX() - pos.getX());
-        int dz = Math.abs(other.blockZ() - pos.getZ());
-        return dx + dz == 1;
-    }
-
-    private void mergeCounts(Map<String, Integer> into, Map<String, Integer> extra) {
-        extra.forEach((item, count) -> into.merge(item, count, Integer::sum));
+        // ChestLootPredictor.exactChestItems already combines both halves of a double chest.
+        // Merging neighboring targets here would count each half twice in the live audit.
+        return new LinkedHashMap<>(predictedCounts(target.chest()));
     }
 
     private Map<String, Integer> actualCountsFromOpenMenu() {
@@ -2984,7 +3372,33 @@ public class SeedExplorerCommand extends Command {
         if (state == null || state.isAir()) return false;
         String id = BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
         return id.contains("chest")
-            || id.contains("shulker_box");
+            || id.contains("shulker_box")
+            || id.contains("barrel")
+            || id.contains("dispenser")
+            || id.contains("dropper")
+            || id.contains("hopper");
+    }
+
+    private void recordMissingPredictedContainer(TpLootTarget target, String actualBlock) {
+        ChestLootOutput chest = target.chest();
+        long packed = BlockPos.asLong(chest.blockX(), chest.blockY(), chest.blockZ());
+        if (!tpLootMissingContainerPositions.add(packed)) return;
+        tpLootMissingContainers++;
+        String position = chest.blockX() + "," + chest.blockY() + "," + chest.blockZ();
+        warning("Seed Explorer TP test: missing predicted container at %s in %s (found %s).",
+            position, target.structure().displayName(), actualBlock);
+        PredictionDebugLogger.append("event=loot_tp_test_missing_container"
+            + " dimension=" + target.dimension()
+            + " type=" + target.structure().type
+            + " structure=" + target.structure().x + "," + target.structure().z
+            + " chest=" + position
+            + " predictedTable=\"" + target.chest().lootTableId().replace("\"", "\\\"") + "\""
+            + " actualBlock=\"" + actualBlock.replace("\"", "\\\"") + "\""
+            + "\n");
+        appendLine(tpLootReport, "MISSING " + target.structure().displayName()
+            + " chest=" + position
+            + " predictedTable=" + target.chest().lootTableId()
+            + " actualBlock=" + actualBlock);
     }
 
     private boolean isContainerBlockedAbove(BlockPos pos) {
@@ -3088,10 +3502,14 @@ public class SeedExplorerCommand extends Command {
             + " unverified=" + tpLootUnverified
             + " skipped=" + tpLootSkipped
             + " mismatches=" + tpLootMismatches
+            + " missingContainers=" + tpLootMissingContainers
+            + " unexpectedContainers=" + tpLootUnexpectedContainers
             + "\n");
         lastTpLootSummary = teleportLootSummary("stopped");
         DebugReportWriter.copyAndSave("loot-tp-stopped", lastTpLootSummary);
         releaseForcedLootChunk();
+        releaseForcedStructureChunks();
+        tpLootPendingContainerScan = null;
         tpLootRunning = false;
         tpLootTargets = List.of();
         tpLootOpened = false;
@@ -3114,11 +3532,15 @@ public class SeedExplorerCommand extends Command {
             + " unverified=" + tpLootUnverified
             + " skipped=" + tpLootSkipped
             + " mismatches=" + tpLootMismatches
+            + " missingContainers=" + tpLootMissingContainers
+            + " unexpectedContainers=" + tpLootUnexpectedContainers
             + "\n");
         DebugReportWriter.copyAndSave("loot-tp-complete", lastTpLootSummary);
         info("Seed Explorer: teleport loot test complete. Targets (highlight)%d(default), opened (highlight)%d(default), verified (highlight)%d(default), skipped/unverified (highlight)%d(default), mismatches (highlight)%d(default).",
             tpLootTargets.size(), tpLootOpenedCount, tpLootVerified, tpLootSkipped + tpLootUnverified, tpLootMismatches);
         releaseForcedLootChunk();
+        releaseForcedStructureChunks();
+        tpLootPendingContainerScan = null;
         tpLootRunning = false;
         tpLootTargets = List.of();
         tpLootOpened = false;
@@ -3139,8 +3561,9 @@ public class SeedExplorerCommand extends Command {
             return SINGLE_SUCCESS;
         }
         TpLootTarget current = tpLootIndex >= 0 && tpLootIndex < tpLootTargets.size() ? tpLootTargets.get(tpLootIndex) : null;
-        info("TP loot test: (highlight)%d(default)/(highlight)%d(default), opened %d, verified %d, unverified %d, skipped %d, mismatches %d.",
-            tpLootIndex + 1, tpLootTargets.size(), tpLootOpenedCount, tpLootVerified, tpLootUnverified, tpLootSkipped, tpLootMismatches);
+        info("TP loot test: (highlight)%d(default)/(highlight)%d(default), opened %d, verified %d, unverified %d, skipped %d, mismatches %d, missing %d, unexpected %d.",
+            tpLootIndex + 1, tpLootTargets.size(), tpLootOpenedCount, tpLootVerified, tpLootUnverified, tpLootSkipped,
+            tpLootMismatches, tpLootMissingContainers, tpLootUnexpectedContainers);
         if (current != null) {
             ChestLootOutput chest = current.chest();
             info("Current: (highlight)%s(default) dim %d chest %d,%d,%d table %s.",
@@ -3173,8 +3596,16 @@ public class SeedExplorerCommand extends Command {
         appendLine(report, "unverified=" + tpLootUnverified);
         appendLine(report, "skipped=" + tpLootSkipped);
         appendLine(report, "mismatches=" + tpLootMismatches);
+        appendLine(report, "missingContainers=" + tpLootMissingContainers);
+        appendLine(report, "unexpectedContainers=" + tpLootUnexpectedContainers);
+        appendLine(report, "minecartCoordinateMatches=" + tpLootMinecartCoordinateMatches);
+        appendLine(report, "minecartCoordinateMismatches=" + tpLootMinecartCoordinateMismatches);
+        appendLine(report, "minecartSeedMatches=" + tpLootMinecartSeedMatches);
+        appendLine(report, "minecartSeedMismatches=" + (tpLootMinecartSeedsChecked - tpLootMinecartSeedMatches));
+        appendLine(report, "minecartSeedsUnresolved="
+            + (tpLootMinecartValidatedTargets.size() - tpLootMinecartSeedsChecked));
         appendLine(report, "");
-        appendLine(report, "Order: Overworld -> Nether -> End. Each structure's predicted chests are tested before moving to the next structure.");
+        appendLine(report, "Order: Overworld -> Nether -> End. Each structure's predicted containers are tested before moving to the next structure.");
         appendLine(report, "Raw per-chest details are also in seed-explorer-reports/prediction-debug.log as loot_tp_test_* events.");
         appendLine(report, "");
         appendLine(report, "Detailed run:");
@@ -3210,25 +3641,32 @@ public class SeedExplorerCommand extends Command {
     }
 
     private boolean exhaustiveMode() {
-        return tpLootMode != null && tpLootMode.startsWith("all-structures");
+        return tpLootMode != null
+            && (tpLootMode.startsWith("all-structures") || tpLootMode.startsWith("audit-all"));
     }
 
     private boolean isLastPredictedChest(TpLootTarget target) {
         return target.structureChestIndex() + 1 >= target.structureChestCount();
     }
 
-    private void scanUnexpectedContainersForStructure(TpLootTarget target) {
-        if (!exhaustiveMode() || mc.level == null) return;
+    private boolean scanUnexpectedContainersForStructure(TpLootTarget target) {
+        if (!exhaustiveMode() || mc.level == null) return true;
         try {
             ResourceKey<Structure> key = structureKeyFor(target.structure());
-            if (key == null) return;
+            if (key == null) {
+                appendLine(tpLootReport, "SCAN " + target.structure().displayName() + " status=unsupported-structure-key");
+                return true;
+            }
 
             StructureStart start = WorldgenEngine.generateSelectedStructureStart(
                 tpLootStartSeed,
                 target.dimension(),
                 key,
                 new ChunkPos(target.structure().startChunkX, target.structure().startChunkZ));
-            if (start == null || !start.isValid()) return;
+            if (start == null || !start.isValid()) {
+                appendLine(tpLootReport, "SCAN " + target.structure().displayName() + " status=structure-start-unavailable");
+                return true;
+            }
 
             Set<Long> predicted = new HashSet<>();
             String structureKey = structureRunKey(target.dimension(), target.structure());
@@ -3237,50 +3675,166 @@ public class SeedExplorerCommand extends Command {
                 predicted.add(BlockPos.asLong(candidate.chest().blockX(), candidate.chest().blockY(), candidate.chest().blockZ()));
             }
 
-            Set<Long> unexpected = new HashSet<>();
+            Set<Long> expectedChunks = new HashSet<>();
             for (var piece : start.getPieces()) {
                 for (ChunkPos chunkPos : piece.getBoundingBox().intersectingChunks().toList()) {
+                    expectedChunks.add(packChunkKey(chunkPos.x(), chunkPos.z()));
+                }
+            }
+            if (tpLootPendingContainerScan == null) {
+                tpLootPendingContainerScan = target;
+                tpLootContainerScanWaitTicks = 0;
+                Set<Long> addedChunks = new HashSet<>();
+                for (long chunkKey : expectedChunks) {
+                    int chunkX = (int) (chunkKey >> 32);
+                    int chunkZ = (int) chunkKey;
+                    if (mc.level.getChunkSource().getChunkNow(chunkX, chunkZ) != null) continue;
+                    addedChunks.add(chunkKey);
+                    String command = "execute in " + dimensionCommandId(target.dimension())
+                        + " run forceload add " + (chunkX * 16) + " " + (chunkZ * 16);
+                    mc.player.connection.sendCommand(command);
+                    PredictionDebugLogger.append("event=loot_tp_test_structure_forceload_add"
+                        + " dimension=" + target.dimension()
+                        + " structure=" + target.structure().x + "," + target.structure().z
+                        + " chunk=" + chunkX + "," + chunkZ
+                        + " command=\"" + command + "\"\n");
+                }
+                tpLootForcedStructureChunks = Set.copyOf(addedChunks);
+            }
+
+            Set<Long> loadedChunks = new HashSet<>();
+            Set<Long> actualContainers = new HashSet<>();
+            for (var piece : start.getPieces()) {
+                for (ChunkPos chunkPos : piece.getBoundingBox().intersectingChunks().toList()) {
+                    long chunkKey = packChunkKey(chunkPos.x(), chunkPos.z());
                     LevelChunk chunk = mc.level.getChunkSource().getChunkNow(chunkPos.x(), chunkPos.z());
                     if (chunk == null) continue;
+                    loadedChunks.add(chunkKey);
                     for (BlockEntity blockEntity : chunk.getBlockEntities().values()) {
                         BlockPos pos = blockEntity.getBlockPos();
                         if (!piece.getBoundingBox().isInside(pos)) continue;
                         if (!isChestLootBlock(mc.level.getBlockState(pos))) continue;
-                        long packed = BlockPos.asLong(pos.getX(), pos.getY(), pos.getZ());
-                        if (!predicted.contains(packed)) unexpected.add(packed);
+                        actualContainers.add(BlockPos.asLong(pos.getX(), pos.getY(), pos.getZ()));
+                    }
+                    if (target.structure().type == StructureType.MINESHAFT) {
+                        var bounds = piece.getBoundingBox();
+                        AABB entityBounds = new AABB(
+                            bounds.minX(), bounds.minY(), bounds.minZ(),
+                            bounds.maxX() + 1.0, bounds.maxY() + 1.0, bounds.maxZ() + 1.0)
+                            .inflate(1.0, 1.0, 1.0);
+                        for (MinecartChest minecart : mc.level.getEntities(
+                            EntityTypeTest.forClass(MinecartChest.class), entityBounds,
+                            cart -> !cart.isRemoved())) {
+                            BlockPos cartPos = minecart.blockPosition();
+                            if (piece.getBoundingBox().isInside(cartPos)) {
+                                actualContainers.add(BlockPos.asLong(cartPos.getX(), cartPos.getY(), cartPos.getZ()));
+                            }
+                        }
                     }
                 }
             }
 
-            if (unexpected.isEmpty()) return;
-
-            StringBuilder positions = new StringBuilder();
-            for (long packed : unexpected) {
-                BlockPos pos = BlockPos.of(packed);
-                if (!positions.isEmpty()) positions.append("; ");
-                positions.append(pos.getX()).append(',').append(pos.getY()).append(',').append(pos.getZ());
+            boolean complete = loadedChunks.containsAll(expectedChunks);
+            tpLootContainerScanWaitTicks++;
+            if (!complete && tpLootContainerScanWaitTicks < TP_LOOT_CONTAINER_SCAN_WAIT_TICKS) {
+                if (tpLootContainerScanWaitTicks == 1
+                    || tpLootContainerScanWaitTicks % TP_LOOT_CHAT_INTERVAL_TICKS == 0) {
+                    info("Seed Explorer TP test: loading structure scan for %s, chunks %d/%d.",
+                        target.structure().displayName(), loadedChunks.size(), expectedChunks.size());
+                }
+                return false;
             }
-            warning("Seed Explorer TP test: found %d unpredicted container%s in %s.",
-                unexpected.size(), unexpected.size() == 1 ? "" : "s", target.structure().displayName());
-            PredictionDebugLogger.append("event=loot_tp_test_unpredicted_containers"
-                + " dimension=" + target.dimension()
-                + " type=" + target.structure().type
-                + " variant=\"" + target.structure().variant.replace("\"", "\\\"") + "\""
-                + " hasShip=" + target.structure().hasShip
-                + " structure=" + target.structure().x + "," + target.structure().z
-                + " positions=\"" + positions.toString().replace("\"", "\\\"") + "\""
-                + "\n");
-            appendLine(tpLootReport, "UNPREDICTED " + target.structure().displayName()
-                + " count=" + unexpected.size()
-                + " positions=" + positions);
+
+            Set<Long> unexpected = new HashSet<>(actualContainers);
+            unexpected.removeAll(predicted);
+            Set<Long> missing = new HashSet<>(predicted);
+            missing.removeAll(actualContainers);
+            String status = complete ? "complete" : "incomplete-loaded-chunks";
+            appendLine(tpLootReport, "SCAN " + target.structure().displayName()
+                + " status=" + status
+                + " predicted=" + predicted.size()
+                + " actual=" + actualContainers.size()
+                + " loadedChunks=" + loadedChunks.size() + "/" + expectedChunks.size()
+                + " unexpected=" + (complete ? unexpected.size() : "unverified")
+                + " missing=" + (complete ? missing.size() : "unverified"));
+
+            if (!complete) {
+                warning("Seed Explorer TP test: could not scan every chunk of %s (%d/%d loaded); container coverage is unverified.",
+                    target.structure().displayName(), loadedChunks.size(), expectedChunks.size());
+                PredictionDebugLogger.append("event=loot_tp_test_container_scan_incomplete"
+                    + " dimension=" + target.dimension()
+                    + " type=" + target.structure().type
+                    + " structure=" + target.structure().x + "," + target.structure().z
+                    + " loadedChunks=" + loadedChunks.size()
+                    + " expectedChunks=" + expectedChunks.size()
+                    + "\n");
+                tpLootPendingContainerScan = null;
+                releaseForcedStructureChunks();
+                return true;
+            }
+
+            if (!missing.isEmpty()) {
+                Set<Long> newlyMissing = new HashSet<>();
+                for (long position : missing) {
+                    if (tpLootMissingContainerPositions.add(position)) newlyMissing.add(position);
+                }
+                tpLootMissingContainers += newlyMissing.size();
+                String missingPositions = positionsSummary(missing);
+                warning("Seed Explorer TP test: %d predicted container%s missing in %s.",
+                    missing.size(), missing.size() == 1 ? "" : "s", target.structure().displayName());
+                PredictionDebugLogger.append("event=loot_tp_test_missing_containers"
+                    + " dimension=" + target.dimension()
+                    + " type=" + target.structure().type
+                    + " structure=" + target.structure().x + "," + target.structure().z
+                    + " positions=\"" + missingPositions.replace("\"", "\\\"") + "\"\n");
+                appendLine(tpLootReport, "MISSING_SCAN " + target.structure().displayName()
+                    + " count=" + missing.size() + " positions=" + missingPositions);
+            }
+
+            if (!unexpected.isEmpty()) {
+                tpLootUnexpectedContainers += unexpected.size();
+                String positions = positionsSummary(unexpected);
+                warning("Seed Explorer TP test: found %d unpredicted container%s in %s.",
+                    unexpected.size(), unexpected.size() == 1 ? "" : "s", target.structure().displayName());
+                PredictionDebugLogger.append("event=loot_tp_test_unpredicted_containers"
+                    + " dimension=" + target.dimension()
+                    + " type=" + target.structure().type
+                    + " variant=\"" + target.structure().variant.replace("\"", "\\\"") + "\""
+                    + " hasShip=" + target.structure().hasShip
+                    + " structure=" + target.structure().x + "," + target.structure().z
+                    + " positions=\"" + positions.replace("\"", "\\\"") + "\"\n");
+                appendLine(tpLootReport, "UNPREDICTED " + target.structure().displayName()
+                    + " count=" + unexpected.size() + " positions=" + positions);
+            }
+            tpLootPendingContainerScan = null;
+            releaseForcedStructureChunks();
+            return true;
         } catch (Throwable throwable) {
+            tpLootPendingContainerScan = null;
+            releaseForcedStructureChunks();
             PredictionDebugLogger.append("event=loot_tp_test_unpredicted_error"
                 + " dimension=" + target.dimension()
                 + " type=" + target.structure().type
                 + " error=\"" + throwable.getClass().getName() + ": "
-                + String.valueOf(throwable.getMessage()).replace("\"", "\\\"") + "\""
-                + "\n");
+                + String.valueOf(throwable.getMessage()).replace("\"", "\\\"") + "\"\n");
+            appendLine(tpLootReport, "SCAN " + target.structure().displayName()
+                + " status=error error=" + throwable.getClass().getSimpleName());
+            return true;
         }
+    }
+
+    private String positionsSummary(Set<Long> positions) {
+        StringBuilder result = new StringBuilder();
+        positions.stream().sorted().forEach(packed -> {
+            BlockPos pos = BlockPos.of(packed);
+            if (!result.isEmpty()) result.append("; ");
+            result.append(pos.getX()).append(',').append(pos.getY()).append(',').append(pos.getZ());
+        });
+        return result.toString();
+    }
+
+    private long packChunkKey(int chunkX, int chunkZ) {
+        return ((long) chunkX << 32) ^ (chunkZ & 0xffffffffL);
     }
 
     private ResourceKey<Structure> structureKeyFor(GeneratedStructure structure) {

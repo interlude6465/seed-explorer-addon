@@ -1,23 +1,41 @@
 package me.seedexplorer.addon.loot;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParser;
+import com.mojang.serialization.JsonOps;
+import me.seedexplorer.addon.debug.PredictionDebugLogger;
 import me.seedexplorer.addon.worldgen.WorldgenEngine;
 import net.minecraft.core.HolderSet;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.Holder;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
+import net.minecraft.resources.RegistryOps;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.client.Minecraft;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.EnchantmentTags;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
+import net.minecraft.world.level.storage.loot.LootParams;
+import net.minecraft.world.level.storage.loot.LootTable;
+import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets;
+import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
+import net.minecraft.world.phys.Vec3;
 
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /** Deterministic simulator for the supported vanilla loot-table operations. */
 public final class LootTableSimulator {
@@ -43,6 +61,7 @@ public final class LootTableSimulator {
     private static volatile List<Holder<Enchantment>> bookEnchantmentPool;
     private static volatile List<String> bookEnchantmentIds;
     private static volatile List<Holder<Enchantment>> gearEnchantmentPool;
+    private static final Set<String> REPORTED_VANILLA_FAILURES = ConcurrentHashMap.newKeySet();
 
     private LootTableSimulator() {
     }
@@ -53,6 +72,168 @@ public final class LootTableSimulator {
         List<ItemLoot> results = new ArrayList<>();
         simulateOnRandom(table, random, maxRolls, new HashMap<>(), results, new int[]{0});
         return List.copyOf(results);
+    }
+
+    /**
+     * Executes the running Minecraft version's own loot-table codec and
+     * executor. A null result means the exact path is unavailable; an empty
+     * list is a valid empty loot roll.
+     */
+    public static List<ItemLoot> simulateVanilla(String tableId, long seed) {
+        if (tableId == null || !tableId.startsWith("minecraft:")) return null;
+        try {
+            JsonElement json = readLootTableJson(tableId);
+            if (json == null) return null;
+
+            // LootTable references normally resolve through the server's reloadable
+            // loot-table registry. The headless verifier intentionally has no full
+            // server reload, so inline those referenced tables before decoding. The
+            // decoded NestedLootTable still executes through vanilla and therefore
+            // preserves the shared RNG stream, conditions, functions, and enchantments.
+            json = expandNestedLootTables(json, tableId, new HashSet<>(Set.of(tableId)));
+
+            RegistryOps<JsonElement> ops = RegistryOps.create(JsonOps.INSTANCE,
+                WorldgenEngine.offlineRegistryAccess());
+            LootTable table = LootTable.DIRECT_CODEC.parse(ops, json)
+                .getOrThrow(error -> new IllegalStateException("loot table parse failed: " + error));
+
+            Object fake = VanillaLootStructureSimulator.fakeLevelForProbe();
+            if (!(fake instanceof ServerLevel level)) return null;
+            LootParams params = new LootParams.Builder(level)
+                .withParameter(LootContextParams.ORIGIN, new Vec3(0, 64, 0))
+                .create(LootContextParamSets.CHEST);
+
+            List<ItemLoot> results = new ArrayList<>();
+            for (ItemStack stack : table.getRandomItems(params, seed)) {
+                if (stack == null || stack.isEmpty()) continue;
+                String itemId = net.minecraft.core.registries.BuiltInRegistries.ITEM
+                    .getKey(stack.getItem()).toString();
+                ItemLoot item = ItemLoot.of(itemId, stack.getCount(), stack.getCount(), 0);
+                String summary = enchantmentSummary(stack);
+                if (summary != null && !summary.isBlank()) {
+                    item = item.withPredictedEnchantments(summary);
+                }
+                results.add(item);
+            }
+            return List.copyOf(mergeExactStacks(results));
+        } catch (Throwable failure) {
+            reportVanillaFailure(tableId, failure);
+            VanillaLootStructureSimulator.probe("[real-loot] failed table=" + tableId
+                + " seed=" + seed + " error=" + failure);
+            return null;
+        }
+    }
+
+    private static JsonElement readLootTableJson(String tableId) {
+        String resourcePath = "/data/minecraft/loot_table/"
+            + tableId.substring("minecraft:".length()) + ".json";
+        try (InputStream in = openLootTableResource(tableId, resourcePath)) {
+            if (in == null) {
+                reportVanillaFailure(tableId, new IllegalStateException("resource unavailable"));
+                return null;
+            }
+            return JsonParser.parseReader(new InputStreamReader(in));
+        } catch (Throwable failure) {
+            reportVanillaFailure(tableId, failure);
+            return null;
+        }
+    }
+
+    private static JsonElement expandNestedLootTables(JsonElement element, String ownerTable,
+                                                       Set<String> activeTables) {
+        if (element == null || element.isJsonNull()) return element;
+        if (element.isJsonArray()) {
+            var array = element.getAsJsonArray();
+            for (int i = 0; i < array.size(); i++) {
+                array.set(i, expandNestedLootTables(array.get(i), ownerTable, activeTables));
+            }
+            return array;
+        }
+        if (!element.isJsonObject()) return element;
+
+        var object = element.getAsJsonObject();
+        String type = object.has("type") && object.get("type").isJsonPrimitive()
+            ? object.get("type").getAsString() : null;
+        if ("minecraft:loot_table".equals(type)
+            && object.has("value")
+            && object.get("value").isJsonPrimitive()) {
+            String reference = object.get("value").getAsString();
+            if (!reference.contains(":")) reference = "minecraft:" + reference;
+            if (!activeTables.contains(reference)) {
+                JsonElement nested = readLootTableJson(reference);
+                if (nested != null) {
+                    Set<String> nestedActive = new HashSet<>(activeTables);
+                    nestedActive.add(reference);
+                    object.add("value", expandNestedLootTables(nested, reference, nestedActive));
+                }
+            }
+            return object;
+        }
+
+        // Walk all nested objects/arrays. Loot-table JSON stores entries and their
+        // functions several levels down, so only looking at direct children misses
+        // references in alternatives or function payloads.
+        List<String> keys = new ArrayList<>();
+        for (var entry : object.entrySet()) keys.add(entry.getKey());
+        for (String key : keys) {
+            object.add(key, expandNestedLootTables(object.get(key), ownerTable, activeTables));
+        }
+        return object;
+    }
+
+    /**
+     * In a production Fabric client the Minecraft data pack is owned by the
+     * runtime resource manager, not the addon class loader. Keep the classpath
+     * path for offline probes, then ask the active client resource manager when
+     * the addon resource lookup is empty.
+     */
+    private static InputStream openLootTableResource(String tableId, String classpathPath) {
+        InputStream bundled = LootTableSimulator.class.getResourceAsStream(classpathPath);
+        if (bundled != null) return bundled;
+        try {
+            Minecraft minecraft = Minecraft.getInstance();
+            if (minecraft == null || minecraft.getResourceManager() == null) return null;
+            Identifier id = Identifier.fromNamespaceAndPath(
+                "minecraft", "loot_table/" + tableId.substring("minecraft:".length()) + ".json");
+            return minecraft.getResourceManager().open(id);
+        } catch (Throwable failure) {
+            reportVanillaFailure(tableId, failure);
+            return null;
+        }
+    }
+
+    private static void reportVanillaFailure(String tableId, Throwable failure) {
+        String key = tableId + ":" + failure.getClass().getName() + ":" + String.valueOf(failure.getMessage());
+        if (!REPORTED_VANILLA_FAILURES.add(key)) return;
+        PredictionDebugLogger.append("event=vanilla_loot_table_unavailable"
+            + " table=\"" + tableId.replace("\"", "\\\"") + "\""
+            + " error=\"" + String.valueOf(failure.getMessage()).replace("\"", "\\\"") + "\"\n");
+    }
+
+    private static List<ItemLoot> mergeExactStacks(List<ItemLoot> stacks) {
+        List<ItemLoot> merged = new ArrayList<>();
+        for (ItemLoot item : stacks) {
+            int existingIndex = -1;
+            for (int i = 0; i < merged.size(); i++) {
+                ItemLoot existing = merged.get(i);
+                if (existing.itemId().equals(item.itemId())
+                    && Objects.equals(existing.enchantmentSummary(), item.enchantmentSummary())) {
+                    existingIndex = i;
+                    break;
+                }
+            }
+            if (existingIndex < 0) {
+                merged.add(item);
+                continue;
+            }
+            ItemLoot existing = merged.get(existingIndex);
+            int count = existing.minCount() + item.minCount();
+            merged.set(existingIndex, new ItemLoot(existing.itemId(), count, count, 0,
+                existing.displayName(), existing.randomEnchantment(), existing.enchantmentId(),
+                existing.enchantmentLevel(), null, false, 0, 0,
+                existing.enchantmentSummary(), false));
+        }
+        return merged;
     }
 
     private static void simulateOnRandom(LootTableDef table, LootRandom random, int maxRolls,
@@ -246,7 +427,13 @@ public final class LootTableSimulator {
             if (summary == null || summary.isBlank()) {
                 summary = "Enchanted level " + level;
             }
-            return selected.withPredictedEnchantments(summary);
+            // Vanilla's EnchantWithLevelsFunction upgrades a book to an enchanted book.
+            // Keeping the original item id makes stronghold library predictions report plain
+            // books even though the stored enchantments were generated correctly.
+            ItemLoot result = "minecraft:book".equals(selected.itemId())
+                ? selected.withItemId("minecraft:enchanted_book")
+                : selected;
+            return result.withPredictedEnchantments(summary);
         } catch (Throwable ignored) {
             return selected.withPredictedEnchantments("Enchanted level " + level);
         }
@@ -254,6 +441,9 @@ public final class LootTableSimulator {
 
     private static String enchantmentSummary(ItemStack stack) {
         var enchantments = stack.getEnchantments();
+        if (enchantments == null || enchantments.isEmpty()) {
+            enchantments = stack.get(DataComponents.STORED_ENCHANTMENTS);
+        }
         if (enchantments == null || enchantments.isEmpty()) return "";
 
         List<String> parts = new ArrayList<>();

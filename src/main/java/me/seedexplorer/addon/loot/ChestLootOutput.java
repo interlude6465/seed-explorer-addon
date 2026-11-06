@@ -14,6 +14,11 @@ public record ChestLootOutput(int blockX, int blockY, int blockZ, String lootTab
         this(blockX, blockY, blockZ, lootTableId, predictedItems, seed, true);
     }
 
+    /** A known container position whose vanilla loot seed could not be reproduced. */
+    public static ChestLootOutput positionOnly(int blockX, int blockY, int blockZ) {
+        return new ChestLootOutput(blockX, blockY, blockZ, "", List.of(), 0L, false);
+    }
+
     public boolean isEmpty() {
         return predictedItems == null || predictedItems.isEmpty();
     }

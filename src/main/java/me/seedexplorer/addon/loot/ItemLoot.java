@@ -87,6 +87,12 @@ public record ItemLoot(String itemId, int minCount, int maxCount, int weight, St
             enchantmentId, enchantmentLevel, referenceTableId, false, 0, 0, summary, hasDamageRoll);
     }
 
+    public ItemLoot withItemId(String replacementItemId) {
+        return new ItemLoot(replacementItemId, minCount, maxCount, weight, displayName, randomEnchantment,
+            enchantmentId, enchantmentLevel, referenceTableId, levelsEnchantment, enchantMinLevel,
+            enchantMaxLevel, enchantmentSummary, hasDamageRoll);
+    }
+
     public ItemLoot withFixedEnchantment(String enchantmentId, int level) {
         return new ItemLoot(itemId, minCount, maxCount, weight, displayName, true,
             enchantmentId, level, referenceTableId, false, 0, 0, null, hasDamageRoll);

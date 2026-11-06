@@ -64,6 +64,24 @@ public class MinimapManager {
         return tile;
     }
 
+    /** Queues nearby biome tiles center-first so a focused map does not remain blank. */
+    public void prewarm(int blockX, int blockZ, int dimension, int radiusChunks) {
+        int centerX = Math.floorDiv(blockX, 16);
+        int centerZ = Math.floorDiv(blockZ, 16);
+        int radius = Math.max(0, radiusChunks);
+        getTile(centerX, centerZ, dimension);
+        for (int ring = 1; ring <= radius; ring++) {
+            for (int offset = -ring; offset <= ring; offset++) {
+                getTile(centerX + offset, centerZ - ring, dimension);
+                getTile(centerX + offset, centerZ + ring, dimension);
+            }
+            for (int offset = -ring + 1; offset < ring; offset++) {
+                getTile(centerX - ring, centerZ + offset, dimension);
+                getTile(centerX + ring, centerZ + offset, dimension);
+            }
+        }
+    }
+
     /**
      * Launches a background task to generate the NativeImage for a chunk tile,
      * then uploads the texture to the GPU on the main render thread.

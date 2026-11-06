@@ -49,7 +49,9 @@ public final class StructureLootProbe {
                     int cx = Integer.parseInt(parts[0].trim());
                     int cz = Integer.parseInt(parts[1].trim());
                     OUT.println("type=" + type + " key=" + key + " seed=" + seed
-                        + " dim=" + dim + " DIRECT startChunk=" + cx + "," + cz);
+                        + " dim=" + dim + " decorationIndex="
+                        + VanillaLootStructureSimulator.decorationIndex(key)
+                        + " DIRECT startChunk=" + cx + "," + cz);
                     probeChunk(type, key, seed, dim, cx, cz);
                     return;
                 }

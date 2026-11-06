@@ -19,7 +19,7 @@ import java.io.DataInputStream;
 import java.io.PrintStream;
 import java.nio.file.Path;
 
-/** Replays one chunk from Paper's serialized stronghold start for parity research. */
+/** Replays one chunk from a Paper-serialized structure start for parity research. */
 public final class StrongholdSavedStartSimulation {
     private static final PrintStream OUT = System.out;
 
@@ -30,7 +30,8 @@ public final class StrongholdSavedStartSimulation {
         Thread.setDefaultUncaughtExceptionHandler((thread, error) -> error.printStackTrace(OUT));
         if (args.length < 8) {
             throw new IllegalArgumentException("Usage: <region-dir> <start-x> <start-z>"
-                + " <placement-x> <placement-z> <seed> <index> <expected-seed>");
+                + " <placement-x> <placement-z> <seed> <index|first..last> <expected-seed>"
+                + " [structure-id] [dimension]");
         }
         SharedConstants.tryDetectVersion();
         Bootstrap.bootStrap();
@@ -40,15 +41,24 @@ public final class StrongholdSavedStartSimulation {
         int placementX = Integer.parseInt(args[3]);
         int placementZ = Integer.parseInt(args[4]);
         long seed = Long.parseLong(args[5]);
-        int index = Integer.parseInt(args[6]);
+        String indexArg = args[6];
         long expectedSeed = Long.parseLong(args[7]);
 
-        CompoundTag stronghold = readStrongholdStart(regionDir, startX, startZ);
+        String structureId = args.length > 8 ? args[8] : "minecraft:stronghold";
+        String dimensionId = args.length > 9 ? args[9] : "minecraft:overworld";
+        int dimension = switch (dimensionId) {
+            case "minecraft:the_nether" -> -1;
+            case "minecraft:the_end" -> 1;
+            default -> 0;
+        };
+        CompoundTag stronghold = readStructureStart(
+            regionDir, startX, startZ, structureId, dimensionId);
         var context = new StructurePieceSerializationContext(
-            null, WorldgenEngine.offlineRegistryAccess(), null);
+            null, WorldgenEngine.offlineRegistryAccess(),
+            WorldgenEngine.structureTemplateManager());
         StructureStart savedStart = StructureStart.loadStaticStart(context, stronghold, seed);
         if (savedStart == null || !savedStart.isValid()) {
-            throw new IllegalStateException("Paper stronghold start could not be loaded");
+            throw new IllegalStateException("Paper structure start could not be loaded");
         }
 
         BoundingBox writable = new BoundingBox(
@@ -65,34 +75,54 @@ public final class StrongholdSavedStartSimulation {
                 + " box=" + piece.getBoundingBox());
         }
 
-        var containers = VanillaLootStructureSimulator.simulateStartChunk(
-            seed, savedStart, placementX, placementZ, index);
+        int firstIndex;
+        int lastIndex;
+        if (indexArg.contains("..")) {
+            String[] range = indexArg.split("\\.\\.", 2);
+            firstIndex = Integer.parseInt(range[0]);
+            lastIndex = Integer.parseInt(range[1]);
+        } else {
+            firstIndex = lastIndex = Integer.parseInt(indexArg);
+        }
         boolean matched = false;
-        for (var container : containers) {
-            OUT.println("saved_start_container=" + container.x() + "," + container.y()
-                + "," + container.z() + " table=" + container.lootTableId()
-                + " seed=" + container.lootSeed());
-            if (container.lootSeed() == expectedSeed) matched = true;
+        for (int index = firstIndex; index <= lastIndex; index++) {
+            var containers = VanillaLootStructureSimulator.simulateStartChunk(
+                seed, dimension, savedStart, placementX, placementZ, index);
+            for (var container : containers) {
+                OUT.println("saved_start_index=" + index + " container=" + container.x() + ","
+                    + container.y() + "," + container.z() + " table=" + container.lootTableId()
+                    + " seed=" + container.lootSeed());
+                if (container.lootSeed() == expectedSeed) {
+                    matched = true;
+                    OUT.println("saved_start_expected_match_index=" + index);
+                }
+            }
         }
         OUT.println("saved_start_expected_match=" + matched);
         if (!matched) System.exit(2);
     }
 
-    private static CompoundTag readStrongholdStart(Path regionDir, int chunkX,
-                                                    int chunkZ) throws Exception {
+    private static CompoundTag readStructureStart(Path regionDir, int chunkX,
+                                                   int chunkZ, String structureId,
+                                                   String dimensionId) throws Exception {
         ChunkPos chunk = new ChunkPos(chunkX, chunkZ);
         Path file = regionDir.resolve("r." + Math.floorDiv(chunkX, 32)
             + "." + Math.floorDiv(chunkZ, 32) + ".mca");
-        RegionStorageInfo info = new RegionStorageInfo(
-            "probe_world", Level.OVERWORLD, "chunk");
+        var dimension = switch (dimensionId) {
+            case "minecraft:the_nether" -> Level.NETHER;
+            case "minecraft:the_end" -> Level.END;
+            default -> Level.OVERWORLD;
+        };
+        RegionStorageInfo info = new RegionStorageInfo("probe_world", dimension, "chunk");
         try (RegionFile region = new RegionFile(info, file, regionDir, false);
              DataInputStream input = region.getChunkDataInputStream(chunk)) {
             if (input == null) throw new IllegalStateException("Start chunk is absent: " + chunk);
             CompoundTag root = NbtIo.read(input, NbtAccounter.unlimitedHeap());
             CompoundTag start = root.getCompoundOrEmpty("structures")
                 .getCompoundOrEmpty("starts")
-                .getCompoundOrEmpty("minecraft:stronghold");
-            if (start.isEmpty()) throw new IllegalStateException("Stronghold start NBT is absent");
+                .getCompoundOrEmpty(structureId);
+            if (start.isEmpty()) throw new IllegalStateException(
+                structureId + " start NBT is absent");
             return start;
         }
     }

@@ -17,6 +17,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
 
 public final class LootTableAccuracyTest {
     private static final PrintStream OUT = System.out;
@@ -46,6 +48,29 @@ public final class LootTableAccuracyTest {
             ? root.getAsJsonObject("regionScan") : root;
         JsonArray structures = scan.has("structures") && scan.get("structures").isJsonArray()
             ? scan.getAsJsonArray("structures") : new JsonArray();
+
+        // Structure-aware comparison handles double chests correctly: Paper
+        // exposes both block positions while their opened inventory contains
+        // one independent loot roll from each half. Keep the old table-only
+        // path below for legacy captures without region structure metadata.
+        if (!structures.isEmpty()) {
+            Set<String> structureIds = new HashSet<>();
+            for (JsonElement element : structures) {
+                if (element.isJsonObject() && element.getAsJsonObject().has("id")) {
+                    structureIds.add(element.getAsJsonObject().get("id").getAsString());
+                }
+            }
+            int failures = 0;
+            for (String structureId : structureIds) {
+                OracleCaseComparator.Result result = OracleCaseComparator.compare(
+                    oraclePath, structureId, null);
+                OUT.println("structure=" + structureId + " " + result.summary());
+                for (String difference : result.differences()) OUT.println("  " + difference);
+                if (!result.exactMatch()) failures++;
+            }
+            if (failures > 0) System.exit(2);
+            return;
+        }
 
         int totalChests = 0;
         int containersWithoutLootTables = 0;
@@ -81,7 +106,10 @@ public final class LootTableAccuracyTest {
                 }
 
                 Map<String, Integer> oracleItems = readOracleItems(chest);
-                java.util.List<ItemLoot> predicted = LootTableSimulator.simulate(table, seed, 64);
+                java.util.List<ItemLoot> vanilla = LootTableSimulator.simulateVanilla(tableId, seed);
+                java.util.List<ItemLoot> predicted = vanilla != null
+                    ? vanilla
+                    : LootTableSimulator.simulate(table, seed, 64);
                 Map<String, Integer> predictedItems = new HashMap<>();
                 for (ItemLoot item : predicted) {
                     predictedItems.merge(item.itemId(), item.minCount(), Integer::sum);

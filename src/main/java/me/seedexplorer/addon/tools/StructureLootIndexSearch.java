@@ -120,6 +120,7 @@ public final class StructureLootIndexSearch {
             case "TRIAL_CHAMBER" -> BuiltinStructures.TRIAL_CHAMBERS;
             case "BASTION" -> BuiltinStructures.BASTION_REMNANT;
             case "MANSION" -> BuiltinStructures.WOODLAND_MANSION;
+            case "ANCIENT_CITY" -> BuiltinStructures.ANCIENT_CITY;
             case "IGLOO" -> BuiltinStructures.IGLOO;
             case "SHIPWRECK" -> BuiltinStructures.SHIPWRECK;
             case "SHIPWRECK_BEACHED" -> BuiltinStructures.SHIPWRECK_BEACHED;

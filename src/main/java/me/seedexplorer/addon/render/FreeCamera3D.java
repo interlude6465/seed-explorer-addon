@@ -2,11 +2,15 @@ package me.seedexplorer.addon.render;
 
 import org.joml.Matrix4f;
 
-/**
- * A reusable 3D orbit camera that revolves around a target point.
- * State is stored in doubles for smooth interpolation.
- */
+/** First-person spectator camera with smooth, accelerated flight controls. */
 public final class FreeCamera3D {
+    private static final double MAX_HORIZONTAL_SPEED = 24.0;
+    private static final double MAX_VERTICAL_SPEED = 18.0;
+    private static final double ACCELERATION_SECONDS = 2.0;
+    private static final double DECELERATION_SECONDS = 0.45;
+
+    // Kept as targetX/Y/Z for source compatibility with the map renderer. These
+    // values are now the camera's physical position, not an orbit anchor.
     private double targetX;
     private double targetY;
     private double targetZ;
@@ -26,6 +30,9 @@ public final class FreeCamera3D {
     private double animStartDistance, animStartPitch, animStartYaw;
     private double animEndTargetX, animEndTargetY, animEndTargetZ;
     private double animEndDistance, animEndPitch, animEndYaw;
+    private double forwardVelocity;
+    private double strafeVelocity;
+    private double verticalVelocity;
 
     public FreeCamera3D() {
         this.targetX = 0;
@@ -41,13 +48,19 @@ public final class FreeCamera3D {
     }
 
     public void target(double x, double y, double z) {
+        position(x, y, z);
+    }
+
+    public void position(double x, double y, double z) {
         this.targetX = x;
         this.targetY = y;
         this.targetZ = z;
     }
 
     public void distance(double d) {
-        this.distance = clamp(d, 5, 500);
+        // Keep the camera numerically stable while allowing the full world to be
+        // inspected. The previous 500 block cap caused scroll-out to snap back.
+        this.distance = clamp(d, 2, 1_000_000_000D);
     }
 
     public void pitch(double p) {
@@ -81,6 +94,7 @@ public final class FreeCamera3D {
      * Positive deltaX turns right, positive deltaY tilts down.
      */
     public void mouseDrag(double deltaX, double deltaY) {
+        animating = false;
         pitch = clamp(pitch - Math.toRadians(deltaY), Math.toRadians(1), Math.toRadians(179));
         yaw -= Math.toRadians(deltaX);
     }
@@ -90,34 +104,113 @@ public final class FreeCamera3D {
      * Positive zooms in, negative zooms out.
      */
     public void scroll(double amount) {
-        distance = clamp(distance * (1.0 + amount * 0.05), 5, 500);
+        if (!Double.isFinite(amount) || amount == 0.0) return;
+        // Exponential scaling is stable for high-resolution touchpads and never
+        // crosses zero when a large wheel delta is delivered.
+        distance = clamp(distance * Math.exp(-amount * 0.12), 2, 1_000_000_000D);
     }
 
-    /** Computes the eye position from spherical coordinates around the target. */
-    private double eyeX() {
-        return targetX + distance * Math.sin(yaw) * Math.sin(pitch);
-    }
+    public double eyeX() { return targetX; }
+    public double eyeY() { return targetY; }
+    public double eyeZ() { return targetZ; }
 
-    private double eyeY() {
-        return targetY + distance * Math.cos(pitch);
-    }
-
-    private double eyeZ() {
-        return targetZ + distance * Math.cos(yaw) * Math.sin(pitch);
-    }
+    public double forwardX() { return -Math.sin(yaw) * Math.sin(pitch); }
+    public double forwardY() { return -Math.cos(pitch); }
+    public double forwardZ() { return -Math.cos(yaw) * Math.sin(pitch); }
+    public double rightX() { return Math.cos(yaw); }
+    public double rightZ() { return -Math.sin(yaw); }
 
     /**
-     * Returns the view matrix (camera-to-world) for the current camera state.
+     * Returns the view matrix for the current camera position and look direction.
      * Uses a right-handed coordinate system with Y-up.
      */
     public Matrix4f getViewMatrix() {
         Matrix4f m = new Matrix4f();
+        double lookX = eyeX() + forwardX();
+        double lookY = eyeY() + forwardY();
+        double lookZ = eyeZ() + forwardZ();
         m.lookAt(
             (float) eyeX(), (float) eyeY(), (float) eyeZ(),
-            (float) targetX, (float) targetY, (float) targetZ,
+            (float) lookX, (float) lookY, (float) lookZ,
             0.0f, 1.0f, 0.0f
         );
         return m;
+    }
+
+    /**
+     * Advances held-key flight. Inputs normally range from -1..1, but may be
+     * larger for movement speed tiers. Diagonal movement is normalized to the
+     * largest requested tier so a 3x diagonal still has a 3x total speed.
+     * Forward follows the complete look vector, including pitch; strafe remains
+     * level and vertical is world Y.
+     */
+    public boolean updateFlight(double forwardInput, double strafeInput,
+                                double verticalInput, double deltaSeconds) {
+        if (!Double.isFinite(deltaSeconds) || deltaSeconds <= 0.0) return false;
+        double length = Math.sqrt(forwardInput * forwardInput
+            + strafeInput * strafeInput + verticalInput * verticalInput);
+        double maximumInput = Math.max(1.0, Math.max(Math.abs(forwardInput),
+            Math.max(Math.abs(strafeInput), Math.abs(verticalInput))));
+        if (length > maximumInput) {
+            double scale = maximumInput / length;
+            forwardInput *= scale;
+            strafeInput *= scale;
+            verticalInput *= scale;
+        }
+
+        double forwardTarget = forwardInput * MAX_HORIZONTAL_SPEED;
+        double strafeTarget = strafeInput * MAX_HORIZONTAL_SPEED;
+        double verticalTarget = verticalInput * MAX_VERTICAL_SPEED;
+        forwardVelocity = approachVelocity(forwardVelocity,
+            forwardTarget, Math.max(MAX_HORIZONTAL_SPEED, Math.abs(forwardTarget)), deltaSeconds);
+        strafeVelocity = approachVelocity(strafeVelocity,
+            strafeTarget, Math.max(MAX_HORIZONTAL_SPEED, Math.abs(strafeTarget)), deltaSeconds);
+        verticalVelocity = approachVelocity(verticalVelocity,
+            verticalTarget, Math.max(MAX_VERTICAL_SPEED, Math.abs(verticalTarget)), deltaSeconds);
+
+        boolean moving = Math.abs(forwardVelocity) > 1.0e-4
+            || Math.abs(strafeVelocity) > 1.0e-4 || Math.abs(verticalVelocity) > 1.0e-4;
+        if (!moving) return false;
+
+        animating = false;
+        targetX += (forwardX() * forwardVelocity + rightX() * strafeVelocity) * deltaSeconds;
+        targetY += (forwardY() * forwardVelocity + verticalVelocity) * deltaSeconds;
+        targetZ += (forwardZ() * forwardVelocity + rightZ() * strafeVelocity) * deltaSeconds;
+        return true;
+    }
+
+    public void stopFlight() {
+        forwardVelocity = 0.0;
+        strafeVelocity = 0.0;
+        verticalVelocity = 0.0;
+    }
+
+    /** Places the camera once at a useful vantage point looking at a world position. */
+    public void viewOf(double focusX, double focusY, double focusZ,
+                       double distance, double pitchDeg, double yawDeg) {
+        double pitchRad = Math.toRadians(pitchDeg);
+        double yawRad = Math.toRadians(yawDeg);
+        position(
+            focusX + distance * Math.sin(yawRad) * Math.sin(pitchRad),
+            focusY + distance * Math.cos(pitchRad),
+            focusZ + distance * Math.cos(yawRad) * Math.sin(pitchRad));
+        distance(distance);
+        pitch(pitchRad);
+        yaw(yawRad);
+        animating = false;
+        stopFlight();
+    }
+
+    public void animateViewOf(double focusX, double focusY, double focusZ,
+                              double distance, double pitchDeg, double yawDeg,
+                              int durationTicks) {
+        double pitchRad = Math.toRadians(pitchDeg);
+        double yawRad = Math.toRadians(yawDeg);
+        animateTo(
+            focusX + distance * Math.sin(yawRad) * Math.sin(pitchRad),
+            focusY + distance * Math.cos(pitchRad),
+            focusZ + distance * Math.cos(yawRad) * Math.sin(pitchRad),
+            distance, pitchDeg, yawDeg, durationTicks);
     }
 
     /**
@@ -125,7 +218,11 @@ public final class FreeCamera3D {
      */
     public Matrix4f getProjectionMatrix() {
         Matrix4f m = new Matrix4f();
-        m.perspective((float) fov, (float) aspectRatio, (float) nearZ, (float) farZ);
+        // The far plane follows the orbit distance so distant terrain remains
+        // visible after zooming out. Clamp to float range used by JOML.
+        double dynamicFar = Math.max(farZ, distance * 4.0 + 4096.0);
+        m.perspective((float) fov, (float) aspectRatio, (float) nearZ,
+            (float) Math.min(dynamicFar, 3.0e38));
         return m;
     }
 
@@ -135,6 +232,7 @@ public final class FreeCamera3D {
     public void animateTo(double targetX, double targetY, double targetZ,
                           double distance, double pitchDeg, double yawDeg,
                           int durationTicks) {
+        stopFlight();
         this.animStartTargetX = this.targetX;
         this.animStartTargetY = this.targetY;
         this.animStartTargetZ = this.targetZ;
@@ -188,6 +286,17 @@ public final class FreeCamera3D {
 
     private static double clamp(double v, double min, double max) {
         return v < min ? min : v > max ? max : v;
+    }
+
+    private static double approachVelocity(double current, double target,
+                                           double maximumSpeed, double deltaSeconds) {
+        double seconds = target == 0.0 ? DECELERATION_SECONDS
+            : current != 0.0 && Math.signum(current) != Math.signum(target)
+                ? DECELERATION_SECONDS : ACCELERATION_SECONDS;
+        double amount = maximumSpeed / seconds * deltaSeconds;
+        if (current < target) return Math.min(target, current + amount);
+        if (current > target) return Math.max(target, current - amount);
+        return target;
     }
 
     private static double lerp(double a, double b, double t) {

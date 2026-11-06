@@ -1,6 +1,50 @@
 # Loot Prediction Engineering Log
 
-Last updated: 2026-07-15
+Last updated: 2026-08-22
+
+## 2026-08-22 — documentation reconciliation
+
+No code changes in this pass. The prose below had drifted behind the code; this
+entry records the authoritative current state so the historical entries above
+(no longer accurate in places) are not silently misread:
+
+### Bastion Remnant — VALIDATED since 2026-07-18
+
+The 2026-07-15 entry's warning ("do not add BASTION to VALIDATED_STRUCTURES
+without a strict zero-difference test") was satisfied on 2026-07-18:
+
+- Root causes fixed were the Nether decoration index (0, see
+  `BundledLootTableLoader`) and `enchant_randomly` seed handling; with those,
+  decoration index 0 reproduces the exact 64-bit loot seed for every bastion
+  chest in the pinned oracle.
+- `PredictionRegressionSuite.validateBastion` now replays the captured
+  `lootprobe-bastion-seed-5674700730434827097.json` oracle (SHA-256
+  `8a408b9a...`) as part of the fail-fast gate.
+- `StructureType.BASTION` is in both `SUPPORTED_STRUCTURES` and
+  `STRICTLY_VALIDATED_STRUCTURES`. The earlier "jigsaw parity unsolved"
+  statements in this log and the old `ChestLootPredictor` header comment are
+  superseded.
+
+Mansion also no longer falls through to the preview/fabricated-seed fallback
+after the same fixes (`ChestLootPredictor.predictForStructure` note); mansion
+remains supported-but-not-strictly-validated.
+
+### Current validation tiers (as enforced by `ChestLootPredictor`)
+
+- Strictly oracle-pinned: desert pyramid (4 oracles), stronghold, shipwreck,
+  outpost, jungle temple, buried treasure, bastion, dungeon.
+- Supported, non-strict (coordinates can shift): mineshaft (minecart entities
+  can be moved by players/hoppers), ruined portal, ocean ruin, igloo, ancient
+  city, trail ruins, mansion, end city, fortress, nether ruined portal. The
+  mineshaft saved-entity oracle cart (position + loot seed) is pinned in the
+  regression suite, which also asserts mineshaft stays non-strict.
+- Gated out entirely: trial chamber (26.1.2 jigsaw processor state not exactly
+  reproduced), monument, witch hut, village, amethyst geode, nether fossil,
+  end gateway.
+
+The regression suite currently pins: 4 desert oracles, stronghold, shipwreck,
+outpost, buried treasure, jungle temple, bastion, the mineshaft saved-entity
+cart, terrain height SHA-256, critical carved height, and the carver tag count.
 
 ## 2026-07-15 follow-up 2 - audit, fresh seeds, GUI rebuild pass
 

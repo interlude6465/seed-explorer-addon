@@ -337,7 +337,9 @@ final class OreDebugRunner {
         appendLine(report, "loaded_chunk_visits=" + loadedChunks);
         appendLine(report, "scan_y_layers_per_tick=" + SCAN_Y_LAYERS_PER_TICK);
         appendLine(report, "predictor=full_ore_step_v3_chunk_biome_features");
-        appendLine(report, "note=actual positions are loaded client chunks only; predictions are seed-only; command scans loaded chunks over ticks then compares predictions in a background thread");
+        appendLine(report, "prediction_accuracy=approximate_for_unloaded_chunks; loaded ESP boxes are reconciled against the current client block state before rendering");
+        appendLine(report, "known_limitations=seed-only terrain uses noise columns and does not replay carvers, surface rules, structures, or cross-chunk feature-write history");
+        appendLine(report, "note=actual positions are loaded client chunks only; command scans loaded chunks over ticks then compares predictions in a background thread");
         appendLine(report, "ore_feature_summary=");
         for (String line : OrePredictor.debugFeatureSummary(seed, dimension)) {
             appendLine(report, "  " + line);

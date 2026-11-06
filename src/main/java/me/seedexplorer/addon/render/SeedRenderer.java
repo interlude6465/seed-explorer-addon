@@ -12,6 +12,7 @@ import me.seedexplorer.addon.ore.OreCache;
 import me.seedexplorer.addon.ore.OrePatch;
 import me.seedexplorer.addon.seed.SeedManager;
 import me.seedexplorer.addon.structures.GeneratedStructure;
+import me.seedexplorer.addon.structures.DungeonPredictor;
 import me.seedexplorer.addon.structures.StructureType;
 import me.seedexplorer.addon.structures.StructureCache;
 import me.seedexplorer.addon.waypoints.SeedWaypoint;
@@ -161,6 +162,13 @@ public class SeedRenderer {
             includeBuriedTreasure,
             includeMineshafts
         );
+        if (context.dimension() == 0) {
+            List<GeneratedStructure> withDungeons = new ArrayList<>(structures);
+            withDungeons.addAll(DungeonPredictor.cachedStructures(SeedManager.get().getWorldSeed(),
+                viewport.startChunkX() - margin, viewport.startChunkZ() - margin,
+                viewport.endChunkX() + margin, viewport.endChunkZ() + margin));
+            structures = List.copyOf(withDungeons);
+        }
         if (context.lootMatchedStructureKeys() != null) {
             structures = structures.stream()
                 .filter(s -> context.lootMatchedStructureKeys().contains(structureKey(context.dimension(), s)))
@@ -174,6 +182,7 @@ public class SeedRenderer {
         key = (key ^ dimension) * 1099511628211L;
         key = (key ^ structure.type.ordinal()) * 1099511628211L;
         key = (key ^ structure.x) * 1099511628211L;
+        key = (key ^ structure.y) * 1099511628211L;
         key = (key ^ structure.z) * 1099511628211L;
         key = (key ^ structure.startChunkX) * 1099511628211L;
         key = (key ^ structure.startChunkZ) * 1099511628211L;

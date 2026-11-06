@@ -31,11 +31,17 @@ public final class SavedChunkNbtReport {
         Path regionDir = Path.of(args[0]).toAbsolutePath();
         int chunkX = Integer.parseInt(args[1]);
         int chunkZ = Integer.parseInt(args[2]);
+        String structureId = args.length > 3 ? args[3] : "minecraft:stronghold";
+        String dimensionId = args.length > 4 ? args[4] : "minecraft:overworld";
         ChunkPos chunk = new ChunkPos(chunkX, chunkZ);
         Path file = regionDir.resolve("r." + Math.floorDiv(chunkX, 32)
             + "." + Math.floorDiv(chunkZ, 32) + ".mca");
-        RegionStorageInfo info = new RegionStorageInfo(
-            "probe_world", Level.OVERWORLD, "chunk");
+        var dimension = switch (dimensionId) {
+            case "minecraft:the_nether" -> Level.NETHER;
+            case "minecraft:the_end" -> Level.END;
+            default -> Level.OVERWORLD;
+        };
+        RegionStorageInfo info = new RegionStorageInfo("probe_world", dimension, "chunk");
 
         try (RegionFile region = new RegionFile(info, file, regionDir, false);
              DataInputStream input = region.getChunkDataInputStream(chunk)) {
@@ -45,20 +51,31 @@ public final class SavedChunkNbtReport {
                 return;
             }
             CompoundTag root = NbtIo.read(input, NbtAccounter.unlimitedHeap());
+            var blockEntities = root.getListOrEmpty("block_entities");
+            var entities = root.getListOrEmpty("Entities");
             CompoundTag structures = root.getCompoundOrEmpty("structures");
             CompoundTag starts = structures.getCompoundOrEmpty("starts");
             CompoundTag references = structures.getCompoundOrEmpty("References");
-            CompoundTag stronghold = starts.getCompoundOrEmpty("minecraft:stronghold");
-            var children = stronghold.getListOrEmpty("Children");
+            CompoundTag selectedStart = starts.getCompoundOrEmpty(structureId);
+            var children = selectedStart.getListOrEmpty("Children");
             OUT.println("saved_chunk_present=true chunk=" + chunkX + "," + chunkZ);
+            OUT.println("block_entities=" + blockEntities.size());
+            for (var blockEntity : blockEntities) {
+                OUT.println("block_entity=" + blockEntity);
+            }
+            OUT.println("entities=" + entities.size());
+            for (var entity : entities) {
+                OUT.println("entity=" + entity);
+            }
             OUT.println("root_keys=" + root.keySet());
             OUT.println("structure_keys=" + structures.keySet());
             OUT.println("start_keys=" + starts.keySet());
             OUT.println("reference_keys=" + references.keySet());
             OUT.println("references=" + references);
-            OUT.println("stronghold_keys=" + stronghold.keySet());
-            OUT.println("stronghold_children=" + children.size());
-            OUT.println("stronghold_start=" + stronghold);
+            OUT.println("selected_structure=" + structureId);
+            OUT.println("selected_start_keys=" + selectedStart.keySet());
+            OUT.println("selected_start_children=" + children.size());
+            OUT.println("selected_start=" + selectedStart);
         }
     }
 }

@@ -237,7 +237,7 @@ tasks {
 
     register<JavaExec>("strongholdSavedStartSimulation") {
         group = "verification"
-        description = "Replay one chunk from a Paper-saved stronghold start"
+        description = "Replay one chunk from a Paper-saved structure start"
         dependsOn(classes)
         classpath = sourceSets.main.get().runtimeClasspath + sourceSets.main.get().compileClasspath
         mainClass.set("me.seedexplorer.addon.tools.StrongholdSavedStartSimulation")
@@ -249,7 +249,9 @@ tasks {
             providers.gradleProperty("placementChunkZ").getOrElse("55"),
             providers.gradleProperty("seed").getOrElse("0"),
             providers.gradleProperty("index").getOrElse("19"),
-            providers.gradleProperty("expectedSeed").getOrElse("-393332197303699418")
+            providers.gradleProperty("expectedSeed").getOrElse("-393332197303699418"),
+            providers.gradleProperty("structureId").getOrElse("minecraft:stronghold"),
+            providers.gradleProperty("dimension").getOrElse("minecraft:overworld")
         )
     }
 
@@ -296,6 +298,31 @@ tasks {
         args(seed, cx, cz, step)
     }
 
+    register<JavaExec>("dungeonSavedOracleReport") {
+        group = "verification"
+        description = "Scans saved Anvil chunks for dungeon spawners and simple-dungeon loot chests."
+        dependsOn(classes)
+        mainClass.set("me.seedexplorer.addon.tools.DungeonSavedOracleReport")
+        classpath = sourceSets.main.get().runtimeClasspath + sourceSets.main.get().compileClasspath
+        args(
+            providers.gradleProperty("regionDir").getOrElse(""),
+            providers.gradleProperty("limit").getOrElse("64")
+        )
+    }
+
+    register<JavaExec>("dungeonPredictorProbe") {
+        group = "verification"
+        description = "Validates the cached parallel dungeon scanner against saved-world oracle coordinates and loot seeds."
+        dependsOn(classes)
+        mainClass.set("me.seedexplorer.addon.tools.DungeonPredictorProbe")
+        classpath = sourceSets.main.get().runtimeClasspath + sourceSets.main.get().compileClasspath
+        args(
+            providers.gradleProperty("seed").getOrElse("-5330673357612662400"),
+            providers.gradleProperty("chunkX").getOrElse("-38"),
+            providers.gradleProperty("chunkZ").getOrElse("-18")
+        )
+    }
+
     register<JavaExec>("lootTableAccuracyTest") {
         group = "verification"
         description = "Tests loot table parsing accuracy vs oracle data."
@@ -337,6 +364,20 @@ tasks {
         )
     }
 
+    register<JavaExec>("naturalDecorationProbe") {
+        group = "verification"
+        description = "Checks deterministic vanilla natural-feature placement for the 3D map."
+        dependsOn(classes)
+        mainClass.set("me.seedexplorer.addon.tools.NaturalDecorationProbe")
+        classpath = sourceSets.main.get().runtimeClasspath + sourceSets.main.get().compileClasspath
+        args(
+            providers.gradleProperty("seed").orElse("123456789").get(),
+            providers.gradleProperty("dimension").orElse("0").get(),
+            providers.gradleProperty("chunkX").orElse("0").get(),
+            providers.gradleProperty("chunkZ").orElse("0").get()
+        )
+    }
+
     register<JavaExec>("predictionRegressionSuite") {
         group = "verification"
         description = "Runs all accepted strict loot oracles and the pinned vanilla carver terrain regression."
@@ -369,7 +410,9 @@ tasks {
         args(
             providers.gradleProperty("regionDir").getOrElse(""),
             providers.gradleProperty("chunkX").getOrElse("0"),
-            providers.gradleProperty("chunkZ").getOrElse("0")
+            providers.gradleProperty("chunkZ").getOrElse("0"),
+            providers.gradleProperty("structureId").getOrElse("minecraft:stronghold"),
+            providers.gradleProperty("dimension").getOrElse("minecraft:overworld")
         )
         if (listOf("minX", "minZ", "maxX", "maxZ").all {
                 providers.gradleProperty(it).isPresent
@@ -515,6 +558,44 @@ tasks {
         args(probeArgs)
     }
 
+    register<JavaExec>("enchantingTablePredictionProbe") {
+        group = "verification"
+        description = "Checks deterministic enchanting-table offers through the vanilla helper path."
+        dependsOn(classes)
+        mainClass.set("me.seedexplorer.addon.tools.EnchantingTablePredictionProbe")
+        classpath = sourceSets.main.get().runtimeClasspath + sourceSets.main.get().compileClasspath
+        jvmArgs("--add-opens", "java.base/jdk.internal.misc=ALL-UNNAMED",
+            "--add-opens", "java.base/java.lang=ALL-UNNAMED")
+        if (providers.gradleProperty("seed").isPresent) {
+            args(providers.gradleProperty("seed").get())
+        }
+    }
+
+    register<JavaExec>("enchantingSeedCrackerProbe") {
+        group = "verification"
+        description = "Checks ClientCommands-compatible XP-seed candidate filtering offline."
+        dependsOn(classes)
+        mainClass.set("me.seedexplorer.addon.tools.EnchantingSeedCrackerProbe")
+        classpath = sourceSets.main.get().runtimeClasspath + sourceSets.main.get().compileClasspath
+        jvmArgs("--add-opens", "java.base/jdk.internal.misc=ALL-UNNAMED",
+            "--add-opens", "java.base/java.lang=ALL-UNNAMED")
+        if (providers.gradleProperty("seed").isPresent) {
+            args(providers.gradleProperty("seed").get())
+        }
+    }
+
+    register<JavaExec>("lootSearchQueryProbe") {
+        group = "verification"
+        description = "Checks natural item, enchanted-book, and quantity search parsing."
+        dependsOn(classes)
+        mainClass.set("me.seedexplorer.addon.tools.LootSearchQueryProbe")
+        classpath = sourceSets.main.get().runtimeClasspath + sourceSets.main.get().compileClasspath
+        jvmArgs("--add-opens", "java.base/jdk.internal.misc=ALL-UNNAMED",
+            "--add-opens", "java.base/java.lang=ALL-UNNAMED")
+        standardOutput = System.out
+        errorOutput = System.err
+    }
+
     register<JavaExec>("structureLootProbe") {
         group = "verification"
         description = "Probes simulate()+predictForStructure() loot for any structure type. -Ptype=TRIAL_CHAMBER -Pseed=... -Plimit=4"
@@ -530,6 +611,9 @@ tasks {
         if (providers.gradleProperty("radius").isPresent) probeArgs.add(providers.gradleProperty("radius").get())
         if (providers.gradleProperty("chunk").isPresent) probeArgs.add("chunk=" + providers.gradleProperty("chunk").get())
         args(probeArgs)
+        if (providers.gradleProperty("probeLog").isPresent) {
+            systemProperty("seedexplorer.probeLog", providers.gradleProperty("probeLog").get())
+        }
     }
 
     register<JavaExec>("structureLootIndexSearch") {
@@ -580,6 +664,22 @@ tasks {
         description = "Verifies observed chunk snapshot compression and restore behavior."
         dependsOn(classes)
         mainClass.set("me.seedexplorer.addon.tools.LiveChunkSnapshotRoundTrip")
+        classpath = sourceSets.main.get().runtimeClasspath + sourceSets.main.get().compileClasspath
+    }
+
+    register<JavaExec>("terrainRendererPolicyProbe") {
+        group = "verification"
+        description = "Checks terrain LOD, material filtering, and persistent cache policy."
+        dependsOn(classes)
+        mainClass.set("me.seedexplorer.addon.render.TerrainRendererPolicyProbe")
+        classpath = sourceSets.main.get().runtimeClasspath + sourceSets.main.get().compileClasspath
+    }
+
+    register<JavaExec>("terrainGenerationStrategyProbe") {
+        group = "verification"
+        description = "Compares renderer-fast and diagnostic vanilla terrain generation for exact parity."
+        dependsOn(classes)
+        mainClass.set("me.seedexplorer.addon.tools.TerrainGenerationStrategyProbe")
         classpath = sourceSets.main.get().runtimeClasspath + sourceSets.main.get().compileClasspath
     }
 
@@ -656,6 +756,79 @@ tasks {
         args("preview")
         if (providers.gradleProperty("seeds").isPresent) {
             args(providers.gradleProperty("seeds").get())
+        }
+    }
+
+    register<JavaExec>("oracleCorpusAudit") {
+        group = "verification"
+        description = "Audits independent Paper oracle captures for complete containers, loot seeds, and enchantment data."
+        dependsOn(classes)
+        mainClass.set("me.seedexplorer.addon.tools.OracleCorpusAudit")
+        classpath = sourceSets.main.get().runtimeClasspath + sourceSets.main.get().compileClasspath
+        args(projectDir.resolve("validation").absolutePath)
+    }
+
+    register<JavaExec>("compareOracleCase") {
+        group = "verification"
+        description = "Compares one Paper oracle JSON with offline structure, container, seed, and loot prediction."
+        dependsOn(classes)
+        mainClass.set("me.seedexplorer.addon.tools.OracleCaseComparator")
+        classpath = sourceSets.main.get().runtimeClasspath + sourceSets.main.get().compileClasspath
+        args(
+            providers.gradleProperty("oracle").orElse("").get(),
+            providers.gradleProperty("structure").orElse("").get()
+        )
+        if (providers.gradleProperty("decorationIndex").isPresent) {
+            args(providers.gradleProperty("decorationIndex").get())
+        }
+    }
+
+    register<JavaExec>("compareOracleMatrix") {
+        group = "verification"
+        description = "Compares every configured fresh Paper oracle case in one JVM."
+        dependsOn(classes)
+        mainClass.set("me.seedexplorer.addon.tools.OracleMatrixComparator")
+        classpath = sourceSets.main.get().runtimeClasspath + sourceSets.main.get().compileClasspath
+        args(
+            providers.gradleProperty("cases").orElse("oracle-cases.example.json").get(),
+            providers.gradleProperty("oracleRoot").orElse("validation/generated-oracles").get()
+        )
+        if (providers.gradleProperty("mode").isPresent) {
+            args(providers.gradleProperty("mode").get())
+        } else if (providers.gradleProperty("maxCases").isPresent) {
+            args(providers.gradleProperty("maxCases").get())
+        }
+    }
+
+    register<JavaExec>("mineshaftSavedOracleReport") {
+        group = "verification"
+        description = "Scans saved entity regions for abandoned-mineshaft chest-minecart oracle data."
+        dependsOn(classes)
+        mainClass.set("me.seedexplorer.addon.tools.MineshaftSavedOracleReport")
+        classpath = sourceSets.main.get().runtimeClasspath + sourceSets.main.get().compileClasspath
+        args(
+            providers.gradleProperty("entityDir").orElse("").get(),
+            providers.gradleProperty("limit").orElse("64").get()
+        )
+    }
+
+    register<JavaExec>("mineshaftSavedOracleCompare") {
+        group = "verification"
+        description = "Compares mineshaft minecart coordinates, loot seeds, and contents with a saved-world oracle."
+        dependsOn(classes)
+        mainClass.set("me.seedexplorer.addon.tools.MineshaftSavedOracleComparator")
+        classpath = sourceSets.main.get().runtimeClasspath + sourceSets.main.get().compileClasspath
+        args(
+            providers.gradleProperty("seed").orElse("0").get(),
+            providers.gradleProperty("entityDir").orElse("").get(),
+            providers.gradleProperty("limit").orElse("12").get()
+        )
+        if (providers.gradleProperty("targetX").isPresent
+            && providers.gradleProperty("targetZ").isPresent) {
+            args(
+                providers.gradleProperty("targetX").get(),
+                providers.gradleProperty("targetZ").get()
+            )
         }
     }
 }

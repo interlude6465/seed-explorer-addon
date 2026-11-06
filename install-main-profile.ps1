@@ -1,11 +1,9 @@
 $ErrorActionPreference = "Stop"
 
-$minecraftProcess = Get-CimInstance Win32_Process |
-    Where-Object {
-        ($_.Name -in @("javaw.exe", "Minecraft.exe")) -or
-        (($_.Name -eq "java.exe") -and ($_.CommandLine -match "net\.fabricmc|minecraft|knot|ModrinthApp\\profiles\\main"))
-    } |
-    Where-Object { $_.CommandLine -notmatch "GradleDaemon|gradle" }
+# Do not enumerate every Windows process through WMI here. Under memory pressure
+# that query can stall before Gradle even starts. This is a non-destructive guard:
+# a Java-windowed client must be closed by the caller before replacement proceeds.
+$minecraftProcess = Get-Process -Name "javaw", "Minecraft" -ErrorAction SilentlyContinue
 
 if ($minecraftProcess) {
     Write-Error "Minecraft appears to be running. Close the game before installing the Seed Explorer jar."

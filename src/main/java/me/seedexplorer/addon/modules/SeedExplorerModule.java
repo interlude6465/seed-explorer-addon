@@ -14,10 +14,13 @@ import me.seedexplorer.addon.ore.OreType;
 import me.seedexplorer.addon.ore.OreCache;
 import me.seedexplorer.addon.render.MapLayer;
 import me.seedexplorer.addon.render.MinimapOverlay;
+import me.seedexplorer.addon.render.Terrain3DRenderer;
+import me.seedexplorer.addon.render.MapLoadingMode;
 import me.seedexplorer.addon.seed.SeedManager;
 import me.seedexplorer.addon.workers.WorkerManager;
 import meteordevelopment.meteorclient.events.render.Render2DEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
 import meteordevelopment.meteorclient.gui.GuiTheme;
 import meteordevelopment.meteorclient.gui.widgets.WWidget;
@@ -35,7 +38,9 @@ import meteordevelopment.meteorclient.utils.misc.Keybind;
 import meteordevelopment.meteorclient.utils.player.ChatUtils;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.orbit.EventHandler;
+import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.phys.AABB;
 
 import java.util.ArrayDeque;
@@ -77,6 +82,7 @@ public class SeedExplorerModule extends Module {
     private OreType lastOreEspType = null;
     private int lastOreEspDimension = Integer.MIN_VALUE;
     private static final long ORE_ESP_REFRESH_MS = 1200L;
+    private int terrainPrepareTicks;
 
     public final Setting<Double> zoomStep = sgMap.add(new DoubleSetting.Builder()
         .name("zoom-step")
@@ -374,6 +380,12 @@ public class SeedExplorerModule extends Module {
         }
 
         for (OrePatch patch : cachedOreEspPatches) {
+            // A loaded chunk is authoritative. Seed-only prediction starts from
+            // noise columns and cannot account for post-noise carvers or player
+            // edits, so do not draw a stale box over a non-ore block. For chunks
+            // outside the client view, retain the prediction until the chunk is
+            // available and can be reconciled.
+            if (!matchesLoadedOreBlock(patch, dimension)) continue;
             Color lineColor = type.color;
             Color sideColor = new Color(lineColor.r, lineColor.g, lineColor.b, oreOpacity.get());
             event.renderer.box(patch.x, patch.y, patch.z, patch.x + 1, patch.y + 1, patch.z + 1, sideColor, lineColor, oreEspShapeMode.get(), 0);
@@ -388,6 +400,10 @@ public class SeedExplorerModule extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
+        if (MapLoadingMode.isActive()) {
+            mapKeyWasDown = false;
+            return;
+        }
         if (mc.player == null || mc.level == null || mc.screen != null) {
             mapKeyWasDown = false;
             if (mc.player == null || mc.level == null) return;
@@ -395,6 +411,17 @@ public class SeedExplorerModule extends Module {
 
         updateOreEsp();
         updateTouchedOreZone();
+
+        // Keep the shared surface/cave stream saturated for the whole in-world
+        // session, including while every Seed Explorer screen is closed.
+        terrainPrepareTicks = 0;
+        long seed = SeedManager.get().getWorldSeed();
+        // The 3D screen prepares around its orbit target. Do not let the module's
+        // player-centered tick overwrite that target while the screen is open.
+        if (seed != 0L && !(mc.screen instanceof SeedExplorerScreen)) {
+            Terrain3DRenderer.shared().prepare(seed, currentDimensionId(),
+                mc.player.getX(), mc.player.getZ());
+        }
 
         boolean down = mc.screen == null && openMapKey.get().isPressed();
         if (down && !mapKeyWasDown) {
@@ -407,6 +434,12 @@ public class SeedExplorerModule extends Module {
     private void onSeedChanged(SeedChangeEvent event) {
         resetOreEspState();
         OreCache.get().clear();
+    }
+
+    @EventHandler
+    private void onGameLeft(GameLeftEvent event) {
+        terrainPrepareTicks = 0;
+        Terrain3DRenderer.shared().reset();
     }
 
     @Override
@@ -604,6 +637,7 @@ public class SeedExplorerModule extends Module {
         AABB playerBox = mc.player.getBoundingBox().inflate(0.04);
         for (OrePatch patch : patches) {
             if (SeedManager.get().isClearedOre(patch, dimension)) continue;
+            if (!matchesLoadedOreBlock(patch, dimension)) continue;
             if (playerBox.intersects(blockBox(patch))) return patch;
         }
 
@@ -613,8 +647,10 @@ public class SeedExplorerModule extends Module {
     private boolean touchesAnyOrePatch(List<OrePatch> patches) {
         if (patches.isEmpty() || mc.player == null) return false;
 
+        int dimension = currentDimensionId();
         AABB playerBox = mc.player.getBoundingBox().inflate(0.04);
         for (OrePatch patch : patches) {
+            if (!matchesLoadedOreBlock(patch, dimension)) continue;
             if (playerBox.intersects(blockBox(patch))) return true;
         }
 
@@ -623,6 +659,23 @@ public class SeedExplorerModule extends Module {
 
     private AABB blockBox(OrePatch patch) {
         return new AABB(patch.x, patch.y, patch.z, patch.x + 1.0, patch.y + 1.0, patch.z + 1.0);
+    }
+
+    /**
+     * Returns false only when the client has an authoritative block state for
+     * this position and it is no longer the predicted ore. An unloaded chunk is
+     * deliberately treated as unknown so the seed prediction remains useful at
+     * the edge of the render distance.
+     */
+    private boolean matchesLoadedOreBlock(OrePatch patch, int dimension) {
+        if (mc.level == null || patch.type.dimension != dimension) return false;
+
+        int chunkX = Math.floorDiv(patch.x, 16);
+        int chunkZ = Math.floorDiv(patch.z, 16);
+        LevelChunk chunk = mc.level.getChunkSource().getChunkNow(chunkX, chunkZ);
+        if (chunk == null) return true;
+
+        return patch.type.matches(chunk.getBlockState(new BlockPos(patch.x, patch.y, patch.z)));
     }
 
     private List<OrePatch> connectedOreZone(List<OrePatch> patches, OrePatch start) {
@@ -640,6 +693,7 @@ public class SeedExplorerModule extends Module {
             for (OrePatch patch : patches) {
                 long key = oreBlockKey(patch);
                 if (visited.contains(key) || patch.type != start.type) continue;
+                if (!matchesLoadedOreBlock(patch, start.type.dimension)) continue;
                 if (!isConnectedOreBlock(current, patch)) continue;
 
                 visited.add(key);

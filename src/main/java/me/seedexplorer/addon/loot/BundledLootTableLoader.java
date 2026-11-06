@@ -97,7 +97,7 @@ public final class BundledLootTableLoader {
         // version-specific evidence otherwise.
         m.put("minecraft:fortress", 1);
         m.put("minecraft:bastion_remnant", 0);
-        m.put("minecraft:woodland_mansion", 5);
+        m.put("minecraft:mansion", 5);
         m.put("minecraft:igloo", 3);
         return Map.copyOf(m);
     }
@@ -128,6 +128,12 @@ public final class BundledLootTableLoader {
         m.put("minecraft:fortress", 1);
         m.put("minecraft:stronghold", 19);
         m.put("minecraft:shipwreck", 17);
+        // Verified against the pinned jungle-temple oracle (seed
+        // -2843430517209339837): index 4 reproduces all four chest seeds.
+        m.put("minecraft:jungle_pyramid", 4);
+        // Verified against the pinned outpost oracle (seed 0, start chunk
+        // 36,103): index 9 reproduces the chest seed and contents.
+        m.put("minecraft:pillager_outpost", 9);
         // Verified 2026-07-18 against pinned bastion oracle (seed -5674700730434827097):
         // decoration index 0 reproduces the exact 64-bit loot seed for every bastion chest.
         // Without this override the STRUCTURE_TYPE-registry fallback picked a non-zero index,
@@ -135,11 +141,15 @@ public final class BundledLootTableLoader {
         m.put("minecraft:bastion_remnant", 0);
         // Verified 2026-07-18 via LocateAndIndexSweep against seed -1124201383388859604 in-game log:
         // index 5 reproduces the exact chest loot at woodland mansion (-2486,73,807).
-        m.put("minecraft:woodland_mansion", 5);
+        m.put("minecraft:mansion", 5);
         // Verified 2026-07-18 via LocateAndIndexSweep against seed -1124201383388859604 in-game log:
         // index 3 reproduces igloo chest at (-270,49,295); index 4 reproduces trial chamber entrance chest.
         m.put("minecraft:igloo", 3);
         m.put("minecraft:trial_chambers", 4);
+        // The ancient-city Paper oracle is materially closer with index 0 than
+        // the generic structure-type fallback (5); keep this pinned pending a
+        // full processor-state replay.
+        m.put("minecraft:ancient_city", 0);
         return Map.copyOf(m);
     }
 

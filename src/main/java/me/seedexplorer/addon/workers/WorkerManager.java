@@ -25,6 +25,7 @@ public final class WorkerManager {
         ThreadFactory factory = task -> {
             Thread thread = new Thread(task, "Seed Explorer Worker " + threadIds.incrementAndGet());
             thread.setDaemon(true);
+            thread.setPriority(Thread.MIN_PRIORITY);
             return thread;
         };
 

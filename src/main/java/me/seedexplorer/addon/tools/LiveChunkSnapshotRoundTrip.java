@@ -22,12 +22,19 @@ public final class LiveChunkSnapshotRoundTrip {
 
         List<String> failures = new ArrayList<>();
         LiveChunkSnapshot snapshot = new LiveChunkSnapshot(0, -12, 34, -64, 320);
+        check(failures, "sparse snapshot rejected", !snapshot.usableForTerrainOverride());
         snapshot.setBlock(0, -64, 0, Blocks.BEDROCK.defaultBlockState());
         snapshot.setBlock(0, 63, 0, Blocks.STONE.defaultBlockState());
         snapshot.setBlock(0, 64, 0, Blocks.GRASS_BLOCK.defaultBlockState());
         snapshot.setBlock(5, 70, 6, Blocks.OAK_PLANKS.defaultBlockState());
         snapshot.setBlock(5, 71, 6, Blocks.CHEST.defaultBlockState());
         snapshot.setBlock(15, 319, 15, Blocks.DIAMOND_BLOCK.defaultBlockState());
+        for (int z = 0; z < 16; z++) {
+            for (int x = 0; x < 16; x++) {
+                snapshot.setBlock(x, 60, z, Blocks.STONE.defaultBlockState());
+            }
+        }
+        check(failures, "complete snapshot accepted", snapshot.usableForTerrainOverride());
 
         Path dir = Files.createTempDirectory("seed-explorer-live-chunk-test");
         Path file = dir.resolve("chunk.nbt.gz");

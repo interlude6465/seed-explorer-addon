@@ -5,7 +5,11 @@
   "client": [
     "ChatScreenPredictedMineMixin",
     "ClientPacketListenerPredictedMineMixin",
-    "ContainerScreenOverlayMixin"
+    "ContainerScreenOverlayMixin",
+    "EnchantmentScreenLayoutMixin",
+    "EnchantmentScreenRngMixin",
+    "EnchantmentMenuSeedSyncMixin",
+    "LocalPlayerRngMixin"
   ],
   "injectors": {
     "defaultRequire": 1

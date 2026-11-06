@@ -55,6 +55,7 @@ import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemp
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -84,8 +85,6 @@ public final class WorldgenEngine {
     }
 
     public static PredictedBiome getBiome(long seed, int dimension, int blockX, int blockY, int blockZ) {
-        if (seed == 0) return PredictedBiome.UNKNOWN;
-
         try {
             EngineCache cache = getCache(seed, dimension);
             Holder<Biome> biome = getBiomeHolder(cache, blockX, blockY, blockZ);
@@ -709,10 +708,14 @@ public final class WorldgenEngine {
     }
 
     public static final class TerrainAccessor {
+        private static final int MAX_COLUMN_CACHE = 32768;
+        private static final int MAX_HEIGHT_CACHE = 32768;
         private final GeneratorView view;
         private final LevelHeightAccessor heightAccessor;
-        private final Map<Long, NoiseColumn> columns = new HashMap<>();
-        private final Map<Long, Integer> heights = new HashMap<>();
+        // Accessors are thread-local, so an access-ordered cache avoids
+        // synchronization while bounding memory during long map sessions.
+        private final Map<Long, NoiseColumn> columns = new BoundedLongCache<>(MAX_COLUMN_CACHE);
+        private final Map<Long, Integer> heights = new BoundedLongCache<>(MAX_HEIGHT_CACHE);
         private final PositionalRandomFactory bedrockFloorRandom;
         private final PositionalRandomFactory bedrockRoofRandom;
 
@@ -773,6 +776,20 @@ public final class WorldgenEngine {
             }
 
             return false;
+        }
+
+        private static final class BoundedLongCache<V> extends LinkedHashMap<Long, V> {
+            private final int maximumSize;
+
+            private BoundedLongCache(int maximumSize) {
+                super(Math.min(maximumSize, 1024), 0.75f, true);
+                this.maximumSize = maximumSize;
+            }
+
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<Long, V> eldest) {
+                return size() > maximumSize;
+            }
         }
     }
 

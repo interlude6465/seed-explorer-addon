@@ -13,7 +13,9 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import me.seedexplorer.addon.loot.ChestLootPredictor;
 import me.seedexplorer.addon.loot.VanillaLootStructureSimulator;
+import me.seedexplorer.addon.structures.StructureType;
 
 import java.io.PrintStream;
 import java.nio.file.Files;
@@ -21,6 +23,7 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
@@ -84,6 +87,58 @@ public final class PredictionRegressionSuite {
         OUT.println("critical_carved_height=" + criticalHeight);
         if (criticalHeight != 67) {
             failures.add("critical carved height expected=67 actual=" + criticalHeight);
+        }
+        var surfaceMaterials = new HashSet<String>();
+        for (int x = -2512; x <= -2481; x += 2) {
+            for (int z = -2000; z <= -1969; z += 2) {
+                int surfaceY = terrain.firstFreeHeight(Heightmap.Types.WORLD_SURFACE_WG, x, z) - 1;
+                surfaceMaterials.add(terrain.blockStateId(x, surfaceY, z));
+            }
+        }
+        for (int x = 0; x <= 31; x += 2) {
+            for (int z = 0; z <= 31; z += 2) {
+                int surfaceY = terrain.firstFreeHeight(Heightmap.Types.WORLD_SURFACE_WG, x, z) - 1;
+                surfaceMaterials.add(terrain.blockStateId(x, surfaceY, z));
+            }
+        }
+        OUT.println("terrain_surface_materials=" + surfaceMaterials);
+        boolean hasSurfaceRuleMaterial = surfaceMaterials.stream().anyMatch(id ->
+            !id.equals("minecraft:stone") && !id.equals("minecraft:deepslate")
+                && !id.equals("minecraft:air") && !id.equals("minecraft:water"));
+        if (!hasSurfaceRuleMaterial) {
+            failures.add("completed terrain surface collapsed to base noise materials: " + surfaceMaterials);
+        }
+
+        boolean mineshaftLootSupported = ChestLootPredictor.canPredict(StructureType.MINESHAFT);
+        boolean bastionLootSupported = ChestLootPredictor.canPredict(StructureType.BASTION);
+        OUT.println("product_loot_support mineshaft=" + mineshaftLootSupported
+            + " bastion=" + bastionLootSupported);
+        if (!mineshaftLootSupported) {
+            failures.add("mineshaft loot unexpectedly disabled after saved-entity oracle validation");
+        }
+        if (ChestLootPredictor.isStrictlyValidated(StructureType.MINESHAFT)) {
+            failures.add("mineshaft coordinates must remain non-strict because minecart entities can move");
+        }
+        int mineshaftIndex = VanillaLootStructureSimulator.decorationIndex(BuiltinStructures.MINESHAFT);
+        int mesaMineshaftIndex = VanillaLootStructureSimulator.decorationIndex(BuiltinStructures.MINESHAFT_MESA);
+        OUT.println("mineshaft_decoration_indices normal=" + mineshaftIndex
+            + " mesa=" + mesaMineshaftIndex);
+        if (mineshaftIndex != 1 || mesaMineshaftIndex != 2) {
+            failures.add("mineshaft decoration indices expected=1,2 actual="
+                + mineshaftIndex + "," + mesaMineshaftIndex);
+        }
+        var savedOracleCart = VanillaLootStructureSimulator.simulate(
+            -5330673357612662400L, BuiltinStructures.MINESHAFT, -93, 5).stream()
+            .filter(cart -> cart.x() == -1472 && cart.y() == 25 && cart.z() == 66)
+            .findFirst().orElse(null);
+        boolean savedOracleCartMatch = savedOracleCart != null
+            && savedOracleCart.lootSeed() == 4095185177439303177L;
+        OUT.println("mineshaft_saved_entity_oracle_match=" + savedOracleCartMatch);
+        if (!savedOracleCartMatch) {
+            failures.add("mineshaft saved-entity oracle cart position/seed mismatch");
+        }
+        if (!bastionLootSupported) {
+            failures.add("bastion loot unexpectedly disabled");
         }
 
         validateOracle(projectRoot, 4717879387438598985L, -21, -370,

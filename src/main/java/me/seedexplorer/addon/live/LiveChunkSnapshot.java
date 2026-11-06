@@ -9,6 +9,8 @@ import java.util.concurrent.ConcurrentHashMap;
 /** Snapshot of non-air blocks observed by the client for one chunk. */
 public final class LiveChunkSnapshot {
     public static final int CHUNK_SIZE = 16;
+    private static final int MIN_COMPLETE_SURFACE_COLUMNS = CHUNK_SIZE * CHUNK_SIZE;
+    private static final int MIN_END_SNAPSHOT_BLOCKS = 1024;
 
     private final int dimension;
     private final int chunkX;
@@ -71,6 +73,24 @@ public final class LiveChunkSnapshot {
 
     public Map<Integer, BlockState> blocks() {
         return Map.copyOf(blocks);
+    }
+
+    public int nonAirBlockCount() {
+        return blocks.size();
+    }
+
+    public int populatedColumnCount() {
+        int populated = 0;
+        for (int height : surfaceHeights) {
+            if (height > minY) populated++;
+        }
+        return populated;
+    }
+
+    /** Rejects sparse block-update captures masquerading as complete chunks. */
+    public boolean usableForTerrainOverride() {
+        return populatedColumnCount() >= MIN_COMPLETE_SURFACE_COLUMNS
+            || dimension == 1 && nonAirBlockCount() >= MIN_END_SNAPSHOT_BLOCKS;
     }
 
     public BlockState block(int localX, int y, int localZ) {

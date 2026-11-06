@@ -6,6 +6,8 @@ import me.seedexplorer.addon.structures.GeneratedStructure;
 import net.minecraft.client.Minecraft;
 
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -40,8 +42,8 @@ public final class PredictionDebugLogger {
                 sb.append("  chest[").append(i).append("]=")
                     .append(chest.blockX()).append(',').append(chest.blockY()).append(',').append(chest.blockZ())
                     .append(" table=").append(chest.lootTableId())
-                    .append(" lootSeed=").append(chest.seed())
-                    .append(" accuracy=").append(chest.exact() ? "exact" : "approx")
+                    .append(" lootSeed=").append(seedText(chest))
+                    .append(" accuracy=").append(accuracy(chest))
                     .append(" items=").append(chest.predictedItems() == null ? 0 : chest.predictedItems().size())
                     .append('\n');
                 if (chest.predictedItems() != null) {
@@ -68,9 +70,24 @@ public final class PredictionDebugLogger {
             + " variant=" + quote(structure.variant)
             + " chest=" + chest.blockX() + "," + chest.blockY() + "," + chest.blockZ()
             + " table=" + chest.lootTableId()
-            + " lootSeed=" + chest.seed()
-            + " accuracy=" + (chest.exact() ? "exact" : "approx")
+            + " lootSeed=" + seedText(chest)
+            + " accuracy=" + accuracy(chest)
             + "\n");
+    }
+
+    private static boolean positionOnly(ChestLootOutput chest) {
+        return !chest.exact() && chest.seed() == 0L
+            && (chest.lootTableId() == null || chest.lootTableId().isBlank())
+            && chest.isEmpty();
+    }
+
+    private static String seedText(ChestLootOutput chest) {
+        return positionOnly(chest) ? "unavailable" : Long.toString(chest.seed());
+    }
+
+    private static String accuracy(ChestLootOutput chest) {
+        if (chest.exact()) return "exact";
+        return positionOnly(chest) ? "position_only" : "unverified_seeded";
     }
 
     public static void chestOpened(int x, int y, int z, String screenTitle) {
@@ -91,6 +108,18 @@ public final class PredictionDebugLogger {
             } catch (IOException ignored) {
             }
         }
+    }
+
+    /** Persist a full exception trace so worker-thread failures are diagnosable after a run. */
+    public static void exception(String event, Throwable throwable) {
+        if (throwable == null) {
+            append(event + " error=<null>\n");
+            return;
+        }
+        StringWriter trace = new StringWriter();
+        throwable.printStackTrace(new PrintWriter(trace));
+        append(event + " error=\"" + trace.toString().replace("\\", "\\\\").replace("\"", "\\\"")
+            .replace("\r", "\\r").replace("\n", "\\n") + "\"\n");
     }
 
     private static Path logPath() {

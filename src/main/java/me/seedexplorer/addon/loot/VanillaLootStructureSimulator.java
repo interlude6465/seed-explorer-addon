@@ -2,7 +2,9 @@ package me.seedexplorer.addon.loot;
 
 import me.seedexplorer.addon.worldgen.WorldgenEngine;
 import me.seedexplorer.addon.worldgen.GeneratedTerrainHeightmap;
+import me.seedexplorer.addon.worldgen.VanillaStructurePredictor;
 import me.seedexplorer.addon.seed.SeedManager;
+import me.seedexplorer.addon.structures.GeneratedStructure;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderLookup;
@@ -14,6 +16,7 @@ import net.minecraft.world.flag.FeatureFlags;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.WorldGenLevel;
 import net.minecraft.world.RandomizableContainer;
+import net.minecraft.world.attribute.EnvironmentAttributeReader;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.vehicle.ContainerEntity;
 import net.minecraft.world.level.block.Block;
@@ -25,6 +28,7 @@ import net.minecraft.world.level.block.entity.DispenserBlockEntity;
 import net.minecraft.world.level.block.entity.DropperBlockEntity;
 import net.minecraft.world.level.block.entity.HopperBlockEntity;
 import net.minecraft.world.level.block.entity.ShulkerBoxBlockEntity;
+import net.minecraft.world.level.block.entity.SpawnerBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkGenerator;
 import net.minecraft.world.level.levelgen.Heightmap;
@@ -37,6 +41,7 @@ import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.levelgen.placement.PlacedFeature;
 import net.minecraft.world.level.levelgen.placement.PlacementModifier;
 import net.minecraft.world.level.levelgen.placement.PlacementContext;
+import net.minecraft.world.level.levelgen.feature.MonsterRoomFeature;
 import net.minecraft.world.level.levelgen.structure.BuiltinStructures;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
@@ -50,9 +55,11 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Executes vanilla structure pieces against a small recording WorldGenLevel.
@@ -63,6 +70,8 @@ import java.util.Optional;
  * world captures every chest and the loot seed assigned by createChest().</p>
  */
 public final class VanillaLootStructureSimulator {
+    private static final ThreadLocal<List<SimulatedMinecart>> LAST_MINECARTS =
+        ThreadLocal.withInitial(List::of);
     /** When true, logs every WorldGenLevel method the proxy answers with its default fallback. */
     static final boolean PROXY_DEBUG = Boolean.getBoolean("seedexplorer.proxyDebug");
 
@@ -123,11 +132,11 @@ public final class VanillaLootStructureSimulator {
             seed, dimension, structureKey, startChunk);
         if (!start.isValid()) return List.of();
 
-        CaptureWorld capture = new CaptureWorld(seed, dimension, terrainStartsFor(start));
-        WorldGenLevel level = capture.proxy();
         Structure structure = start.getStructure();
         int step = structure.step().ordinal();
         int idx = explicitIndex;
+        CaptureWorld capture = new CaptureWorld(seed, dimension, terrainStartsFor(start));
+        WorldGenLevel level = capture.proxy();
 
         List<ChunkPos> chunks = start.getPieces().stream()
             .flatMap(piece -> piece.getBoundingBox().intersectingChunks())
@@ -136,8 +145,17 @@ public final class VanillaLootStructureSimulator {
             .toList();
         boolean needsTerrain = needsTerrainPrefill(structureKey);
         for (ChunkPos chunk : chunks) {
-            capture.prepareDecorationBefore(step, chunk,
-                structureKey.equals(BuiltinStructures.DESERT_PYRAMID));
+            StructureStart chunkStart = WorldgenEngine.generateSelectedStructureStart(
+                seed, dimension, structureKey, startChunk);
+            if (!chunkStart.isValid()) continue;
+            // Earlier features matter only when the piece reads generated terrain.
+            // Replaying unrelated ores for rigid templates can also re-enter locked
+            // ProtoChunk sections in the offline world. Desert pyramids are the one
+            // height-only exception because earlier surface features can move them.
+            if (needsTerrain || structureKey.equals(BuiltinStructures.DESERT_PYRAMID)) {
+                capture.prepareDecorationBefore(step, chunk,
+                    structureKey.equals(BuiltinStructures.DESERT_PYRAMID));
+            }
             if (needsTerrain) {
                 capture.prefillTerrain(chunk, 0);
             }
@@ -146,23 +164,40 @@ public final class VanillaLootStructureSimulator {
             long decorationSeed = random.setDecorationSeed(seed, chunk.getMinBlockX(), chunk.getMinBlockZ());
             random.setFeatureSeed(decorationSeed, idx, step);
 
-            int minY = capture.minBuildY;
-            int maxY = capture.maxBuildY;
+            // Noise generation in the Nether/End is 128 blocks tall, but both
+            // dimensions have a legal 0..255 build range and structures can extend
+            // above the noise ceiling (notably End-city tower treasure rooms).
+            int minY = dimension == 0 ? capture.minBuildY : 0;
+            int maxY = dimension == 0 ? capture.maxBuildY : 255;
             BoundingBox writableArea = new BoundingBox(
                 chunk.getMinBlockX(), minY, chunk.getMinBlockZ(),
                 chunk.getMaxBlockX(), maxY, chunk.getMaxBlockZ());
             try {
-                start.placeInChunk(level, null, WorldgenEngine.chunkGenerator(seed, dimension), random, writableArea, chunk);
+                chunkStart.placeInChunk(level, null, WorldgenEngine.chunkGenerator(seed, dimension), random, writableArea, chunk);
             } catch (IllegalStateException e) {
                 if (e.getMessage() != null && e.getMessage().contains("Tags not bound")) {
-                    break;
+                    continue;
                 }
                 throw e;
             }
         }
 
-        probe("[done] " + structureKey.identifier() + " captured=" + capture.containers().size());
-        return capture.containers();
+        List<SimulatedContainer> result = capture.containers();
+        LAST_MINECARTS.set(capture.minecarts());
+        return result;
+    }
+
+    /**
+     * Replays a structure and returns only chest-minecart entities. The entity
+     * coordinates retain their precise double position for map markers while the
+     * integer block position remains suitable for loot/container matching.
+     */
+    public static List<SimulatedMinecart> simulateMinecarts(long seed, int dimension,
+                                                              ResourceKey<Structure> structureKey,
+                                                              int chunkX, int chunkZ) {
+        LAST_MINECARTS.set(List.of());
+        simulate(seed, dimension, structureKey, chunkX, chunkZ);
+        return LAST_MINECARTS.get();
     }
 
     /** Backward-compatible overworld simulate with explicit index. */
@@ -185,20 +220,86 @@ public final class VanillaLootStructureSimulator {
             explicitIndex);
     }
 
+    /** Replays one placement chunk over an index range while sharing its generated terrain. */
+    public static Map<Integer, List<SimulatedContainer>> simulateChunkIndexSweep(
+        long seed, ResourceKey<Structure> structureKey,
+        int startChunkX, int startChunkZ, int placementChunkX, int placementChunkZ,
+        int firstIndex, int lastIndex) {
+        return simulateChunkIndexSweep(seed, structureKey, startChunkX, startChunkZ,
+            placementChunkX, placementChunkZ, firstIndex, lastIndex, true);
+    }
+
+    /** Research overload for isolating earlier-decoration terrain effects. */
+    public static Map<Integer, List<SimulatedContainer>> simulateChunkIndexSweep(
+        long seed, ResourceKey<Structure> structureKey,
+        int startChunkX, int startChunkZ, int placementChunkX, int placementChunkZ,
+        int firstIndex, int lastIndex, boolean applyEarlierFeatures) {
+        StructureStart initial = WorldgenEngine.generateSelectedStructureStart(
+            seed, 0, structureKey, new ChunkPos(startChunkX, startChunkZ));
+        if (!initial.isValid() || firstIndex > lastIndex) return Map.of();
+
+        ChunkPos chunk = new ChunkPos(placementChunkX, placementChunkZ);
+        CaptureWorld prepared = new CaptureWorld(seed, terrainStartsFor(initial));
+        int step = initial.getStructure().step().ordinal();
+        boolean needsTerrain = needsTerrainPrefill(structureKey);
+        if (applyEarlierFeatures
+            && (needsTerrain || structureKey.equals(BuiltinStructures.DESERT_PYRAMID))) {
+            prepared.prepareDecorationBefore(step, chunk,
+                structureKey.equals(BuiltinStructures.DESERT_PYRAMID));
+        }
+        if (needsTerrain) prepared.prefillTerrain(chunk, 0);
+
+        Map<Integer, List<SimulatedContainer>> result = new java.util.LinkedHashMap<>();
+        for (int index = firstIndex; index <= lastIndex; index++) {
+            StructureStart start = WorldgenEngine.generateSelectedStructureStart(
+                seed, 0, structureKey, new ChunkPos(startChunkX, startChunkZ));
+            if (!start.isValid()) continue;
+            CaptureWorld capture = new CaptureWorld(prepared);
+            WorldgenRandom random = new WorldgenRandom(new XoroshiroRandomSource(0L));
+            long decorationSeed = random.setDecorationSeed(
+                seed, chunk.getMinBlockX(), chunk.getMinBlockZ());
+            random.setFeatureSeed(decorationSeed, index, step);
+            BoundingBox writableArea = new BoundingBox(
+                chunk.getMinBlockX(), capture.minBuildY, chunk.getMinBlockZ(),
+                chunk.getMaxBlockX(), capture.maxBuildY, chunk.getMaxBlockZ());
+            try {
+                start.placeInChunk(capture.proxy(), null, WorldgenEngine.chunkGenerator(seed, 0),
+                    random, writableArea, chunk);
+            } catch (IllegalStateException e) {
+                if (e.getMessage() == null || !e.getMessage().contains("Tags not bound")) throw e;
+            }
+            result.put(index, capture.containers());
+        }
+        return Map.copyOf(result);
+    }
+
     /** Places one chunk from an already-created or independently loaded start. */
     public static List<SimulatedContainer> simulateStartChunk(long seed,
                                                                StructureStart start,
                                                                int placementChunkX,
                                                                int placementChunkZ,
                                                                int explicitIndex) {
+        return simulateStartChunk(seed, 0, start, placementChunkX, placementChunkZ, explicitIndex);
+    }
+
+    /** Dimension-aware saved-start replay used by Paper NBT parity research. */
+    public static List<SimulatedContainer> simulateStartChunk(long seed, int dimension,
+                                                               StructureStart start,
+                                                               int placementChunkX,
+                                                               int placementChunkZ,
+                                                               int explicitIndex) {
         if (start == null || !start.isValid()) return List.of();
 
-        CaptureWorld capture = new CaptureWorld(seed, terrainStartsFor(start));
+        CaptureWorld capture = new CaptureWorld(seed, dimension, terrainStartsFor(start));
         ChunkPos chunk = new ChunkPos(placementChunkX, placementChunkZ);
+        StructureType<?> structureType = start.getStructure().type();
         int step = start.getStructure().step().ordinal();
-        capture.prepareDecorationBefore(step, chunk,
-            start.getStructure().type() == StructureType.DESERT_PYRAMID);
-        if (needsTerrainPrefillByType(start.getStructure().type())) {
+        boolean needsTerrain = needsTerrainPrefillByType(structureType);
+        if (needsTerrain || structureType == StructureType.DESERT_PYRAMID) {
+            capture.prepareDecorationBefore(step, chunk,
+                structureType == StructureType.DESERT_PYRAMID);
+        }
+        if (needsTerrain) {
             capture.prefillTerrain(chunk, 0);
         }
 
@@ -210,7 +311,7 @@ public final class VanillaLootStructureSimulator {
             chunk.getMinBlockX(), -64, chunk.getMinBlockZ(),
             chunk.getMaxBlockX(), 319, chunk.getMaxBlockZ());
         try {
-            start.placeInChunk(capture.proxy(), null, WorldgenEngine.chunkGenerator(seed, 0),
+            start.placeInChunk(capture.proxy(), null, WorldgenEngine.chunkGenerator(seed, dimension),
                 random, writableArea, chunk);
         } catch (IllegalStateException e) {
             if (e.getMessage() != null && e.getMessage().contains("Tags not bound")) {
@@ -325,6 +426,105 @@ public final class VanillaLootStructureSimulator {
         return capture.containers();
     }
 
+    /** Replays only vanilla monster-room features for one chunk, including chest and spawner RNG. */
+    public static List<SimulatedDungeon> simulateDungeons(long seed, int chunkX, int chunkZ) {
+        ChunkPos chunkPos = new ChunkPos(chunkX, chunkZ);
+        Set<Holder<Biome>> biomes = WorldgenEngine.decorationBiomes(seed, 0, chunkX, chunkZ);
+        if (biomes.isEmpty()) return List.of();
+
+        List<net.minecraft.world.level.biome.FeatureSorter.StepFeatureData> steps =
+            WorldgenEngine.featureSteps(seed, 0);
+        CaptureWorld capture = new CaptureWorld(seed, true);
+        WorldGenLevel level = capture.proxy();
+        int minY = WorldgenEngine.minBuildHeight(seed, 0);
+        BlockPos origin = SectionPos.of(chunkPos, Math.floorDiv(minY, 16)).origin();
+        WorldgenRandom random = new WorldgenRandom(new XoroshiroRandomSource(0L));
+        long decorationSeed = random.setDecorationSeed(seed, origin.getX(), origin.getZ());
+        ChunkGenerator generator = WorldgenEngine.chunkGenerator(seed, 0);
+        placeDungeonTerrainStructures(capture, seed, chunkPos, generator);
+        capture.clearCapturedEntities();
+        for (int step = 0; step < steps.size(); step++) {
+            var stepData = steps.get(step);
+            java.util.TreeSet<Integer> indices = new java.util.TreeSet<>();
+            boolean containsMonsterRoom = false;
+            for (Holder<Biome> biome : biomes) {
+                var biomeSteps = biome.value().getGenerationSettings().features();
+                if (step >= biomeSteps.size()) continue;
+                for (Holder<PlacedFeature> holder : biomeSteps.get(step)) {
+                    PlacedFeature feature = holder.value();
+                    int index = stepData.indexMapping().applyAsInt(feature);
+                    if (index >= 0) indices.add(index);
+                    if (isMonsterRoom(feature)) containsMonsterRoom = true;
+                }
+            }
+            if (!containsMonsterRoom) continue;
+
+            capture.prepareDecorationBefore(step, chunkPos, false);
+            for (int index : indices) {
+                PlacedFeature feature = stepData.features().get(index);
+                try {
+                    random.setFeatureSeed(decorationSeed, index, step);
+                    feature.placeWithBiomeCheck(level, generator, random, origin);
+                } catch (Throwable ignored) {
+                    // A non-dungeon feature may require server-only context that is
+                    // irrelevant to the monster-room terrain/opening checks. Vanilla
+                    // feature seeds are independent, so later indices remain aligned.
+                }
+            }
+        }
+        return capture.dungeons();
+    }
+
+    /** Places underground structure pieces that can create the wall openings used by
+     * MonsterRoomFeature's validity check. Their block entities are discarded before
+     * dungeon capture so mineshaft cave-spider spawners are never reported as rooms. */
+    private static void placeDungeonTerrainStructures(CaptureWorld capture, long seed,
+                                                       ChunkPos chunkPos, ChunkGenerator generator) {
+        List<GeneratedStructure> nearby = VanillaStructurePredictor.predictDimension(seed, 0,
+            chunkPos.x() - 10, chunkPos.z() - 10, chunkPos.x() + 10, chunkPos.z() + 10,
+            false, true);
+        BoundingBox writableArea = new BoundingBox(chunkPos.getMinBlockX(), capture.minBuildY,
+            chunkPos.getMinBlockZ(), chunkPos.getMaxBlockX(), capture.maxBuildY, chunkPos.getMaxBlockZ());
+
+        for (GeneratedStructure structure : nearby) {
+            ResourceKey<Structure> key = switch (structure.type) {
+                case MINESHAFT -> structure.variant.equals("minecraft:mineshaft_mesa")
+                    ? BuiltinStructures.MINESHAFT_MESA : BuiltinStructures.MINESHAFT;
+                case STRONGHOLD -> BuiltinStructures.STRONGHOLD;
+                default -> null;
+            };
+            if (key == null) continue;
+
+            StructureStart start;
+            try {
+                start = WorldgenEngine.generateSelectedStructureStart(seed, 0, key,
+                    new ChunkPos(structure.startChunkX, structure.startChunkZ));
+            } catch (Throwable ignored) {
+                continue;
+            }
+            if (start == null || !start.isValid() || start.getPieces().stream().noneMatch(piece ->
+                piece.getBoundingBox().intersects(writableArea))) continue;
+
+            int step = start.getStructure().step().ordinal();
+            WorldgenRandom random = new WorldgenRandom(new XoroshiroRandomSource(0L));
+            long decorationSeed = random.setDecorationSeed(seed, chunkPos.getMinBlockX(), chunkPos.getMinBlockZ());
+            random.setFeatureSeed(decorationSeed, decorationIndex(key), step);
+            try {
+                start.placeInChunk(capture.proxy(), null, generator, random, writableArea, chunkPos);
+            } catch (Throwable ignored) {
+                // Terrain fallback still permits rooms not intersecting this structure.
+            }
+        }
+    }
+
+    private static boolean isMonsterRoom(PlacedFeature feature) {
+        try {
+            return feature.feature().value().feature() instanceof MonsterRoomFeature;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
     /** Backward-compatible alias for desert pyramid simulation. */
     public static List<SimulatedContainer> desertPyramid(long seed, int chunkX, int chunkZ) {
         return simulate(seed, BuiltinStructures.DESERT_PYRAMID, chunkX, chunkZ);
@@ -346,11 +546,30 @@ public final class VanillaLootStructureSimulator {
         int override = profile.decorationIndexOverride(keyStr);
         if (override >= 0) return override;
 
-        // Fall back to the lightweight STRUCTURE_TYPE registry order.
-        // This is the stable fallback for structures like desert pyramids
-        // whose type index is consistent across Paper versions.
+        // Fall back to the lightweight STRUCTURE_TYPE registry order.  This is
+        // retained for compatibility with the verified runtime profiles below;
+        // structures whose Paper index differs are pinned explicitly there.
         var lookup = WorldgenEngine.vanillaLookup().lookupOrThrow(Registries.STRUCTURE);
         Structure target = lookup.getOrThrow(key).value();
+        if (key.equals(BuiltinStructures.MINESHAFT) || key.equals(BuiltinStructures.MINESHAFT_MESA)) {
+            // ChunkGenerator.applyBiomeDecoration groups the STRUCTURE registry by
+            // decoration step, then increments the feature index once per structure.
+            // Sort dynamic-registry keys so the headless datagen lookup mirrors the
+            // loaded registry's stable order instead of its JVM-dependent encounter
+            // order. A STRUCTURE_TYPE index cannot reproduce that stream: normal and
+            // mesa mineshafts share StructureType.MINESHAFT but occupy separate slots.
+            int structureIndex = 0;
+            List<Holder.Reference<Structure>> stepStructures = lookup.listElements()
+                .filter(holder -> holder.value().step() == target.step())
+                .sorted(Comparator.comparing(holder -> holder.key().identifier().toString()))
+                .toList();
+            for (Holder<Structure> holder : stepStructures) {
+                Structure candidate = holder.value();
+                if (candidate == target) return structureIndex;
+                structureIndex++;
+            }
+            throw new IllegalStateException("Structure not found in decoration step: " + key);
+        }
         var typeLookup = WorldgenEngine.vanillaLookup().lookupOrThrow(Registries.STRUCTURE_TYPE);
         StructureType<?> targetType = target.type();
         int typeIndex = 0;
@@ -426,6 +645,21 @@ public final class VanillaLootStructureSimulator {
     public record SimulatedContainer(int x, int y, int z, String lootTableId, long lootSeed) {
     }
 
+    /** A container carried by a minecart entity rather than a placed block. */
+    public record SimulatedMinecart(int x, int y, int z, double preciseX, double preciseY,
+                                    double preciseZ, String lootTableId, long lootSeed) {
+        public SimulatedContainer asContainer() {
+            return new SimulatedContainer(x, y, z, lootTableId, lootSeed);
+        }
+    }
+
+    public record SimulatedSpawner(int x, int y, int z, String entityId) {
+    }
+
+    public record SimulatedDungeon(int x, int y, int z, String spawnerEntityId,
+                                   List<SimulatedContainer> containers) {
+    }
+
     private static final class CaptureWorld implements InvocationHandler {
         private final long seed;
         private final int dimension;
@@ -434,29 +668,56 @@ public final class VanillaLootStructureSimulator {
         private final int seaLevel;
         private final RandomSource worldRandom;
         private final GeneratedTerrainHeightmap terrainHeightmap;
+        private final boolean terrainFallback;
         private final Map<BlockPos, BlockState> blocks = new HashMap<>();
         private final Map<BlockPos, BlockEntity> blockEntities = new HashMap<>();
         private final List<SimulatedContainer> capturedEntities = new ArrayList<>();
+        private final List<SimulatedMinecart> capturedMinecarts = new ArrayList<>();
         private final Map<Heightmap.Types, Map<Long, Integer>> heights =
             new EnumMap<>(Heightmap.Types.class);
         private WorldGenLevel proxy;
 
         private CaptureWorld(long seed) {
-            this(seed, 0, List.of());
+            this(seed, 0, List.of(), false);
+        }
+
+        private CaptureWorld(long seed, boolean terrainFallback) {
+            this(seed, 0, List.of(), terrainFallback);
         }
 
         private CaptureWorld(long seed, List<StructureStart> terrainStarts) {
-            this(seed, 0, terrainStarts);
+            this(seed, 0, terrainStarts, false);
         }
 
         private CaptureWorld(long seed, int dimension, List<StructureStart> terrainStarts) {
+            this(seed, dimension, terrainStarts, false);
+        }
+
+        private CaptureWorld(long seed, int dimension, List<StructureStart> terrainStarts,
+                             boolean terrainFallback) {
             this.seed = seed;
             this.dimension = dimension;
+            this.terrainFallback = terrainFallback;
             this.minBuildY = WorldgenEngine.minBuildHeight(seed, dimension);
             this.maxBuildY = minBuildY + WorldgenEngine.overallHeight(seed, dimension) - 1;
             this.seaLevel = dimension == -1 ? 32 : 63;
             this.worldRandom = RandomSource.create(seed ^ 0x5EEDC0DEL);
             this.terrainHeightmap = new GeneratedTerrainHeightmap(seed, dimension, terrainStarts);
+        }
+
+        private CaptureWorld(CaptureWorld prepared) {
+            this.seed = prepared.seed;
+            this.dimension = prepared.dimension;
+            this.minBuildY = prepared.minBuildY;
+            this.maxBuildY = prepared.maxBuildY;
+            this.seaLevel = prepared.seaLevel;
+            this.worldRandom = RandomSource.create(seed ^ 0x5EEDC0DEL);
+            this.terrainHeightmap = prepared.terrainHeightmap;
+            this.terrainFallback = prepared.terrainFallback;
+            this.blocks.putAll(prepared.blocks);
+            for (Map.Entry<Heightmap.Types, Map<Long, Integer>> entry : prepared.heights.entrySet()) {
+                this.heights.put(entry.getKey(), new HashMap<>(entry.getValue()));
+            }
         }
 
         private WorldGenLevel proxy() {
@@ -485,6 +746,47 @@ public final class VanillaLootStructureSimulator {
                 .thenComparingInt(SimulatedContainer::y)
                 .thenComparingInt(SimulatedContainer::z));
             return List.copyOf(result);
+        }
+
+        private List<SimulatedMinecart> minecarts() {
+            return List.copyOf(capturedMinecarts);
+        }
+
+        private void clearCapturedEntities() {
+            blockEntities.clear();
+            capturedEntities.clear();
+            capturedMinecarts.clear();
+        }
+
+        private List<SimulatedDungeon> dungeons() {
+            List<SimulatedContainer> containers = containers();
+            List<SimulatedDungeon> result = new ArrayList<>();
+            for (Map.Entry<BlockPos, BlockEntity> entry : blockEntities.entrySet()) {
+                if (!(entry.getValue() instanceof SpawnerBlockEntity spawner)) continue;
+                BlockPos pos = entry.getKey();
+                List<SimulatedContainer> nearby = containers.stream()
+                    .filter(container -> Math.abs(container.x() - pos.getX()) <= 8
+                        && Math.abs(container.y() - pos.getY()) <= 1
+                        && Math.abs(container.z() - pos.getZ()) <= 8)
+                    .toList();
+                result.add(new SimulatedDungeon(pos.getX(), pos.getY(), pos.getZ(),
+                    spawnerEntityId(spawner), List.copyOf(nearby)));
+            }
+            result.sort(Comparator.comparingInt(SimulatedDungeon::x)
+                .thenComparingInt(SimulatedDungeon::y)
+                .thenComparingInt(SimulatedDungeon::z));
+            return List.copyOf(result);
+        }
+
+        private String spawnerEntityId(SpawnerBlockEntity spawner) {
+            try {
+                var tag = spawner.getUpdateTag(WorldgenEngine.offlineRegistryAccess());
+                var spawnData = tag.getCompoundOrEmpty("SpawnData");
+                var entity = spawnData.getCompoundOrEmpty("entity");
+                return entity.getString("id").orElse("minecraft:pig");
+            } catch (Throwable ignored) {
+                return "minecraft:pig";
+            }
         }
 
         private void prepareDecorationBefore(int structureStep, ChunkPos chunk,
@@ -546,6 +848,7 @@ public final class VanillaLootStructureSimulator {
                 return null;
             }
             if (name.equals("enabledFeatures")) return FeatureFlags.DEFAULT_FLAGS;
+            if (name.equals("environmentAttributes")) return EnvironmentAttributeReader.EMPTY;
             if (name.equals("isClientSide")) return false;
             if (name.equals("getSeaLevel")) return seaLevel;
             if (name.equals("getMinY") || name.equals("getMinBuildHeight")) return minBuildY;
@@ -563,14 +866,14 @@ public final class VanillaLootStructureSimulator {
                 return new BlockPos(pos.getX(), height(type, pos.getX(), pos.getZ()), pos.getZ());
             }
             if (name.equals("isEmptyBlock")) {
-                return blocks.getOrDefault(immutable((BlockPos) args[0]), Blocks.AIR.defaultBlockState()).isAir();
+                return stateAt(immutable((BlockPos) args[0])).isAir();
             }
             if (name.equals("getBlockState")) {
-                return blocks.getOrDefault(immutable((BlockPos) args[0]), Blocks.AIR.defaultBlockState());
+                return stateAt(immutable((BlockPos) args[0]));
             }
             if (name.equals("getFluidState")) {
                 BlockPos pos = immutable((BlockPos) args[0]);
-                return blocks.getOrDefault(pos, Blocks.AIR.defaultBlockState()).getFluidState();
+                return stateAt(pos).getFluidState();
             }
             if (name.equals("setBlock")) {
                 BlockPos pos = immutable((BlockPos) args[0]);
@@ -579,6 +882,8 @@ public final class VanillaLootStructureSimulator {
                 BlockEntity entity = blockEntityFor(pos, state);
                 if (entity != null) {
                     blockEntities.put(pos, entity);
+                } else {
+                    blockEntities.remove(pos);
                 }
                 return true;
             }
@@ -593,8 +898,15 @@ public final class VanillaLootStructureSimulator {
                     ResourceKey<LootTable> table = container.getContainerLootTable();
                     if (table != null) {
                         BlockPos pos = entity.blockPosition();
-                        capturedEntities.add(new SimulatedContainer(
-                            pos.getX(), pos.getY(), pos.getZ(), table.identifier().toString(), container.getContainerLootTableSeed()));
+                        long lootSeed = container.getContainerLootTableSeed();
+                        SimulatedContainer captured = new SimulatedContainer(
+                            pos.getX(), pos.getY(), pos.getZ(), table.identifier().toString(), lootSeed);
+                        capturedEntities.add(captured);
+                        if (entity instanceof net.minecraft.world.entity.vehicle.minecart.MinecartChest) {
+                            capturedMinecarts.add(new SimulatedMinecart(entity.getBlockX(), entity.getBlockY(),
+                                entity.getBlockZ(), entity.getX(), entity.getY(), entity.getZ(),
+                                table.identifier().toString(), lootSeed));
+                        }
                     }
                 }
                 return true;
@@ -658,6 +970,15 @@ public final class VanillaLootStructureSimulator {
             long key = ((long) x << 32) ^ (z & 0xffffffffL);
             return heights.computeIfAbsent(type, ignored -> new HashMap<>()).computeIfAbsent(key,
                 ignored -> terrainHeightmap.firstFreeHeight(type, x, z));
+        }
+
+        private BlockState stateAt(BlockPos pos) {
+            BlockState state = blocks.get(pos);
+            if (state != null || blocks.containsKey(pos)) return state;
+            if (terrainFallback) {
+                return terrainHeightmap.blockState(seed, pos.getX(), pos.getY(), pos.getZ());
+            }
+            return Blocks.AIR.defaultBlockState();
         }
 
         private static BlockPos immutable(BlockPos pos) {
@@ -783,14 +1104,13 @@ public final class VanillaLootStructureSimulator {
                         // is unaffected.
                     }
 
-                    // Level.registryAccess() is a plain field read. Running real vanilla
-                    // loot tables (LootTable.getRandomItems) builds a LootContext that reads
-                    // this to resolve enchantment/tag lookups, so wire it to the offline
-                    // tag-bound registry access.
+                    // Level.registryAccess() is a plain field read. In an integrated server,
+                    // use its live registries so runtime data-pack tags/components match the
+                    // loot table being decoded. Headless probes retain the offline registry.
                     try {
                         Class<?> registryAccessClass = Class.forName("net.minecraft.core.RegistryAccess");
                         setField(unsafe, level, serverLevelClass, registryAccessClass,
-                            WorldgenEngine.offlineRegistryAccess());
+                            lootRegistryAccess());
                     } catch (Throwable ignored) {
                         // registryAccess not wired — structure placement still works; only the
                         // real-loot-table path (if used) would need it.
@@ -809,9 +1129,12 @@ public final class VanillaLootStructureSimulator {
                         Class<?> reloadableResourcesClass = Class.forName(
                             "net.minecraft.server.MinecraftServer$ReloadableResources");
 
-                        Object holder = holderClass
-                            .getConstructor(net.minecraft.core.HolderLookup.Provider.class)
-                            .newInstance(WorldgenEngine.offlineRegistryAccess());
+                        Object holder = liveReloadableRegistryHolder();
+                        if (holder == null) {
+                            holder = holderClass
+                                .getConstructor(net.minecraft.core.HolderLookup.Provider.class)
+                                .newInstance(WorldgenEngine.offlineRegistryAccess());
+                        }
 
                         // ReloadableServerResources is a normal class — Unsafe can set its
                         // fullRegistryHolder. MinecraftServer$ReloadableResources is a RECORD,
@@ -824,9 +1147,14 @@ public final class VanillaLootStructureSimulator {
 
                         Class<?> resourceManagerClass = Class.forName(
                             "net.minecraft.server.packs.resources.CloseableResourceManager");
-                        Object reloadableResources = reloadableResourcesClass
-                            .getDeclaredConstructor(resourceManagerClass, resourcesClass)
-                            .newInstance(null, managers);
+                        // The record constructor is private in 26.1.2.  This is an
+                        // internal test-only fake server, so make the constructor
+                        // accessible rather than silently leaving resources null and
+                        // losing the real vanilla loot-table A/B path.
+                        java.lang.reflect.Constructor<?> reloadableResourcesCtor =
+                            reloadableResourcesClass.getDeclaredConstructor(resourceManagerClass, resourcesClass);
+                        reloadableResourcesCtor.setAccessible(true);
+                        Object reloadableResources = reloadableResourcesCtor.newInstance(null, managers);
 
                         boolean m3 = setFieldByName(unsafe, server, minecraftServerClass,
                             "resources", reloadableResources);
@@ -845,6 +1173,28 @@ public final class VanillaLootStructureSimulator {
                     probe("[fakeServerLevel] failed: " + t);
                     return null;
                 }
+            }
+        }
+
+        private static net.minecraft.core.RegistryAccess lootRegistryAccess() {
+            try {
+                net.minecraft.client.Minecraft minecraft = net.minecraft.client.Minecraft.getInstance();
+                net.minecraft.server.MinecraftServer server = minecraft == null
+                    ? null : minecraft.getSingleplayerServer();
+                if (server != null) return server.registryAccess();
+            } catch (Throwable ignored) {
+            }
+            return WorldgenEngine.offlineRegistryAccess();
+        }
+
+        private static Object liveReloadableRegistryHolder() {
+            try {
+                net.minecraft.client.Minecraft minecraft = net.minecraft.client.Minecraft.getInstance();
+                net.minecraft.server.MinecraftServer server = minecraft == null
+                    ? null : minecraft.getSingleplayerServer();
+                return server == null ? null : server.reloadableRegistries();
+            } catch (Throwable ignored) {
+                return null;
             }
         }
 
@@ -906,6 +1256,7 @@ public final class VanillaLootStructureSimulator {
             if (block == Blocks.DISPENSER) return new DispenserBlockEntity(pos, state);
             if (block == Blocks.DROPPER) return new DropperBlockEntity(pos, state);
             if (block == Blocks.HOPPER) return new HopperBlockEntity(pos, state);
+            if (block == Blocks.SPAWNER) return new SpawnerBlockEntity(pos, state);
             if (isShulkerBox(block)) return new ShulkerBoxBlockEntity(pos, state);
             return null;
         }

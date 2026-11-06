@@ -38,6 +38,31 @@ final class SeedExplorerRenderPipelines {
         .withCull(false)
         .build();
 
+    /** Same vertex layout, but samples Minecraft's live block atlas directly. */
+    static final RenderPipeline WORLD_VANILLA_TEXTURED = new ExtendedRenderPipelineBuilder(MESH_UNIFORMS)
+        .withLocation(MeteorClient.identifier("pipeline/seed_explorer_vanilla_textured"))
+        .withVertexFormat(DefaultVertexFormat.POSITION_TEX_COLOR, VertexFormat.Mode.TRIANGLES)
+        .withVertexShader(MeteorClient.identifier("shaders/pos_tex_color.vert"))
+        .withFragmentShader(MeteorClient.identifier("shaders/pos_tex_color.frag"))
+        .withSampler("u_Texture")
+        .withDepthStencilState(new DepthStencilState(CompareOp.LESS_THAN_OR_EQUAL, true))
+        .withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
+        .withCull(false)
+        .build();
+
+    /** Vanilla block-model vertex layout with packed UV2 light coordinates. */
+    static final RenderPipeline WORLD_VANILLA_LIGHTMAP = new ExtendedRenderPipelineBuilder(MESH_UNIFORMS)
+        .withLocation(MeteorClient.identifier("pipeline/seed_explorer_vanilla_lightmap"))
+        .withVertexFormat(DefaultVertexFormat.POSITION_TEX_LIGHTMAP_COLOR, VertexFormat.Mode.TRIANGLES)
+        .withVertexShader(MeteorClient.identifier("shaders/pos_tex_lightmap_color.vert"))
+        .withFragmentShader(MeteorClient.identifier("shaders/pos_tex_lightmap_color.frag"))
+        .withSampler("u_Texture")
+        .withSampler("u_Lightmap")
+        .withDepthStencilState(new DepthStencilState(CompareOp.LESS_THAN_OR_EQUAL, true))
+        .withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
+        .withCull(false)
+        .build();
+
     private SeedExplorerRenderPipelines() {
     }
 }

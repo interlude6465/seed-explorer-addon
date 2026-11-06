@@ -1,6 +1,7 @@
 package me.seedexplorer.addon.gui;
 
 import me.seedexplorer.addon.debug.PredictionDebugLogger;
+import me.seedexplorer.addon.loot.ChestLootPredictor;
 import me.seedexplorer.addon.loot.ChestLootOutput;
 import me.seedexplorer.addon.loot.ItemLoot;
 import me.seedexplorer.addon.preview.StructurePreviewModel;
@@ -30,10 +31,10 @@ import java.time.format.DateTimeFormatter;
 
 public class Structure3DViewerScreen extends Screen {
     private static final int SBW = 240;
-    private static final int CHH = 28;
+    private static final int CHH = 38;
     private static final int PNW = 280;
     private static final int ITH = 20;
-    private static final int TOP_BAR = 72;
+    private static final int TOP_BAR = 84;
     private static final int BG = 0xFF0B1117;
     private static final int SURFACE = 0xFF111A22;
     private static final int SURFACE_2 = 0xFF16212B;
@@ -104,26 +105,19 @@ public class Structure3DViewerScreen extends Screen {
         g.fill(0, 0, vw, TOP_BAR, 0xF2101820);
         g.fill(0, TOP_BAR - 1, vw, TOP_BAR, LINE);
 
-        g.text(f, structureName, 14, 12, TEXT);
-        g.text(f, "Seed " + seed, 14, 29, TEXT_MUTED);
-        String meta = blockX + ", " + blockZ + "   " + chests.size() + " containers";
-        g.text(f, meta, Math.max(14, vw - f.width(meta) - 16), 29, TEXT_MUTED);
+        int headerTextWidth = Math.max(24, vw - 58);
+        g.text(f, trimText(f, structureName, headerTextWidth), 14, 10, TEXT);
+        g.text(f, trimText(f, "Seed " + seed, headerTextWidth), 14, 27, TEXT_MUTED);
+        String meta = blockX + ", " + blockZ + "   " + chests.size() + " predicted container"
+            + (chests.size() == 1 ? "" : "s");
+        g.text(f, trimText(f, meta, headerTextWidth), 14, 44, TEXT_MUTED);
         drawHeaderBadges(g, vw);
 
         drawStructurePreview(g, vw, mx, my);
 
-        // Empty state: no loot to show for this structure.
-        if (chests.isEmpty()) {
-            Font f2 = Minecraft.getInstance().font;
-            String line1 = "No loot to predict for this structure";
-            String line2 = structureName + " is not in the validated set, or produced no containers.";
-            g.text(f2, line1, (vw - f2.width(line1)) / 2, height / 2 - 8, 0xFFAAAAAA);
-            g.text(f2, line2, (vw - f2.width(line2)) / 2, height / 2 + 4, 0xFF666666);
-        }
-
         // Sidebar
-        g.fill(vw, 0, sidebarW, height, 0xFF0D141B);
-        g.fill(vw, 0, 1, height, LINE);
+        g.fill(vw, 0, width, height, 0xFF0D141B);
+        g.fill(vw, 0, vw + 1, height, LINE);
         drawSidebar(g, vw, mx, my);
 
         // Loot panel
@@ -138,7 +132,8 @@ public class Structure3DViewerScreen extends Screen {
             drawChestLayout(g, vw, mx, my);
             if (previewLoading) {
                 Font f = Minecraft.getInstance().font;
-                g.text(f, "Building structure preview...", 14, TOP_BAR + 16, TEXT_MUTED);
+                g.text(f, trimText(f, "Building structure preview...", Math.max(20, vw - 28)),
+                    14, TOP_BAR + 16, TEXT_MUTED);
             }
             return;
         }
@@ -157,8 +152,8 @@ public class Structure3DViewerScreen extends Screen {
         double tile = Math.min(areaW / (double) (spanX + spanZ), areaH / (double) (spanY + spanX / 2.0)) * 0.55 * scale;
         tile = Math.max(3.0, Math.min(18.0, tile));
 
-        g.fill(areaX, areaY, areaW, areaH, 0xFF0C1218);
-        g.fill(areaX + 8, areaY + 8, areaW - 16, areaH - 16, 0xFF111A22);
+        g.fill(areaX, areaY, areaX + areaW, areaY + areaH, 0xFF0C1218);
+        g.fill(areaX + 8, areaY + 8, areaX + areaW - 8, areaY + areaH - 8, 0xFF111A22);
 
         for (StructurePreviewModel.PreviewBlock block : model.blocks()) {
             int relX = block.x() - model.centerX();
@@ -177,13 +172,15 @@ public class Structure3DViewerScreen extends Screen {
             r.render();
         }
 
+        Font f = Minecraft.getInstance().font;
+        String previewLabel = model.truncated() ? "Structure preview (clipped)" : "Structure preview";
+        int previewBadgeW = Math.max(40, Math.min(Math.max(112, f.width(previewLabel) + 16), vw - 28));
         Renderer2D overlay = Renderer2D.COLOR;
         overlay.begin();
-        overlay.quad(14, TOP_BAR + 10, 138, 20, new Color(11, 17, 24, 200));
-        overlay.boxLines(14, TOP_BAR + 10, 138, 20, new Color(44, 59, 72, 200));
+        overlay.quad(14, TOP_BAR + 10, previewBadgeW, 20, new Color(11, 17, 24, 200));
+        overlay.boxLines(14, TOP_BAR + 10, previewBadgeW, 20, new Color(44, 59, 72, 200));
         overlay.render();
-        Font f = Minecraft.getInstance().font;
-        g.text(f, model.truncated() ? "Structure preview (clipped)" : "Structure preview", 22, TOP_BAR + 15, TEXT);
+        g.text(f, trimText(f, previewLabel, previewBadgeW - 16), 22, TOP_BAR + 15, TEXT);
     }
 
     private Color structureTint(net.minecraft.world.level.block.state.BlockState state) {
@@ -203,7 +200,7 @@ public class Structure3DViewerScreen extends Screen {
         Renderer2D r = Renderer2D.COLOR;
         Font f = Minecraft.getInstance().font;
         int chipX = 14;
-        int chipY = 49;
+        int chipY = 64;
         int rightLimit = vw - 46;
 
         chipX = drawChip(g, r, structureType.displayName, chipX, chipY, rightLimit,
@@ -305,7 +302,7 @@ public class Structure3DViewerScreen extends Screen {
             int sy = originZ + (c.blockZ() - minZ) * cellSize + cellSize / 2;
             int half = cellSize / 2 - 2;
             int dx = mx - sx, dy = my - sy;
-            boolean hover = Math.abs(dx) < half && Math.abs(dy) < half && mx < width - SBW;
+            boolean hover = Math.abs(dx) < half && Math.abs(dy) < half && mx < vw;
 
             int color;
             if (i == selectedChest) color = 0xFFFFD978;
@@ -325,9 +322,15 @@ public class Structure3DViewerScreen extends Screen {
 
             if (hover && !hoveredAny) {
                 hoveredAny = true;
-                g.fill(sx - 34, sy - half - 26, 72, 22, 0xEE0D141B);
-                g.text(f, "Chest " + (i + 1), sx - 28, sy - half - 23, GOLD);
-                g.text(f, c.blockX() + "," + c.blockY() + "," + c.blockZ(), sx - 30, sy - half - 11, TEXT_MUTED);
+                String hoverTitle = "Chest " + (i + 1);
+                String hoverCoords = c.blockX() + "," + c.blockY() + "," + c.blockZ();
+                int tooltipW = Math.max(40, Math.min(
+                    Math.max(72, Math.max(f.width(hoverTitle), f.width(hoverCoords)) + 12), vw - 8));
+                int tooltipX = Math.max(4, Math.min(vw - tooltipW - 4, sx - tooltipW / 2));
+                int tooltipY = sy - half - 26;
+                g.fill(tooltipX, tooltipY, tooltipX + tooltipW, tooltipY + 22, 0xEE0D141B);
+                g.text(f, trimText(f, hoverTitle, tooltipW - 12), tooltipX + 6, tooltipY + 3, GOLD);
+                g.text(f, trimText(f, hoverCoords, tooltipW - 12), tooltipX + 6, tooltipY + 14, TEXT_MUTED);
             }
         }
     }
@@ -337,12 +340,24 @@ public class Structure3DViewerScreen extends Screen {
         int ssx = vw;
         int sidebarW = width - vw;
 
-        g.fill(ssx, 0, sidebarW, TOP_BAR, SURFACE);
-        g.fill(ssx, TOP_BAR - 1, sidebarW, TOP_BAR, LINE);
-        g.text(f, "Containers", ssx + 12, 12, TEXT);
+        g.fill(ssx, 0, ssx + sidebarW, TOP_BAR, SURFACE);
+        g.fill(ssx, TOP_BAR - 1, ssx + sidebarW, TOP_BAR, LINE);
+        g.text(f, trimText(f, "Containers", sidebarW - 48), ssx + 12, 12, TEXT);
         g.text(f, String.valueOf(chests.size()), ssx + sidebarW - 22 - f.width(String.valueOf(chests.size())), 12, ACCENT);
 
         int y = TOP_BAR + 10;
+        if (chests.isEmpty()) {
+            boolean supported = ChestLootPredictor.canPredict(structureType);
+            String title = supported ? "No containers predicted" : "Loot prediction unavailable";
+            String detail = supported
+                ? "The structure preview is still available."
+                : "This structure type is not validated yet.";
+            int textWidth = Math.max(20, sidebarW - 24);
+            g.text(f, trimText(f, title, textWidth), ssx + 12, y + 2, supported ? TEXT_MUTED : GOLD);
+            g.text(f, trimText(f, detail, textWidth), ssx + 12, y + 18, TEXT_MUTED);
+            return;
+        }
+
         for (int i = scrollOffset; i < chests.size(); i++) {
             if (y + CHH > height - 10) break;
             ChestLootOutput c = chests.get(i);
@@ -355,9 +370,9 @@ public class Structure3DViewerScreen extends Screen {
 
             String label = "Chest " + (i + 1);
             int tc = selected ? 0xFFFFFFFF : (hover ? TEXT : TEXT_MUTED);
-            g.text(f, label, ssx + 12, y + 6, tc);
+            g.text(f, trimText(f, label, sidebarW - 24), ssx + 12, y + 5, tc);
             String yz = c.blockX() + ", " + c.blockY() + ", " + c.blockZ();
-            g.text(f, yz, ssx + sidebarW - f.width(yz) - 12, y + 6, TEXT_MUTED);
+            g.text(f, trimText(f, yz, sidebarW - 24), ssx + 12, y + 19, TEXT_MUTED);
             y += CHH;
         }
     }
@@ -368,8 +383,8 @@ public class Structure3DViewerScreen extends Screen {
         int panelW = lootPanelWidth(vw);
         int px = Math.max(8, vw - panelW);
 
-        g.fill(px, 0, panelW, height, 0xFF0E151D);
-        g.fill(px, 0, 1, height, ACCENT);
+        g.fill(px, 0, px + panelW, height, 0xFF0E151D);
+        g.fill(px, 0, px + 1, height, ACCENT);
 
         // Close button
         g.fill(px + panelW - 22, 8, px + panelW - 8, 22, 0xFF2A1619);
@@ -378,16 +393,18 @@ public class Structure3DViewerScreen extends Screen {
         int y = 12;
         g.text(f, "Chest " + (selectedChest + 1), px + 12, y, TEXT);
         y += 15;
-        g.text(f, chest.blockX() + ", " + chest.blockY() + ", " + chest.blockZ(), px + 12, y, TEXT_MUTED);
+        g.text(f, trimText(f, chest.blockX() + ", " + chest.blockY() + ", " + chest.blockZ(), panelW - 36),
+            px + 12, y, TEXT_MUTED);
         y += 14;
         if (chest.lootTableId() != null) {
-            g.text(f, chest.lootTableId(), px + 12, y, 0xFF6FAEC0);
+            g.text(f, trimText(f, chest.lootTableId(), panelW - 36), px + 12, y, 0xFF6FAEC0);
             y += 14;
         }
-        g.text(f, "Loot seed " + chest.seed(), px + 12, y, TEXT_MUTED);
+        g.text(f, trimText(f, "Loot seed " + chest.seed(), panelW - 36), px + 12, y, TEXT_MUTED);
         y += 14;
-        g.text(f, chest.exact() ? "Accuracy: exact" : "Accuracy: approx (position only)",
-            px + 12, y, chest.exact() ? 0xFF7ED88A : 0xFFD8B45A);
+        String accuracy = chest.exact() ? "Accuracy: exact" : "Accuracy: approx (position only)";
+        g.text(f, trimText(f, accuracy, panelW - 36), px + 12, y,
+            chest.exact() ? 0xFF7ED88A : 0xFFD8B45A);
         y += 18;
 
         int navY = y;
@@ -428,16 +445,17 @@ public class Structure3DViewerScreen extends Screen {
         y += 26;
 
         // Separator
-        g.fill(px + 12, y, px + PNW - 12, y + 1, LINE);
+        g.fill(px + 12, y, px + panelW - 12, y + 1, LINE);
         y += 10;
 
-        g.text(f, "Items (" + chest.predictedItems().size() + ")", px + 12, y, TEXT);
+        List<ItemLoot> predictedItems = chest.predictedItems() == null ? List.of() : chest.predictedItems();
+        g.text(f, "Items (" + predictedItems.size() + ")", px + 12, y, TEXT);
         y += 14;
 
-        if (chest.predictedItems().isEmpty()) {
+        if (predictedItems.isEmpty()) {
             g.text(f, "No items", px + 14, y, TEXT_MUTED);
         } else {
-            for (ItemLoot item : chest.predictedItems()) {
+            for (ItemLoot item : predictedItems) {
                 if (y > height - 20) break;
                 String name = item.displayName();
                 if (name == null || name.isEmpty()) continue;
@@ -448,7 +466,7 @@ public class Structure3DViewerScreen extends Screen {
                 int color = ench ? 0xFFD6A8FF : TEXT;
 
                 // Item background
-            g.fill(px + 12, y + 1, px + panelW - 12, y + ITH - 1, ench ? 0xFF21182C : 0xFF111A22);
+                g.fill(px + 12, y + 1, px + panelW - 12, y + ITH - 1, ench ? 0xFF21182C : 0xFF111A22);
                 g.fill(px + 16, y + 6, px + 23, y + 13, ench ? 0xFF7A46C6 : ACCENT);
                 if (ench) {
                     g.fill(px + 12, y + 1, px + 15, y + ITH - 1, 0xFF9E6DDB);
@@ -497,11 +515,12 @@ public class Structure3DViewerScreen extends Screen {
     }
 
     private int sidebarWidth() {
-        return Math.max(180, Math.min(SBW, width / 3));
+        int available = Math.min(width / 3, width - 120);
+        return Math.max(80, Math.min(SBW, available));
     }
 
     private int lootPanelWidth(int previewWidth) {
-        return Math.max(180, Math.min(PNW, previewWidth - 24));
+        return Math.max(1, Math.min(PNW, previewWidth - 16));
     }
 
     @Override
@@ -514,7 +533,7 @@ public class Structure3DViewerScreen extends Screen {
                 int vw = width - sidebarWidth();
                 int panelW = lootPanelWidth(vw);
                 int px = Math.max(8, vw - panelW);
-                if (mx >= px + panelW - 20 && mx <= px + panelW && my >= 4 && my <= 18) {
+                if (mx >= px + panelW - 22 && mx <= px + panelW - 8 && my >= 8 && my <= 22) {
                     selectedChest = -1;
                     return true;
                 }
@@ -582,7 +601,9 @@ public class Structure3DViewerScreen extends Screen {
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double ha, double va) {
         if (mouseX >= width - sidebarWidth()) {
-            scrollOffset = Math.max(0, Math.min(chests.size() - 1, scrollOffset + (va > 0 ? -1 : 1)));
+            int visibleRows = Math.max(1, (height - TOP_BAR - 20) / CHH);
+            int maxOffset = Math.max(0, chests.size() - visibleRows);
+            scrollOffset = Math.max(0, Math.min(maxOffset, scrollOffset + (va > 0 ? -1 : 1)));
             return true;
         }
         zoom *= (va > 0) ? 1.15f : 0.87f;

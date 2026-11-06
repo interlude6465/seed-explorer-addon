@@ -7,10 +7,8 @@ package me.seedexplorer.addon.worldgen;
 
 import me.seedexplorer.addon.structures.GeneratedStructure;
 import me.seedexplorer.addon.structures.StructureType;
-import com.mojang.datafixers.util.Pair;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
-import net.minecraft.core.SectionPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.Identifier;
@@ -41,9 +39,6 @@ import java.util.Optional;
 
 /** Predicts supported structures using vanilla structure-set placement data. */
 public final class VanillaStructurePredictor {
-    private static final Object STRONGHOLD_FALLBACK_LOCK = new Object();
-    private static volatile long fallbackStrongholdSeed = Long.MIN_VALUE;
-    private static volatile List<ChunkPos> fallbackStrongholdPositions = List.of();
     private static volatile Field templateNameField;
 
     private VanillaStructurePredictor() {
@@ -84,11 +79,20 @@ public final class VanillaStructurePredictor {
     }
 
     public static List<GeneratedStructure> predictDimension(long seed, int dimension, int chunkMinX, int chunkMinZ, int chunkMaxX, int chunkMaxZ, boolean includeBuriedTreasure, boolean includeMineshafts) {
-        return switch (dimension) {
+        List<GeneratedStructure> raw = switch (dimension) {
             case -1 -> predictNether(seed, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ);
             case 1 -> predictEnd(seed, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ);
             default -> predictOverworld(seed, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ, includeBuriedTreasure, includeMineshafts);
         };
+        // A mixed structure set can expose the same start through more than one
+        // placement query. Keep one marker per vanilla start/type/variant.
+        java.util.LinkedHashMap<String, GeneratedStructure> unique = new java.util.LinkedHashMap<>();
+        for (GeneratedStructure structure : raw) {
+            String key = structure.type + "|" + structure.startChunkX + "," + structure.startChunkZ
+                + "|" + structure.variant + "|" + structure.hasShip;
+            unique.putIfAbsent(key, structure);
+        }
+        return List.copyOf(unique.values());
     }
 
     public static List<GeneratedStructure> predictNether(long seed, int chunkMinX, int chunkMinZ, int chunkMaxX, int chunkMaxZ) {
@@ -129,12 +133,20 @@ public final class VanillaStructurePredictor {
     }
 
     public static List<GeneratedStructure> predictOverworldStructure(long seed, String structureId, int chunkMinX, int chunkMinZ, int chunkMaxX, int chunkMaxZ) {
+        return predictStructure(seed, 0, structureId, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ);
+    }
+
+    /** Predicts one exact vanilla structure key without scanning unrelated sets. */
+    public static List<GeneratedStructure> predictStructure(long seed, int dimension, String structureId,
+                                                             int chunkMinX, int chunkMinZ,
+                                                             int chunkMaxX, int chunkMaxZ) {
         List<GeneratedStructure> results = new ArrayList<>();
         ResourceKey<StructureSet> key = setForStructureId(structureId);
         if (key == BuiltinStructureSets.STRONGHOLDS) {
             addStrongholds(results, seed, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ);
         } else if (key != null) {
-            addForSet(results, seed, 0, key, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ, structureId);
+            addForSet(results, seed, dimension, key,
+                chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ, structureId);
         }
         return results;
     }
@@ -234,12 +246,34 @@ public final class VanillaStructurePredictor {
             return entry != null && isViableEntry(seed, dimension, chunk, entry) ? entry : null;
         }
 
-        StructureSet.StructureSelectionEntry selected = chooseEntry(seed, chunk, set, null);
-        if (selected != null && isViableEntry(seed, dimension, chunk, selected)) return selected;
+        // Vanilla consumes the large-feature RNG once per weighted choice. If a
+        // chosen entry cannot generate (usually because its biome predicate
+        // rejects the candidate), it removes that entry and rolls again from
+        // the remaining weighted list. Keeping that sequence matters for
+        // mixed sets such as villages and Nether complexes: picking the first
+        // viable entry would display the wrong variant at some candidates.
+        List<StructureSet.StructureSelectionEntry> remaining = new ArrayList<>(set.structures());
+        WorldgenRandom random = chunkGenerateRandom(seed, chunk);
+        while (!remaining.isEmpty()) {
+            int totalWeight = 0;
+            for (StructureSet.StructureSelectionEntry entry : remaining) {
+                totalWeight += Math.max(0, entry.weight());
+            }
+            if (totalWeight <= 0) return null;
 
-        for (StructureSet.StructureSelectionEntry entry : set.structures()) {
-            if (entry == selected) continue;
-            if (isViableEntry(seed, dimension, chunk, entry)) return entry;
+            int roll = random.nextInt(totalWeight);
+            int selectedIndex = -1;
+            for (int i = 0; i < remaining.size(); i++) {
+                roll -= Math.max(0, remaining.get(i).weight());
+                if (roll < 0) {
+                    selectedIndex = i;
+                    break;
+                }
+            }
+            if (selectedIndex < 0) return null;
+
+            StructureSet.StructureSelectionEntry selected = remaining.remove(selectedIndex);
+            if (isViableEntry(seed, dimension, chunk, selected)) return selected;
         }
         return null;
     }
@@ -252,15 +286,17 @@ public final class VanillaStructurePredictor {
             && !isValidStructureCandidate(seed, dimension, chunk, entry.structure(), structureId)) {
             return false;
         }
-        return !requiresStrictStartValidation(type) || hasValidSelectedStart(seed, dimension, structureId, chunk);
+        return !requiresStrictStartValidation(structureId)
+            || hasValidSelectedStart(seed, dimension, structureId, chunk);
     }
 
-    private static boolean requiresStrictStartValidation(StructureType type) {
-        return switch (type) {
-            case DESERT_PYRAMID, JUNGLE_TEMPLE, IGLOO, WITCH_HUT, RUINED_PORTAL,
-                 SHIPWRECK, OCEAN_RUIN, TREASURE -> true;
-            default -> false;
-        };
+    /**
+     * Placement and biome filtering can still leave candidates whose concrete
+     * generator rejects them. Validate every structure with a known vanilla key,
+     * including pillager outposts, before exposing a marker or 3D preview.
+     */
+    private static boolean requiresStrictStartValidation(String structureId) {
+        return exactStructureKey(structureId) != null;
     }
 
     private static boolean hasValidSelectedStart(long seed, int dimension, String structureId, ChunkPos chunk) {
@@ -280,6 +316,17 @@ public final class VanillaStructurePredictor {
             case "minecraft:jungle_pyramid" -> BuiltinStructures.JUNGLE_TEMPLE;
             case "minecraft:swamp_hut" -> BuiltinStructures.SWAMP_HUT;
             case "minecraft:igloo" -> BuiltinStructures.IGLOO;
+            case "minecraft:pillager_outpost" -> BuiltinStructures.PILLAGER_OUTPOST;
+            case "minecraft:mansion" -> BuiltinStructures.WOODLAND_MANSION;
+            case "minecraft:monument" -> BuiltinStructures.OCEAN_MONUMENT;
+            case "minecraft:ancient_city" -> BuiltinStructures.ANCIENT_CITY;
+            case "minecraft:trail_ruins" -> BuiltinStructures.TRAIL_RUINS;
+            case "minecraft:trial_chambers" -> BuiltinStructures.TRIAL_CHAMBERS;
+            case "minecraft:village_plains" -> BuiltinStructures.VILLAGE_PLAINS;
+            case "minecraft:village_desert" -> BuiltinStructures.VILLAGE_DESERT;
+            case "minecraft:village_savanna" -> BuiltinStructures.VILLAGE_SAVANNA;
+            case "minecraft:village_snowy" -> BuiltinStructures.VILLAGE_SNOWY;
+            case "minecraft:village_taiga" -> BuiltinStructures.VILLAGE_TAIGA;
             case "minecraft:ruined_portal" -> BuiltinStructures.RUINED_PORTAL_STANDARD;
             case "minecraft:ruined_portal_desert" -> BuiltinStructures.RUINED_PORTAL_DESERT;
             case "minecraft:ruined_portal_jungle" -> BuiltinStructures.RUINED_PORTAL_JUNGLE;
@@ -291,6 +338,13 @@ public final class VanillaStructurePredictor {
             case "minecraft:ocean_ruin_cold" -> BuiltinStructures.OCEAN_RUIN_COLD;
             case "minecraft:ocean_ruin_warm" -> BuiltinStructures.OCEAN_RUIN_WARM;
             case "minecraft:buried_treasure" -> BuiltinStructures.BURIED_TREASURE;
+            case "minecraft:stronghold" -> BuiltinStructures.STRONGHOLD;
+            case "minecraft:mineshaft" -> BuiltinStructures.MINESHAFT;
+            case "minecraft:mineshaft_mesa" -> BuiltinStructures.MINESHAFT_MESA;
+            case "minecraft:fortress" -> BuiltinStructures.FORTRESS;
+            case "minecraft:bastion_remnant" -> BuiltinStructures.BASTION_REMNANT;
+            case "minecraft:nether_fossil" -> BuiltinStructures.NETHER_FOSSIL;
+            case "minecraft:end_city" -> BuiltinStructures.END_CITY;
             default -> null;
         };
     }
@@ -400,17 +454,6 @@ public final class VanillaStructurePredictor {
                 type, bastionVariant(seed, chunk), false);
         }
         if (type == StructureType.END_CITY) {
-            try {
-                Holder<StructureSet> holder = WorldgenEngine.vanillaLookup()
-                    .lookupOrThrow(Registries.STRUCTURE_SET)
-                    .getOrThrow(BuiltinStructureSets.END_CITIES);
-                StructureSet.StructureSelectionEntry entry = chooseEntry(seed, chunk, holder.value(), "minecraft:end_city");
-                if (entry != null) {
-                    BlockPos generated = endCityGenerationPos(seed, chunk, entry.structure());
-                    if (generated != null) locatePos = generated;
-                }
-            } catch (Throwable ignored) {
-            }
             boolean hasShip = endCityLikelyHasShip(seed, chunk);
             return new GeneratedStructure(locatePos.getX(), locatePos.getZ(), chunk.x(), chunk.z(),
                 type, hasShip ? "Ship" : "", hasShip);
@@ -422,8 +465,10 @@ public final class VanillaStructurePredictor {
 
     private static String selectedStructureVariant(StructureType type, String structureId) {
         if (type == StructureType.RUINED_PORTAL
+            || type == StructureType.NETHER_RUINED_PORTAL
             || type == StructureType.SHIPWRECK
             || type == StructureType.OCEAN_RUIN
+            || type == StructureType.MINESHAFT
             || type == StructureType.VILLAGE) {
             return structureId;
         }
@@ -562,81 +607,7 @@ public final class VanillaStructurePredictor {
     }
 
     private static List<ChunkPos> strongholdPositions(long seed, ConcentricRingsStructurePlacement placement) {
-        try {
-            List<ChunkPos> vanilla = WorldgenEngine.structureState(seed).getRingPositionsFor(placement);
-            if (vanilla != null && !vanilla.isEmpty()) return vanilla;
-        } catch (Throwable ignored) {
-        }
-
-        return fallbackStrongholdPositions(seed, placement);
-    }
-
-    private static List<ChunkPos> fallbackStrongholdPositions(long seed, ConcentricRingsStructurePlacement placement) {
-        List<ChunkPos> current = fallbackStrongholdPositions;
-        if (fallbackStrongholdSeed == seed && !current.isEmpty()) return current;
-
-        synchronized (STRONGHOLD_FALLBACK_LOCK) {
-            current = fallbackStrongholdPositions;
-            if (fallbackStrongholdSeed == seed && !current.isEmpty()) return current;
-
-            List<ChunkPos> created = createFallbackStrongholdPositions(seed, placement);
-            fallbackStrongholdSeed = seed;
-            fallbackStrongholdPositions = created;
-            return created;
-        }
-    }
-
-    private static List<ChunkPos> createFallbackStrongholdPositions(long seed, ConcentricRingsStructurePlacement placement) {
-        int distance = placement.distance();
-        int count = placement.count();
-        List<ChunkPos> results = new ArrayList<>(count);
-        int spread = placement.spread();
-        RandomSource random = RandomSource.create();
-        random.setSeed(seed);
-        double angle = random.nextDouble() * Math.PI * 2.0;
-        int placedInRing = 0;
-        int ring = 0;
-
-        for (int i = 0; i < count; i++) {
-            double radius = 4 * distance + distance * ring * 6 + (random.nextDouble() - 0.5) * distance * 2.5;
-            int ringX = (int) Math.round(Math.cos(angle) * radius);
-            int ringZ = (int) Math.round(Math.sin(angle) * radius);
-            results.add(findNearestStrongholdBiome(seed, ringX, ringZ, placement, random.fork()));
-
-            angle += Math.PI * 2.0 / spread;
-            placedInRing++;
-            if (placedInRing == spread) {
-                ring++;
-                placedInRing = 0;
-                spread += 2 * spread / (ring + 1);
-                spread = Math.min(spread, count - i);
-                angle += random.nextDouble() * Math.PI * 2.0;
-            }
-        }
-
-        return List.copyOf(results);
-    }
-
-    private static ChunkPos findNearestStrongholdBiome(long seed, int chunkX, int chunkZ, ConcentricRingsStructurePlacement placement, RandomSource random) {
-        try {
-            WorldgenEngine.EngineView view = WorldgenEngine.view(seed, 0);
-            Pair<BlockPos, Holder<Biome>> pair = view.biomeSource().findBiomeHorizontal(
-                SectionPos.sectionToBlockCoord(chunkX, 8),
-                0,
-                SectionPos.sectionToBlockCoord(chunkZ, 8),
-                112,
-                placement.preferredBiomes()::contains,
-                random,
-                view.sampler()
-            );
-
-            if (pair == null) return new ChunkPos(chunkX, chunkZ);
-
-            BlockPos pos = pair.getFirst();
-            return new ChunkPos(SectionPos.blockToSectionCoord(pos.getX()), SectionPos.blockToSectionCoord(pos.getZ()));
-        } catch (Throwable ignored) {
-            return new ChunkPos(chunkX, chunkZ);
-        }
+        return WorldgenEngine.ringPositions(seed, 0, BuiltinStructureSets.STRONGHOLDS);
     }
 
     private static boolean isValidBiome(long seed, ChunkPos chunk, Holder<Structure> structure, String structureId) {
@@ -840,7 +811,7 @@ public final class VanillaStructurePredictor {
             case "minecraft:buried_treasure" -> isBeach(biomeId);
             case "minecraft:fortress" -> isNetherBiome(biomeId);
             case "minecraft:bastion_remnant" -> isBastionBiome(biomeId);
-            case "minecraft:ruined_portal_nether" -> biomeId.equals("minecraft:nether_wastes");
+            case "minecraft:ruined_portal_nether" -> isNetherBiome(biomeId);
             case "minecraft:nether_fossil" -> biomeId.equals("minecraft:soul_sand_valley");
             case "minecraft:end_city" -> biomeId.equals("minecraft:end_midlands")
                 || biomeId.equals("minecraft:end_highlands");
@@ -947,6 +918,21 @@ public final class VanillaStructurePredictor {
     }
 
     private static String bastionVariant(long seed, ChunkPos chunk) {
+        // Inspect the generated vanilla start. A shortcut RNG sequence can
+        // classify a valid Housing Units start as another bastion family.
+        try {
+            StructureStart start = WorldgenEngine.generateSelectedStructureStart(
+                seed, -1, BuiltinStructures.BASTION_REMNANT, chunk);
+            if (start != null && start.isValid()) {
+                String templates = startTemplates(start).toLowerCase(java.util.Locale.ROOT);
+                if (templates.contains("bastion/bridge/")) return "Bridge";
+                if (templates.contains("bastion/hoglin_stable/")) return "Hoglin Stables";
+                if (templates.contains("bastion/treasure/")) return "Treasure Room";
+                if (templates.contains("bastion/units/")) return "Housing Units";
+            }
+        } catch (Throwable ignored) {
+            // Keep the deterministic fallback for environments without templates.
+        }
         return switch (bastionVariantData(seed, chunk).start()) {
             case 0 -> "Housing Units";
             case 1 -> "Hoglin Stables";
@@ -954,6 +940,21 @@ public final class VanillaStructurePredictor {
             case 3 -> "Bridge";
             default -> "";
         };
+    }
+
+    private static String startTemplates(StructureStart start) {
+        StringBuilder result = new StringBuilder();
+        for (StructurePiece piece : start.getPieces()) {
+            if (piece instanceof TemplateStructurePiece templatePiece) {
+                String name = templateName(templatePiece);
+                if (name != null) result.append(name).append('\n');
+            }
+            if (piece instanceof net.minecraft.world.level.levelgen.structure.PoolElementStructurePiece poolPiece
+                && poolPiece.getElement() instanceof net.minecraft.world.level.levelgen.structure.pools.SinglePoolElement single) {
+                result.append(single.getTemplateLocation()).append('\n');
+            }
+        }
+        return result.toString();
     }
 
     private static BastionVariant bastionVariantData(long seed, ChunkPos chunk) {

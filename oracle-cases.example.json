@@ -1,0 +1,200 @@
+{
+  "cases": [
+    {
+      "name": "desert-pyramid-seed42",
+      "seed": 42,
+      "dimension": "minecraft:overworld",
+      "structure": "minecraft:desert_pyramid",
+      "centerX": -1376,
+      "centerZ": -1760,
+      "radius": 96,
+      "extractChunkRadius": 2
+    },
+    {
+      "name": "stronghold-seed0",
+      "seed": 0,
+      "dimension": "minecraft:overworld",
+      "structure": "minecraft:stronghold",
+      "centerX": 2000,
+      "centerZ": 912,
+      "radius": 256,
+      "extractChunkRadius": 5
+    },
+    {
+      "name": "bastion-seed-5674700730434827097",
+      "seed": -5674700730434827097,
+      "dimension": "minecraft:the_nether",
+      "structure": "minecraft:bastion_remnant",
+      "centerX": -176,
+      "centerZ": -208,
+      "radius": 512,
+      "extractChunkRadius": 5
+    },
+    {
+      "name": "jungle-temple-seed-2843430517209339837",
+      "seed": -2843430517209339837,
+      "dimension": "minecraft:overworld",
+      "structure": "minecraft:jungle_pyramid",
+      "centerX": -3856,
+      "centerZ": 256,
+      "radius": 128,
+      "extractChunkRadius": 2
+    },
+    {
+      "name": "outpost-seed0",
+      "seed": 0,
+      "dimension": "minecraft:overworld",
+      "structure": "minecraft:pillager_outpost",
+      "centerX": 576,
+      "centerZ": 1648,
+      "radius": 128,
+      "extractChunkRadius": 3
+    },
+    {
+      "name": "shipwreck-seed0",
+      "seed": 0,
+      "dimension": "minecraft:overworld",
+      "structure": "minecraft:shipwreck",
+      "centerX": -336,
+      "centerZ": -528,
+      "radius": 128,
+      "extractChunkRadius": 3
+    },
+    {
+      "name": "buried-treasure-seed0",
+      "seed": 0,
+      "dimension": "minecraft:overworld",
+      "structure": "minecraft:buried_treasure",
+      "centerX": 9,
+      "centerZ": -343,
+      "radius": 128,
+      "extractChunkRadius": 2
+    },
+    {
+      "name": "mansion-seed0",
+      "seed": 0,
+      "dimension": "minecraft:overworld",
+      "structure": "minecraft:mansion",
+      "centerX": -3536,
+      "centerZ": -832,
+      "radius": 128,
+      "extractChunkRadius": 8
+    },
+    {
+      "name": "ancient-city-seed0",
+      "seed": 0,
+      "dimension": "minecraft:overworld",
+      "structure": "minecraft:ancient_city",
+      "centerX": 800,
+      "centerZ": 1264,
+      "radius": 128,
+      "extractChunkRadius": 8
+    },
+    {
+      "name": "trial-chambers-seed0",
+      "seed": 0,
+      "dimension": "minecraft:overworld",
+      "structure": "minecraft:trial_chambers",
+      "centerX": -528,
+      "centerZ": 48,
+      "radius": 128,
+      "extractChunkRadius": 8
+    },
+    {
+      "name": "fortress-seed0",
+      "seed": 0,
+      "dimension": "minecraft:the_nether",
+      "structure": "minecraft:fortress",
+      "centerX": -624,
+      "centerZ": 288,
+      "radius": 128,
+      "extractChunkRadius": 8
+    },
+    {
+      "name": "end-city-seed0",
+      "seed": 0,
+      "dimension": "minecraft:the_end",
+      "structure": "minecraft:end_city",
+      "centerX": -1216,
+      "centerZ": -592,
+      "radius": 128,
+      "extractChunkRadius": 8
+    },
+    {
+      "name": "end-city-ship-seed4717879387438598985",
+      "seed": 4717879387438598985,
+      "dimension": "minecraft:the_end",
+      "structure": "minecraft:end_city",
+      "centerX": 6480,
+      "centerZ": 6080,
+      "radius": 128,
+      "extractChunkRadius": 8
+    },
+    {
+      "name": "overworld-structure-locations-seed0",
+      "seed": 0,
+      "dimension": "minecraft:overworld",
+      "locationOnly": true,
+      "structures": [
+        "minecraft:village_plains",
+        "minecraft:village_desert",
+        "minecraft:village_savanna",
+        "minecraft:village_snowy",
+        "minecraft:village_taiga",
+        "minecraft:desert_pyramid",
+        "minecraft:jungle_pyramid",
+        "minecraft:swamp_hut",
+        "minecraft:igloo",
+        "minecraft:pillager_outpost",
+        "minecraft:monument",
+        "minecraft:mansion",
+        "minecraft:ancient_city",
+        "minecraft:trial_chambers",
+        "minecraft:trail_ruins",
+        "minecraft:stronghold",
+        "minecraft:ruined_portal",
+        "minecraft:ruined_portal_desert",
+        "minecraft:ruined_portal_jungle",
+        "minecraft:ruined_portal_swamp",
+        "minecraft:ruined_portal_mountain",
+        "minecraft:ruined_portal_ocean",
+        "minecraft:shipwreck",
+        "minecraft:shipwreck_beached",
+        "minecraft:ocean_ruin_cold",
+        "minecraft:ocean_ruin_warm",
+        "minecraft:mineshaft",
+        "minecraft:buried_treasure"
+      ]
+    },
+    {
+      "name": "mesa-mineshaft-location-seed3",
+      "seed": 3,
+      "dimension": "minecraft:overworld",
+      "locationOnly": true,
+      "structures": [
+        "minecraft:mineshaft_mesa"
+      ]
+    },
+    {
+      "name": "nether-structure-locations-seed0",
+      "seed": 0,
+      "dimension": "minecraft:the_nether",
+      "locationOnly": true,
+      "structures": [
+        "minecraft:fortress",
+        "minecraft:bastion_remnant",
+        "minecraft:ruined_portal_nether",
+        "minecraft:nether_fossil"
+      ]
+    },
+    {
+      "name": "end-structure-locations-seed0",
+      "seed": 0,
+      "dimension": "minecraft:the_end",
+      "locationOnly": true,
+      "structures": [
+        "minecraft:end_city"
+      ]
+    }
+  ]
+}
