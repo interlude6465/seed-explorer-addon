@@ -130,6 +130,12 @@ public final class TerrainLodPolicy {
         return sameViewLifecycle && stillVisible;
     }
 
+    /** A late packed result may refine an older display, but must never replace a newer one. */
+    public static boolean progressiveGpuBatchDoesNotRegress(long displayedRevision,
+                                                             long candidateRevision) {
+        return displayedRevision < 0L || candidateRevision >= displayedRevision;
+    }
+
     public static boolean insideActiveWindow(int dx, int dz) {
         int radius = HORIZON_CHUNKS + LOAD_PADDING_CHUNKS;
         return Math.abs(dx) <= radius && Math.abs(dz) <= radius;

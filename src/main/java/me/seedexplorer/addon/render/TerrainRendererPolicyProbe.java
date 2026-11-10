@@ -59,8 +59,8 @@ public final class TerrainRendererPolicyProbe {
                 && BlockTextureAtlas.excludedTextureFile("leaf_litter.png")
                 && !BlockTextureAtlas.excludedTextureFile("oak_leaves.png"),
             "excluded leaf materials can re-enter the map texture atlas");
-        require(Terrain3DRenderer.naturalDecorationsUseTranslucentPass(),
-            "natural decorations can write rectangular transparent texels into the depth buffer");
+        require(Terrain3DRenderer.naturalDecorationsUseDepthWritingCutoutPass(),
+            "natural decorations lost their depth-writing alpha-cutout pass");
     }
 
     private static void verifyNaturalDecorationSchedulingPolicy() {
@@ -207,6 +207,12 @@ public final class TerrainRendererPolicyProbe {
             "GPU batch from an obsolete view lifecycle was admitted");
         require(!TerrainLodPolicy.admitProgressiveGpuBatch(true, false, true),
             "GPU batch outside the visible window was admitted");
+        require(TerrainLodPolicy.progressiveGpuBatchDoesNotRegress(7L, 7L)
+                && TerrainLodPolicy.progressiveGpuBatchDoesNotRegress(7L, 8L)
+                && TerrainLodPolicy.progressiveGpuBatchDoesNotRegress(-1L, 0L),
+            "current or newer progressive GPU batches were rejected");
+        require(!TerrainLodPolicy.progressiveGpuBatchDoesNotRegress(8L, 7L),
+            "late stale GPU batch can still overwrite a newer displayed revision");
         require(TerrainLodPolicy.exactDisplayStep(512.0) == 1,
             "near exact terrain lost its block-level display mesh");
         require(TerrainLodPolicy.exactDisplayStep(513.0) == 2,

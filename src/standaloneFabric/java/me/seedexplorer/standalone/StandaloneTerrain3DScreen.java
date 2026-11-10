@@ -1,5 +1,6 @@
 package me.seedexplorer.standalone;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -27,6 +28,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
 import org.joml.Vector4f;
 
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -49,16 +51,21 @@ public final class StandaloneTerrain3DScreen extends Screen {
             return thread;
         }, new ThreadPoolExecutor.DiscardOldestPolicy());
     private static final AtomicLong STRUCTURE_REQUESTS = new AtomicLong();
-    private static final int KEY_W = 87;
-    private static final int KEY_S = 83;
-    private static final int KEY_A = 65;
-    private static final int KEY_D = 68;
-    private static final int KEY_SPACE = 32;
-    private static final int KEY_C = 67;
-    private static final int KEY_LEFT_SHIFT = 340;
-    private static final int KEY_RIGHT_SHIFT = 344;
-    private static final int KEY_LEFT_CONTROL = 341;
-    private static final int KEY_RIGHT_CONTROL = 345;
+    private static final int KEY_W = InputConstants.KEYCODE_W;
+    private static final int KEY_S = 's';
+    private static final int KEY_A = InputConstants.KEYCODE_A;
+    private static final int KEY_D = 'd';
+    private static final int KEY_SPACE = InputConstants.KEYCODE_SPACE;
+    private static final int KEY_C = InputConstants.KEYCODE_C;
+    private static final int KEY_LEFT_SHIFT = (1 << 30) | InputConstants.KEY_LSHIFT;
+    private static final int KEY_RIGHT_SHIFT = (1 << 30) | InputConstants.KEY_RSHIFT;
+    private static final int KEY_LEFT_CONTROL = InputConstants.KEYCODE_LCONTROL;
+    private static final int KEY_RIGHT_CONTROL = InputConstants.KEYCODE_RCONTROL;
+    private static final int KEY_ENTER = InputConstants.KEYCODE_RETURN;
+    private static final int KEY_NUMPAD_ENTER = InputConstants.KEYCODE_NUMPADENTER;
+    private static final int KEY_ESCAPE = 27;
+    private static final int KEY_F = InputConstants.KEYCODE_F;
+    private static final int KEY_T = 't';
 
     private final Screen parent;
     private final StandaloneSeedExplorerConfig config;
@@ -87,6 +94,13 @@ public final class StandaloneTerrain3DScreen extends Screen {
     private boolean underground;
     private final Set<Integer> heldMovementKeys = new HashSet<>();
     private int dragButton = -1;
+    private double rightDragDistance;
+    private double rightPressX;
+    private double rightPressY;
+    private List<ContextAction> contextActions = List.of();
+    private int contextX;
+    private int contextY;
+    private int contextWidth;
     private long lastFrameNanos;
     private volatile long activeStructureRequest;
     private int structureAnchorChunkX = Integer.MIN_VALUE;
@@ -362,6 +376,24 @@ public final class StandaloneTerrain3DScreen extends Screen {
                 width / 2, 72, 0xFFFFFFFF);
         }
         super.extractRenderState(graphics, mouseX, mouseY, delta);
+        drawContextMenu(graphics, mouseX, mouseY);
+    }
+
+    private void drawContextMenu(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
+        if (contextActions.isEmpty()) return;
+        graphics.nextStratum();
+        int menuHeight = contextActions.size() * 22;
+        graphics.fill(contextX - 1, contextY - 1, contextX + contextWidth + 1,
+            contextY + menuHeight + 1, 0xFF658878);
+        for (int index = 0; index < contextActions.size(); index++) {
+            int y = contextY + index * 22;
+            boolean hovered = mouseX >= contextX && mouseX < contextX + contextWidth
+                && mouseY >= y && mouseY < y + 22;
+            graphics.fill(contextX, y, contextX + contextWidth, y + 22,
+                hovered ? 0xFF324F43 : 0xFF15251E);
+            graphics.text(font, contextActions.get(index).label(), contextX + 8, y + 7,
+                0xFFFFFFFF);
+        }
     }
 
     private void ensureTerrainTarget(int framebufferWidth, int framebufferHeight) {
@@ -636,11 +668,12 @@ public final class StandaloneTerrain3DScreen extends Screen {
     private void toggleFocus() {
         if (focusActive) {
             returnFromFocus();
-        } else if (selection.structure() != null) {
-            focusOn(selection.structure());
-        } else if (selectedWaypoint != null) {
-            focusOn(selectedWaypoint);
-        }
+        } else focusSelection();
+    }
+
+    private void focusSelection() {
+        if (selection.structure() != null) focusOn(selection.structure());
+        else if (selectedWaypoint != null) focusOn(selectedWaypoint);
     }
 
     private void focusOn(GeneratedStructure structure) {
@@ -968,61 +1001,126 @@ public final class StandaloneTerrain3DScreen extends Screen {
             / Math.max(1.0, minecraft.getWindow().getGuiScaledHeight());
     }
 
+    private TerrainPick pickAt(double guiX, double guiY) {
+        double renderX = toRenderX(guiX);
+        double renderY = toRenderY(guiY);
+        double centerX = minecraft.getWindow().getWidth() / 2.0;
+        double centerY = minecraft.getWindow().getHeight() / 2.0;
+        StandaloneWaypoint waypoint = null;
+        if (config.booleanValue("waypoint-layer", true)) {
+            List<WaypointView> waypointViews = config.waypoints(seed, dimension).stream()
+                .map(candidate -> new WaypointView(candidate, renderedWaypoint(candidate)))
+                .toList();
+            SeedWaypoint picked = renderer.pickWaypoint(camera, renderX, renderY,
+                waypointViews.stream().map(WaypointView::rendered).toList(), centerX, centerY);
+            waypoint = standaloneWaypoint(picked, waypointViews);
+        }
+        ChestLootOutput chest = waypoint == null
+            ? renderer.pickChest(camera, renderX, renderY, selection.chests(), centerX, centerY)
+            : null;
+        GeneratedStructure structure = waypoint == null && chest == null
+            && config.booleanValue("structure-layer", true)
+            ? renderer.pickStructure(camera, renderX, renderY, visibleStructures(),
+                pickContext(renderX, renderY), centerX, centerY)
+            : null;
+        return new TerrainPick(waypoint, chest, structure);
+    }
+
+    private void openContextMenu(double mouseX, double mouseY) {
+        TerrainPick picked = pickAt(mouseX, mouseY);
+        if (picked.waypoint() != null) {
+            selectWaypoint(picked.waypoint(), false);
+        } else if (picked.structure() != null) {
+            selectStructure(picked.structure(), false);
+        } else if (picked.chest() != null) {
+            selection.selectChest(picked.chest());
+        } else {
+            selection.select(null);
+            selectedWaypoint = null;
+            updateActionButtons();
+        }
+
+        GeneratedStructure structure = selection.structure();
+        boolean hasStructure = structure != null;
+        boolean hasWaypoint = selectedWaypoint != null;
+        boolean waypointExists = hasStructure
+            && config.hasWaypointAt(seed, dimension, structure.x, structure.z);
+        List<ContextAction> actions = new ArrayList<>();
+        actions.add(new ContextAction(hasWaypoint ? "Edit waypoint"
+            : hasStructure && waypointExists ? "Unpin waypoint" : "Add waypoint",
+            this::waypointAction));
+        if (hasStructure || hasWaypoint) {
+            actions.add(new ContextAction("View in 3D", this::focusSelection));
+        }
+        if (hasStructure) {
+            actions.add(new ContextAction("Inspect loot", this::openDetails));
+        }
+        contextActions = List.copyOf(actions);
+        contextWidth = actions.stream().mapToInt(action -> font.width(action.label()) + 16)
+            .max().orElse(130);
+        contextX = Math.max(2, Math.min((int) mouseX, width - contextWidth - 2));
+        contextY = Math.max(contentTop() + 2,
+            Math.min((int) mouseY, height - actions.size() * 22 - 2));
+    }
+
+    private boolean handleContextMenuClick(MouseButtonEvent click) {
+        if (contextActions.isEmpty()) return false;
+        int row = (int) ((click.y() - contextY) / 22);
+        if (click.button() == InputConstants.MOUSE_BUTTON_LEFT && click.x() >= contextX
+            && click.x() < contextX + contextWidth && click.y() >= contextY
+            && row >= 0 && row < contextActions.size()) {
+            Runnable action = contextActions.get(row).command();
+            contextActions = List.of();
+            action.run();
+            return true;
+        }
+        contextActions = List.of();
+        return click.button() == InputConstants.MOUSE_BUTTON_LEFT
+            || click.button() == InputConstants.MOUSE_BUTTON_RIGHT;
+    }
+
     @Override
     public boolean mouseClicked(MouseButtonEvent click, boolean doubled) {
+        if (handleContextMenuClick(click)) return true;
         if (super.mouseClicked(click, doubled)) return true;
-        if ((click.button() == 0 || click.button() == 1) && click.y() > contentTop()) {
+        if ((click.button() == InputConstants.MOUSE_BUTTON_LEFT
+            || click.button() == InputConstants.MOUSE_BUTTON_RIGHT)
+            && click.y() > contentTop()) {
             setFocused(null);
-            if (click.button() == 1) {
-                dragButton = 1;
-                releaseFocusForManualControl();
+            if (click.button() == InputConstants.MOUSE_BUTTON_RIGHT) {
+                dragButton = InputConstants.MOUSE_BUTTON_RIGHT;
+                rightDragDistance = 0.0;
+                rightPressX = click.x();
+                rightPressY = click.y();
                 return true;
             }
             if ((selection.structure() != null || selectedWaypoint != null)
                 && click.x() >= width - 350
                 && click.x() <= width - 12 && click.y() >= contentTop() + 10
                 && click.y() < contentTop() + 96) {
-                if (click.button() == 0 && !selection.chests().isEmpty()) {
+                if (click.button() == InputConstants.MOUSE_BUTTON_LEFT
+                    && !selection.chests().isEmpty()) {
                     int selectedIndex = selection.selectedChestIndex();
                     selection.selectChest(selectedIndex < 0 ? 0
                         : Math.floorMod(selectedIndex + 1, selection.chests().size()));
                 }
                 return true;
             }
-            double renderX = toRenderX(click.x());
-            double renderY = toRenderY(click.y());
-            double centerX = minecraft.getWindow().getWidth() / 2.0;
-            double centerY = minecraft.getWindow().getHeight() / 2.0;
-            if (config.booleanValue("waypoint-layer", true)) {
-                List<WaypointView> waypointViews = config.waypoints(seed, dimension).stream()
-                    .map(waypoint -> new WaypointView(waypoint, renderedWaypoint(waypoint)))
-                    .toList();
-                List<SeedWaypoint> renderedWaypoints = waypointViews.stream()
-                    .map(WaypointView::rendered).toList();
-                SeedWaypoint pickedWaypoint = renderer.pickWaypoint(camera, renderX, renderY,
-                    renderedWaypoints, centerX, centerY);
-                if (pickedWaypoint != null) {
-                    selectWaypoint(standaloneWaypoint(pickedWaypoint, waypointViews),
-                        click.button() == 0);
-                    return true;
-                }
+            TerrainPick picked = pickAt(click.x(), click.y());
+            if (picked.waypoint() != null) {
+                selectWaypoint(picked.waypoint(), true);
+                return true;
             }
-            ChestLootOutput chest = renderer.pickChest(camera, renderX, renderY,
-                selection.chests(), centerX, centerY);
-            if (chest != null) {
-                selection.selectChest(chest);
+            if (picked.chest() != null) {
+                selection.selectChest(picked.chest());
                 if (doubled) openDetails();
                 return true;
             }
-            MapRenderContext context = pickContext(renderX, renderY);
-            GeneratedStructure structure = config.booleanValue("structure-layer", true)
-                ? renderer.pickStructure(camera, renderX, renderY, visibleStructures(), context, centerX, centerY)
-                : null;
-            if (structure != null) {
-                selectStructure(structure, click.button() == 0);
+            if (picked.structure() != null) {
+                selectStructure(picked.structure(), true);
                 return true;
             }
-            dragButton = 0;
+            dragButton = InputConstants.MOUSE_BUTTON_LEFT;
             selection.select(null);
             selectedWaypoint = null;
             releaseFocusForManualControl();
@@ -1035,7 +1133,12 @@ public final class StandaloneTerrain3DScreen extends Screen {
     @Override
     public boolean mouseReleased(MouseButtonEvent click) {
         if (click.button() == dragButton) {
+            int releasedButton = dragButton;
             dragButton = -1;
+            if (releasedButton == InputConstants.MOUSE_BUTTON_RIGHT
+                && rightDragDistance < 3.0) {
+                openContextMenu(rightPressX, rightPressY);
+            }
             return true;
         }
         return super.mouseReleased(click);
@@ -1043,8 +1146,12 @@ public final class StandaloneTerrain3DScreen extends Screen {
 
     @Override
     public boolean mouseDragged(MouseButtonEvent click, double deltaX, double deltaY) {
-        if (click.button() == dragButton && (dragButton == 0 || dragButton == 1)) {
+        if (click.button() == dragButton && (dragButton == InputConstants.MOUSE_BUTTON_LEFT
+            || dragButton == InputConstants.MOUSE_BUTTON_RIGHT)) {
             releaseFocusForManualControl();
+            if (dragButton == InputConstants.MOUSE_BUTTON_RIGHT) {
+                rightDragDistance += Math.hypot(deltaX, deltaY);
+            }
             double scaleX = minecraft.getWindow().getWidth()
                 / Math.max(1.0, minecraft.getWindow().getGuiScaledWidth());
             double scaleY = minecraft.getWindow().getHeight()
@@ -1065,29 +1172,34 @@ public final class StandaloneTerrain3DScreen extends Screen {
 
     @Override
     public boolean keyPressed(KeyEvent key) {
+        int code = key.keycode();
+        if (code == KEY_ESCAPE && !contextActions.isEmpty()) {
+            contextActions = List.of();
+            return true;
+        }
         if (searchField != null && searchField.isFocused()) {
-            if (key.key() == 257 || key.key() == 335) {
+            if (code == KEY_ENTER || code == KEY_NUMPAD_ENTER) {
                 navigateMatch(1);
                 searchField.setFocused(false);
                 return true;
             }
             return super.keyPressed(key);
         }
-        if (key.key() == 70) {
+        if (code == KEY_F) {
             if (selection.structure() != null) openDetails();
             return true;
         }
-        if (key.key() == 84) {
+        if (code == KEY_T) {
             teleportSelection();
             return true;
         }
-        if (key.key() == 256) {
+        if (code == KEY_ESCAPE) {
             if (focusActive) returnFromFocus();
             else onClose();
             return true;
         }
-        if (isMovementKey(key.key())) {
-            heldMovementKeys.add(key.key());
+        if (isMovementKey(code)) {
+            heldMovementKeys.add(code);
             return true;
         }
         return super.keyPressed(key);
@@ -1095,8 +1207,9 @@ public final class StandaloneTerrain3DScreen extends Screen {
 
     @Override
     public boolean keyReleased(KeyEvent key) {
-        boolean movementKey = isMovementKey(key.key());
-        if (movementKey) heldMovementKeys.remove(key.key());
+        int code = key.keycode();
+        boolean movementKey = isMovementKey(code);
+        if (movementKey) heldMovementKeys.remove(code);
         if (searchField != null && searchField.isFocused()) return super.keyReleased(key);
         if (movementKey) return true;
         return super.keyReleased(key);
@@ -1139,6 +1252,7 @@ public final class StandaloneTerrain3DScreen extends Screen {
     public void onClose() {
         heldMovementKeys.clear();
         dragButton = -1;
+        contextActions = List.of();
         camera.stopFlight();
         if (bulkLoading) renderer.stopBulkLoading();
         bulkLoading = false;
@@ -1156,6 +1270,7 @@ public final class StandaloneTerrain3DScreen extends Screen {
     public void removed() {
         heldMovementKeys.clear();
         dragButton = -1;
+        contextActions = List.of();
         if (terrainTarget != null) {
             terrainTarget.destroyBuffers();
             terrainTarget = null;
@@ -1173,5 +1288,12 @@ public final class StandaloneTerrain3DScreen extends Screen {
     }
 
     private record WaypointView(StandaloneWaypoint waypoint, SeedWaypoint rendered) {
+    }
+
+    private record TerrainPick(StandaloneWaypoint waypoint, ChestLootOutput chest,
+                               GeneratedStructure structure) {
+    }
+
+    private record ContextAction(String label, Runnable command) {
     }
 }

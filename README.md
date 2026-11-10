@@ -21,6 +21,10 @@ structure/biome names, spelling approximations, coordinates, and `loot:`/`item:`
 queries. The Items/books mode supports multiple items and quantities.
 The **Actions** menu contains recentering, visibility, waypoint management,
 copying coordinates, teleporting, navigation and completion controls.
+In 3D, left-click a structure icon to focus on it; a right-click without dragging
+opens its action menu. Two-finger map zoom respects fractional scroll movement and
+limits large bursts. Every structure type has its own icon, including Bastion and
+End City variants.
 
 The map includes per-structure visibility, completion markers, editable waypoints,
 copy/teleport/navigation controls, loaded terrain, predicted ores, a minimap, and

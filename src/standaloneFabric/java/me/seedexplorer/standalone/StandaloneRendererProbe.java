@@ -8,6 +8,7 @@ import net.minecraft.SharedConstants;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.world.level.block.Blocks;
 
+import java.io.IOException;
 import java.util.ServiceLoader;
 
 /** Verifies the packaged renderer can link and initialize without Meteor. */
@@ -44,6 +45,20 @@ public final class StandaloneRendererProbe {
         String identity = Terrain3DRenderer.worldCacheIdentity(42L);
         if (!"standalone-renderer-probe".equals(identity)) {
             throw new AssertionError("unexpected renderer cache identity: " + identity);
+        }
+        if (StandaloneStructureIcons.supportedTypes().size()
+            != me.seedexplorer.addon.structures.StructureType.values().length) {
+            throw new AssertionError("standalone structure icon catalog is incomplete");
+        }
+        for (String fileName : StandaloneStructureIcons.requiredFileNames()) {
+            String resource = StandaloneStructureIcons.resourcePath(fileName);
+            try (var stream = StandaloneRendererProbe.class.getResourceAsStream(resource)) {
+                if (stream == null || stream.read() < 0) {
+                    throw new AssertionError("missing standalone structure icon: " + resource);
+                }
+            } catch (IOException exception) {
+                throw new AssertionError("could not read standalone structure icon: " + resource, exception);
+            }
         }
         System.out.println("standalone renderer probe: linked and initialized");
     }

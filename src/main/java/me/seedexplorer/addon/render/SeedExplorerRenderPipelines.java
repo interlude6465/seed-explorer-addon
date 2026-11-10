@@ -37,6 +37,20 @@ final class SeedExplorerRenderPipelines {
         .withCull(false)
         .build();
 
+    /** Alpha-tested block models such as leaves and crossed plants need depth writes. */
+    static final RenderPipeline WORLD_TEXTURED_CUTOUT = RenderPipeline.builder(MESH_UNIFORMS)
+        .withLocation(id("pipeline/seed_explorer_world_textured_cutout"))
+        .withVertexBinding(0, DefaultVertexFormat.POSITION_TEX_COLOR).withPrimitiveTopology(PrimitiveTopology.TRIANGLES)
+        .withVertexShader(id("seed_explorer_world_pos_tex_color"))
+        .withFragmentShader(id("pos_tex_color_cutout"))
+        .withBindGroupLayout(BindGroupLayout.builder()
+            .withUniform("u_Texture", UniformType.COMBINED_IMAGE_SAMPLER)
+            .build())
+        .withDepthStencilState(new DepthStencilState(CompareOp.LESS_THAN_OR_EQUAL, true))
+        .withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
+        .withCull(false)
+        .build();
+
     /** Same vertex layout, but samples Minecraft's live block atlas directly. */
     static final RenderPipeline WORLD_VANILLA_TEXTURED = RenderPipeline.builder(MESH_UNIFORMS)
         .withLocation(id("pipeline/seed_explorer_vanilla_textured"))

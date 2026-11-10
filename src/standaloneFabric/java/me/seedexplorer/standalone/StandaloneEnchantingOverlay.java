@@ -1,5 +1,7 @@
 package me.seedexplorer.standalone;
 
+import com.mojang.blaze3d.platform.InputConstants;
+
 import me.seedexplorer.addon.enchant.EnchantingTablePredictor;
 import me.seedexplorer.addon.enchant.EnchantingTargetPlanner;
 import net.minecraft.client.Minecraft;
@@ -74,7 +76,7 @@ public final class StandaloneEnchantingOverlay {
     }
 
     public boolean click(EnchantmentScreen screen, MouseButtonEvent click) {
-        if (click.button() != 0 || !inside(click.x(), click.y(), panelX, panelY, panelW, panelH)) return false;
+        if (click.button() != InputConstants.MOUSE_BUTTON_LEFT || !inside(click.x(), click.y(), panelX, panelY, panelW, panelH)) return false;
         int index = scroll + (int) ((click.y() - optionTop) / ROW);
         if (click.y() >= optionTop && index >= 0 && index < options.size()) {
             EnchantingTablePredictor.EnchantmentOption option = options.get(index);

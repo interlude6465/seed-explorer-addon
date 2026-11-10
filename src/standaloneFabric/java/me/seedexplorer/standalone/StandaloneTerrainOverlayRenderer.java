@@ -65,10 +65,11 @@ public final class StandaloneTerrainOverlayRenderer implements TerrainOverlayRen
         if (graphics == null || texture == null) return;
         int left = guiX(x);
         int top = guiY(y);
+        int right = Math.max(left + 1, guiX(x + width));
+        int bottom = Math.max(top + 1, guiY(y + height));
         graphics.blit(texture.getTextureView(), texture.getSampler(),
-            left, top, Math.max(1, guiX(x + width) - left),
-            Math.max(1, guiY(y + height) - top),
-            0.0f, 0.0f, 1.0f, 1.0f);
+            left, top, right, bottom,
+            0.0f, 1.0f, 0.0f, 1.0f);
     }
 
     @Override

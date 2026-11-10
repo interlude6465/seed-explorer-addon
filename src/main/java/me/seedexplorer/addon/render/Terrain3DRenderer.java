@@ -1609,9 +1609,11 @@ public final class Terrain3DRenderer {
         continueGpuBatchBuild(camera, seed, dimension, caveView, textureDebugView, requestedCutaway);
 
         int renderedBatches = renderGpuBatches(SeedExplorerRenderPipelines.WORLD_TEXTURED,
-            atlas, camera, false);
+            atlas, camera, TerrainGpuLayer.SOLID);
+        renderGpuBatches(SeedExplorerRenderPipelines.WORLD_TEXTURED_CUTOUT,
+            atlas, camera, TerrainGpuLayer.CUTOUT);
         renderGpuBatches(SeedExplorerRenderPipelines.WORLD_TEXTURED_TRANSLUCENT,
-            atlas, camera, true);
+            atlas, camera, TerrainGpuLayer.FLUID);
 
         int renderedChunks = 0;
         int renderedVertices = 0;
@@ -1952,9 +1954,11 @@ public final class Terrain3DRenderer {
         long lodSignature = caveView ? 0L
             : gpuBatchLodSignature(key, camera, previousSteps);
         BakingSink solid = new BakingSink();
+        BakingSink cutout = new BakingSink();
         BakingSink fluid = new BakingSink();
         return new TerrainGpuBuild(key, gpuBatchRevisions.getOrDefault(key, 0L),
-            chunks, solid, fluid, requestedSteps, lodSignature, minimumVertices, caveCutaway);
+            chunks, solid, cutout, fluid, requestedSteps, lodSignature,
+            minimumVertices, caveCutaway);
     }
 
     private int requestedDisplayStep(FreeCamera3D camera, ChunkData chunk,
@@ -2054,10 +2058,10 @@ public final class Terrain3DRenderer {
         SurfaceLod selected = baked.surfaceLodForBudget(requestedDisplayStep,
             maximumStep, vertexBudget);
         if (selected != null && selected.vertexCount() > 0) {
-            boolean naturalVisible = naturalFeaturesWantedForChunk(chunk.chunkX, chunk.chunkZ);
-            int naturalVertices = naturalVisible ? baked.naturalSolid().px().length : 0;
-            BakingSink naturalTarget = naturalDecorationsUseTranslucentPass()
-                ? build.fluid() : build.solid();
+            // Once vegetation is resolved, retain it when the camera moves. The
+            // generation radius limits new work, not already available geometry.
+            int naturalVertices = baked.naturalSolid().px().length;
+            BakingSink naturalTarget = build.cutout();
             boolean includeNatural = naturalVertices == 0
                 || selected.vertexCount() + naturalVertices <= vertexBudget;
             if (naturalVertices > 0 && !includeNatural) {
@@ -2154,9 +2158,11 @@ public final class Terrain3DRenderer {
             PreparedGpuUpload prepared = null;
             try {
                 BakedGeometry solid = build.solid().finish();
+                BakedGeometry cutout = build.cutout().finish();
                 BakedGeometry fluid = build.fluid().finish();
                 prepared = new PreparedGpuUpload(build.key(), build.revision(), lifecycle,
-                    PackedGpuGeometry.pack(solid), PackedGpuGeometry.pack(fluid),
+                    PackedGpuGeometry.pack(solid), PackedGpuGeometry.pack(cutout),
+                    PackedGpuGeometry.pack(fluid),
                     build.renderedChunks(), build.vertexCount(), build.missingBakes(),
                     build.budgetFallbackChunks(), Map.copyOf(build.displayedSteps()),
                     build.lodSignature(), System.nanoTime() - started);
@@ -2207,19 +2213,36 @@ public final class Terrain3DRenderer {
                 // black terrain whenever generation changed a region continuously.
                 queueGpuBatch(prepared.key());
             }
+            TerrainGpuBatch displayed = gpuBatches.get(prepared.key());
+            long displayedRevision = displayed == null ? -1L : displayed.revision();
+            if (!TerrainLodPolicy.progressiveGpuBatchDoesNotRegress(
+                displayedRevision, prepared.revision())) {
+                prepared.close();
+                continue;
+            }
             long started = System.nanoTime();
             PersistentGpuGeometry solid = uploadPackedGeometry(
                 "Seed Explorer terrain solid", prepared.solid());
-            PersistentGpuGeometry fluid;
+            PersistentGpuGeometry cutout;
             try {
-                fluid = uploadPackedGeometry("Seed Explorer terrain fluid", prepared.fluid());
+                cutout = uploadPackedGeometry("Seed Explorer terrain cutout", prepared.cutout());
             } catch (RuntimeException | Error error) {
                 solid.close();
                 prepared.close();
                 throw error;
             }
+            PersistentGpuGeometry fluid;
+            try {
+                fluid = uploadPackedGeometry("Seed Explorer terrain fluid", prepared.fluid());
+            } catch (RuntimeException | Error error) {
+                solid.close();
+                cutout.close();
+                prepared.close();
+                throw error;
+            }
             TerrainGpuBatch batch = new TerrainGpuBatch(prepared.key(), prepared.revision(),
                 prepared.lodSignature(), solid.vertices(), solid.indices(), solid.indexCount(),
+                cutout.vertices(), cutout.indices(), cutout.indexCount(),
                 fluid.vertices(), fluid.indices(), fluid.indexCount(), prepared.renderedChunks(),
                 prepared.vertexCount(), prepared.missingBakes(), prepared.budgetFallbackChunks(),
                 prepared.displayedSteps());
@@ -2335,21 +2358,21 @@ public final class Terrain3DRenderer {
     }
 
     private int renderGpuBatches(RenderPipeline pipeline, BlockTextureAtlas atlas,
-                                 FreeCamera3D camera, boolean fluidLayer) {
+                                 FreeCamera3D camera, TerrainGpuLayer layer) {
         if (gpuBatches.isEmpty() || atlas.texture() == null) return 0;
         FrustumIntersection frustum = new FrustumIntersection(
             new Matrix4f(camera.getProjectionMatrix()).mul(camera.getViewMatrix()));
         int drawable = 0;
         int culled = 0;
         for (TerrainGpuBatch batch : gpuBatches.values()) {
-            if (!(fluidLayer ? batch.fluidIndexCount() > 0 : batch.solidIndexCount() > 0)) continue;
+            if (layer.indexCount(batch) <= 0) continue;
             if (!gpuBatchInFrustum(batch.key(), frustum, gpuBatchSize(gpuCaveView))) {
                 culled++;
                 continue;
             }
             drawable++;
         }
-        if (!fluidLayer) lastGpuBatchesCulled = culled;
+        if (layer == TerrainGpuLayer.SOLID) lastGpuBatchesCulled = culled;
         if (drawable == 0) return 0;
 
         Minecraft mc = Minecraft.getInstance();
@@ -2371,9 +2394,9 @@ public final class Terrain3DRenderer {
             pass.setUniform("u_Texture", atlas.texture().getTextureView(), atlas.texture().getSampler());
             for (TerrainGpuBatch batch : gpuBatches.values()) {
                 if (!gpuBatchInFrustum(batch.key(), frustum, gpuBatchSize(gpuCaveView))) continue;
-                GpuBuffer vertices = fluidLayer ? batch.fluidVertices() : batch.solidVertices();
-                GpuBuffer indices = fluidLayer ? batch.fluidIndices() : batch.solidIndices();
-                int indexCount = fluidLayer ? batch.fluidIndexCount() : batch.solidIndexCount();
+                GpuBuffer vertices = layer.vertices(batch);
+                GpuBuffer indices = layer.indices(batch);
+                int indexCount = layer.indexCount(batch);
                 if (vertices == null || indices == null || indexCount <= 0) continue;
                 pass.setVertexBuffer(0, vertices.slice());
                 pass.setIndexBuffer(indices, IndexType.INT);
@@ -2859,12 +2882,8 @@ public final class Terrain3DRenderer {
     }
 
     private void rebuildNaturalFeatureQueue(int centerChunkX, int centerChunkZ) {
-        int previousCenterX = naturalFeatureQueueCenterX;
-        int previousCenterZ = naturalFeatureQueueCenterZ;
         naturalFeatureQueueCenterX = centerChunkX;
         naturalFeatureQueueCenterZ = centerChunkZ;
-        invalidateNaturalFeatureBoundary(previousCenterX, previousCenterZ,
-            centerChunkX, centerChunkZ);
         pendingNaturalFeatures.clear();
         queuedNaturalFeatures.clear();
         for (int ring = 0; ring <= NATURAL_FEATURE_RADIUS_CHUNKS; ring++) {
@@ -2888,41 +2907,10 @@ public final class Terrain3DRenderer {
         if (queuedNaturalFeatures.add(key)) pendingNaturalFeatures.add(key);
     }
 
-    private void invalidateNaturalFeatureBoundary(int previousCenterX, int previousCenterZ,
-                                                  int centerChunkX, int centerChunkZ) {
-        if (previousCenterX == Integer.MIN_VALUE || previousCenterZ == Integer.MIN_VALUE
-            || (previousCenterX == centerChunkX && previousCenterZ == centerChunkZ)) return;
-        int minX = Math.min(previousCenterX, centerChunkX) - NATURAL_FEATURE_RADIUS_CHUNKS;
-        int maxX = Math.max(previousCenterX, centerChunkX) + NATURAL_FEATURE_RADIUS_CHUNKS;
-        int minZ = Math.min(previousCenterZ, centerChunkZ) - NATURAL_FEATURE_RADIUS_CHUNKS;
-        int maxZ = Math.max(previousCenterZ, centerChunkZ) + NATURAL_FEATURE_RADIUS_CHUNKS;
-        for (int chunkZ = minZ; chunkZ <= maxZ; chunkZ++) {
-            for (int chunkX = minX; chunkX <= maxX; chunkX++) {
-                boolean wasIncluded = withinNaturalFeatureRadius(previousCenterX, previousCenterZ,
-                    chunkX, chunkZ);
-                boolean nowIncluded = withinNaturalFeatureRadius(centerChunkX, centerChunkZ,
-                    chunkX, chunkZ);
-                if (wasIncluded == nowIncluded) continue;
-                long key = ChunkPos.pack(chunkX, chunkZ);
-                if (!chunkCache.containsKey(key)) continue;
-                geometryRevisions.put(key, nextGeometryRevision.incrementAndGet());
-                queueBackgroundBake(key);
-                invalidateGpuBatchForChunk(chunkX, chunkZ);
-            }
-        }
-    }
-
     static boolean withinNaturalFeatureRadius(int centerChunkX, int centerChunkZ,
                                               int chunkX, int chunkZ) {
         return Math.max(Math.abs(chunkX - centerChunkX),
             Math.abs(chunkZ - centerChunkZ)) <= NATURAL_FEATURE_RADIUS_CHUNKS;
-    }
-
-    private boolean naturalFeaturesWantedForChunk(int chunkX, int chunkZ) {
-        int centerX = naturalFeatureQueueCenterX;
-        int centerZ = naturalFeatureQueueCenterZ;
-        return centerX != Integer.MIN_VALUE && centerZ != Integer.MIN_VALUE
-            && withinNaturalFeatureRadius(centerX, centerZ, chunkX, chunkZ);
     }
 
     private void submitNaturalFeatureUpgrades(long seed, int dimension,
@@ -3155,7 +3143,7 @@ public final class Terrain3DRenderer {
         if (baked.seed() != seed || baked.dimension() != dimension) return true;
         if (baked.textureDebugView() != textureDebugView) return true;
         if (baked.naturalFeaturesIncluded()
-            != naturalFeaturesWantedForChunk(chunk.chunkX, chunk.chunkZ)) return true;
+            != hasNaturalDecorationSource(chunk)) return true;
         if (baked.observedAt() != chunk.observedAt) return true;
         if (baked.geometryRevision() != geometryRevisions.getOrDefault(
             ChunkPos.pack(chunk.chunkX, chunk.chunkZ), 0L)) return true;
@@ -3187,8 +3175,7 @@ public final class Terrain3DRenderer {
         long key = ChunkPos.pack(chunk.chunkX, chunk.chunkZ);
         long generation = worldGeneration;
         long geometryRevision = geometryRevisions.getOrDefault(key, 0L);
-        boolean includeNaturalFeatures = naturalFeaturesWantedForChunk(
-            chunk.chunkX, chunk.chunkZ);
+        boolean includeNaturalFeatures = hasNaturalDecorationSource(chunk);
         WorkKey workKey = new WorkKey(seed, dimension, key, generation);
         if (!inFlightBakes.add(workKey)) return false;
 
@@ -5453,15 +5440,18 @@ public final class Terrain3DRenderer {
             decorations.size() * 2);
         for (GeneratedTerrainHeightmap.NaturalDecorationBlock block
             : decorations) {
-            decorated.put(BlockPos.asLong(block.x(), block.y(), block.z()), block.state());
+            BlockState state = block.state();
+            // Excluded or non-model decorations must not hide faces belonging to
+            // a neighbouring model that will actually be emitted.
+            if (naturalDecorationCanRender(state)) {
+                decorated.put(BlockPos.asLong(block.x(), block.y(), block.z()), state);
+            }
         }
 
         for (GeneratedTerrainHeightmap.NaturalDecorationBlock block
             : decorations) {
             BlockState state = block.state();
-            if (state == null || state.isAir()
-                || !TerrainMaterialPolicy.renderNaturalDecoration(blockId(state))
-                || state.getRenderShape() != RenderShape.MODEL) continue;
+            if (!naturalDecorationCanRender(state)) continue;
             try {
                 BlockStateModel model = Minecraft.getInstance().getModelManager()
                     .getBlockStateModelSet().get(state);
@@ -5496,6 +5486,12 @@ public final class Terrain3DRenderer {
                     "state=" + blockId(state));
             }
         }
+    }
+
+    static boolean naturalDecorationCanRender(BlockState state) {
+        return state != null && !state.isAir()
+            && TerrainMaterialPolicy.renderNaturalDecoration(blockId(state))
+            && state.getRenderShape() == RenderShape.MODEL;
     }
 
     private static BlockState naturalDecorationNeighbour(
@@ -5600,7 +5596,7 @@ public final class Terrain3DRenderer {
             || id.endsWith(":vine") || id.equals("vine");
     }
 
-    static boolean naturalDecorationsUseTranslucentPass() {
+    static boolean naturalDecorationsUseDepthWritingCutoutPass() {
         return true;
     }
 
@@ -6299,9 +6295,33 @@ public final class Terrain3DRenderer {
                                       int budgetFallbackChunks) {
     }
 
+    private enum TerrainGpuLayer {
+        SOLID {
+            @Override GpuBuffer vertices(TerrainGpuBatch batch) { return batch.solidVertices(); }
+            @Override GpuBuffer indices(TerrainGpuBatch batch) { return batch.solidIndices(); }
+            @Override int indexCount(TerrainGpuBatch batch) { return batch.solidIndexCount(); }
+        },
+        CUTOUT {
+            @Override GpuBuffer vertices(TerrainGpuBatch batch) { return batch.cutoutVertices(); }
+            @Override GpuBuffer indices(TerrainGpuBatch batch) { return batch.cutoutIndices(); }
+            @Override int indexCount(TerrainGpuBatch batch) { return batch.cutoutIndexCount(); }
+        },
+        FLUID {
+            @Override GpuBuffer vertices(TerrainGpuBatch batch) { return batch.fluidVertices(); }
+            @Override GpuBuffer indices(TerrainGpuBatch batch) { return batch.fluidIndices(); }
+            @Override int indexCount(TerrainGpuBatch batch) { return batch.fluidIndexCount(); }
+        };
+
+        abstract GpuBuffer vertices(TerrainGpuBatch batch);
+        abstract GpuBuffer indices(TerrainGpuBatch batch);
+        abstract int indexCount(TerrainGpuBatch batch);
+    }
+
     private record TerrainGpuBatch(long key, long revision, long lodSignature,
                                    GpuBuffer solidVertices, GpuBuffer solidIndices,
                                    int solidIndexCount,
+                                   GpuBuffer cutoutVertices, GpuBuffer cutoutIndices,
+                                   int cutoutIndexCount,
                                    GpuBuffer fluidVertices, GpuBuffer fluidIndices,
                                    int fluidIndexCount,
                                    int renderedChunks, int vertexCount,
@@ -6310,6 +6330,8 @@ public final class Terrain3DRenderer {
         void close() {
             if (solidVertices != null) solidVertices.close();
             if (solidIndices != null) solidIndices.close();
+            if (cutoutVertices != null) cutoutVertices.close();
+            if (cutoutIndices != null) cutoutIndices.close();
             if (fluidVertices != null) fluidVertices.close();
             if (fluidIndices != null) fluidIndices.close();
         }
@@ -6346,14 +6368,16 @@ public final class Terrain3DRenderer {
     }
 
     private record PreparedGpuUpload(long key, long revision, long lifecycleGeneration,
-                                     PackedGpuGeometry solid, PackedGpuGeometry fluid,
+                                     PackedGpuGeometry solid, PackedGpuGeometry cutout,
+                                     PackedGpuGeometry fluid,
                                      int renderedChunks, int vertexCount, int missingBakes,
                                      int budgetFallbackChunks,
                                      Map<Long, Integer> displayedSteps,
                                      long lodSignature, long packNanos) {
-        long byteSize() { return solid.byteSize() + fluid.byteSize(); }
+        long byteSize() { return solid.byteSize() + cutout.byteSize() + fluid.byteSize(); }
         void close() {
             solid.close();
+            cutout.close();
             fluid.close();
         }
     }
@@ -6363,6 +6387,7 @@ public final class Terrain3DRenderer {
         private final long revision;
         private final List<ChunkData> chunks;
         private final BakingSink solid;
+        private final BakingSink cutout;
         private final BakingSink fluid;
         private final Map<Long, Integer> requestedSteps;
         private final long lodSignature;
@@ -6377,13 +6402,14 @@ public final class Terrain3DRenderer {
         private boolean skirtsAdded;
 
         TerrainGpuBuild(long key, long revision, List<ChunkData> chunks,
-                        BakingSink solid, BakingSink fluid,
+                        BakingSink solid, BakingSink cutout, BakingSink fluid,
                         Map<Long, Integer> requestedSteps, long lodSignature,
                         long remainingMinimumVertices, CaveCutaway caveCutaway) {
             this.key = key;
             this.revision = revision;
             this.chunks = chunks;
             this.solid = solid;
+            this.cutout = cutout;
             this.fluid = fluid;
             this.requestedSteps = requestedSteps;
             this.lodSignature = lodSignature;
@@ -6395,6 +6421,7 @@ public final class Terrain3DRenderer {
         long revision() { return revision; }
         List<ChunkData> chunks() { return chunks; }
         BakingSink solid() { return solid; }
+        BakingSink cutout() { return cutout; }
         BakingSink fluid() { return fluid; }
         Map<Long, Integer> requestedSteps() { return requestedSteps; }
         long lodSignature() { return lodSignature; }

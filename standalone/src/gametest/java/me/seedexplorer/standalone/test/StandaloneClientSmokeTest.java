@@ -1,5 +1,6 @@
 package me.seedexplorer.standalone.test;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import me.seedexplorer.standalone.StandaloneAncillaryRuntime;
 import me.seedexplorer.standalone.StandaloneSeedExplorerConfig;
 import me.seedexplorer.standalone.StandaloneSeedExplorerScreen;
@@ -78,6 +79,27 @@ public final class StandaloneClientSmokeTest implements FabricClientGameTest {
                 client.gui.screen().onClose();
                 require(client.gui.screen() == mapScreen.get(),
                     "3D back navigation did not restore the same 2D map");
+
+                Screen terrain3d = new StandaloneTerrain3DScreen(mapScreen.get(), config, seed, 0,
+                    java.util.List.of()).openAt(client.player.getX(), client.player.getZ(),
+                        null, java.util.List.of(), 0);
+                client.gui.setScreen(terrain3d);
+                require(client.gui.screen() == terrain3d,
+                    "forest-spawn 3D verification screen did not open");
+            });
+            context.waitTicks(100);
+            context.runOnClient(client -> {
+                StandaloneTerrain3DScreen terrain3d = require3DScreen(client.gui.screen());
+                require(renderError(terrain3d).isBlank(),
+                    "forest-spawn 3D renderer reported: " + renderError(terrain3d));
+                require(Terrain3DRenderer.shared().hasDrawableTerrain(),
+                    "forest-spawn 3D renderer did not retain drawable terrain");
+            });
+            context.takeScreenshot("seed-explorer-standalone-map-3d-foliage");
+            context.runOnClient(client -> {
+                client.gui.screen().onClose();
+                require(client.gui.screen() == mapScreen.get(),
+                    "forest-spawn 3D back navigation did not restore the map");
             });
             context.waitTicks(2);
             deleteTestWaypoint(context, config, seed,
@@ -119,7 +141,8 @@ public final class StandaloneClientSmokeTest implements FabricClientGameTest {
         double beforeZ = doubleField(map, "centerZ");
         GuiPoint dragStart = context.computeOnClient(client -> new GuiPoint(
             map.width / 2, mapTop(map) + (map.height - mapTop(map) - 10) / 2));
-        drag(context, dragStart, 54, 36, 0);
+        exerciseTouchpadZoom(context, config, map, dragStart);
+        drag(context, dragStart, 54, 36, InputConstants.MOUSE_BUTTON_LEFT);
         context.runOnClient(client -> {
             double afterX = doubleField(map, "centerX");
             double afterZ = doubleField(map, "centerZ");
@@ -131,7 +154,7 @@ public final class StandaloneClientSmokeTest implements FabricClientGameTest {
 
         config.setBoolean("waypoint-layer", true);
         GuiPoint emptyPoint = context.computeOnClient(client -> emptyMapPoint(map, config, seed));
-        click(context, emptyPoint, 1);
+        click(context, emptyPoint, InputConstants.MOUSE_BUTTON_RIGHT);
         context.runOnClient(client -> {
             List<String> labels = contextLabels(map);
             require(labels.contains("Add waypoint"), "empty-map menu did not offer Add waypoint");
@@ -147,7 +170,7 @@ public final class StandaloneClientSmokeTest implements FabricClientGameTest {
             return selected;
         });
         GuiPoint waypointPoint = context.computeOnClient(client -> waypointPoint(map, waypoint));
-        click(context, waypointPoint, 1);
+        click(context, waypointPoint, InputConstants.MOUSE_BUTTON_RIGHT);
         context.runOnClient(client -> require(contextLabels(map).contains("View in 3D"),
             "waypoint menu did not offer View in 3D"));
         clickMenuAction(context, map, "View in 3D");
@@ -156,20 +179,84 @@ public final class StandaloneClientSmokeTest implements FabricClientGameTest {
         return new InteractionState(baselineWaypoints, waypoint, structureLayer, waypointLayer, autoCenter);
     }
 
+    private static void exerciseTouchpadZoom(ClientGameTestContext context,
+                                             StandaloneSeedExplorerConfig config,
+                                             StandaloneSeedExplorerScreen map,
+                                             GuiPoint point) {
+        RawPoint raw = context.computeOnClient(client -> rawPoint(client, point));
+        context.getInput().setCursorPos(raw.x, raw.y);
+        context.waitTick();
+        double zoomStep = config.doubleValue("zoom-step", 1.2, 1.01, 2.0);
+        double beforeFraction = doubleField(map, "blocksPerPixel");
+        context.getInput().scroll(0.0, 0.05);
+        context.waitTick();
+        double afterFraction = doubleField(map, "blocksPerPixel");
+        double fractionalNotches = -Math.log(afterFraction / beforeFraction) / Math.log(zoomStep);
+        require(Math.abs(fractionalNotches - 0.05) < 0.002,
+            "fractional touchpad scroll was treated as a full wheel notch");
+
+        double beforeBurst = afterFraction;
+        context.getInput().scroll(0.0, 100.0);
+        context.waitTick();
+        double afterBurst = doubleField(map, "blocksPerPixel");
+        double appliedNotches = -Math.log(afterBurst / beforeBurst) / Math.log(zoomStep);
+        require(appliedNotches > 0.24 && appliedNotches < 0.26,
+            "touchpad zoom burst was not bounded to a quarter notch per tick");
+        require(doubleField(map, "queuedZoom") <= 2.76,
+            "touchpad zoom queue exceeded its bounded backlog");
+
+        click(context, point, InputConstants.MOUSE_BUTTON_LEFT);
+        context.runOnClient(client -> require(Math.abs(doubleField(map, "queuedZoom")) < 1.0e-9,
+            "physical map click did not cancel queued touchpad zoom"));
+    }
+
     private static void exercise3DInteractions(ClientGameTestContext context) {
+        StandaloneWaypoint selectionBeforeMenu = context.computeOnClient(client ->
+            (StandaloneWaypoint) field(require3DScreen(client.gui.screen()), "selectedWaypoint"));
+        GuiPoint contextPoint = context.computeOnClient(client -> {
+            Screen screen = client.gui.screen();
+            return new GuiPoint(screen.width / 4.0, Math.max(110, screen.height * 0.75));
+        });
+        click(context, contextPoint, InputConstants.MOUSE_BUTTON_RIGHT);
+        context.runOnClient(client -> {
+            StandaloneTerrain3DScreen screen = require3DScreen(client.gui.screen());
+            require(contextLabels(screen).contains("Add waypoint"),
+                "3D empty-space right click did not offer Add waypoint");
+            require(intField(screen, "dragButton") == -1,
+                "3D right click left drag state armed");
+            setField(screen, "selectedWaypoint", selectionBeforeMenu);
+        });
+        GuiPoint outsideMenu = context.computeOnClient(client -> {
+            Screen screen = client.gui.screen();
+            return new GuiPoint(screen.width - 24.0, screen.height - 24.0);
+        });
+        click(context, outsideMenu, InputConstants.MOUSE_BUTTON_LEFT);
+        context.runOnClient(client -> {
+            StandaloneTerrain3DScreen screen = require3DScreen(client.gui.screen());
+            require(contextLabels(screen).isEmpty(), "3D outside click did not close the context menu");
+            require(field(screen, "selectedWaypoint") == selectionBeforeMenu,
+                "3D context-menu outside click changed the terrain selection");
+        });
+
         CameraState beforeMove = context.computeOnClient(client -> {
             StandaloneTerrain3DScreen screen = require3DScreen(client.gui.screen());
             setBooleanField(screen, "focusActive", true);
             FreeCamera3D camera = camera(screen);
             return CameraState.of(camera);
         });
-        context.getInput().holdKeyFor(87, 6);
-        context.waitTicks(3);
+        context.getInput().holdKey(InputConstants.KEY_W);
+        context.waitTicks(6);
         context.runOnClient(client -> {
             StandaloneTerrain3DScreen screen = require3DScreen(client.gui.screen());
             require(!booleanField(screen, "focusActive"), "3D WASD did not clear focus");
+            @SuppressWarnings("unchecked")
+            java.util.Set<Integer> held = (java.util.Set<Integer>) field(screen, "heldMovementKeys");
+            require(held.contains(InputConstants.KEYCODE_W),
+                "physical W was not translated to its SDL logical keycode");
             require(beforeMove.moved(camera(screen)), "3D WASD did not move the camera");
         });
+        context.getInput().releaseKey(InputConstants.KEY_W);
+        context.waitTicks(2);
 
         CameraState beforeLook = context.computeOnClient(client -> {
             StandaloneTerrain3DScreen screen = require3DScreen(client.gui.screen());
@@ -180,12 +267,14 @@ public final class StandaloneClientSmokeTest implements FabricClientGameTest {
             Screen screen = client.gui.screen();
             return new GuiPoint(screen.width / 2, Math.max(110, screen.height / 2));
         });
-        drag(context, lookStart, 72, 38, 1);
+        drag(context, lookStart, 72, 38, InputConstants.MOUSE_BUTTON_RIGHT);
         context.runOnClient(client -> {
             StandaloneTerrain3DScreen screen = require3DScreen(client.gui.screen());
             FreeCamera3D camera = camera(screen);
             require(!booleanField(screen, "focusActive"), "3D right drag did not clear focus");
             require(beforeLook.rotated(camera), "3D right drag did not rotate the camera");
+            require(contextLabels(screen).isEmpty(),
+                "3D right drag incorrectly opened the context menu");
             require(intField(screen, "dragButton") == -1,
                 "3D right drag did not release the drag state");
         });
@@ -197,7 +286,7 @@ public final class StandaloneClientSmokeTest implements FabricClientGameTest {
                                            StandaloneSeedExplorerScreen map,
                                            InteractionState interaction) {
         GuiPoint point = context.computeOnClient(client -> waypointPoint(map, interaction.waypoint));
-        click(context, point, 1);
+        click(context, point, InputConstants.MOUSE_BUTTON_RIGHT);
         context.runOnClient(client -> require(contextLabels(map).contains("Delete waypoint"),
             "waypoint menu did not offer Delete waypoint"));
         clickMenuAction(context, map, "Delete waypoint");
@@ -219,7 +308,7 @@ public final class StandaloneClientSmokeTest implements FabricClientGameTest {
             return new GuiPoint(intField(screen, "contextX") + 6,
                 intField(screen, "contextY") + row * 22 + 11);
         });
-        click(context, point, 0);
+        click(context, point, InputConstants.MOUSE_BUTTON_LEFT);
     }
 
     private static void click(ClientGameTestContext context, GuiPoint point, int button) {
@@ -284,7 +373,7 @@ public final class StandaloneClientSmokeTest implements FabricClientGameTest {
                 + (waypoint.z() - centerZ) / scale));
     }
 
-    private static List<String> contextLabels(StandaloneSeedExplorerScreen screen) {
+    private static List<String> contextLabels(Object screen) {
         @SuppressWarnings("unchecked")
         List<Object> actions = (List<Object>) field(screen, "contextActions");
         return actions.stream().map(action -> {
@@ -344,6 +433,16 @@ public final class StandaloneClientSmokeTest implements FabricClientGameTest {
             var field = target.getClass().getDeclaredField(name);
             field.setAccessible(true);
             field.setBoolean(target, value);
+        } catch (ReflectiveOperationException exception) {
+            throw new AssertionError("Could not set field " + name, exception);
+        }
+    }
+
+    private static void setField(Object target, String name, Object value) {
+        try {
+            var field = target.getClass().getDeclaredField(name);
+            field.setAccessible(true);
+            field.set(target, value);
         } catch (ReflectiveOperationException exception) {
             throw new AssertionError("Could not set field " + name, exception);
         }

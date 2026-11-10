@@ -1,5 +1,7 @@
 package me.seedexplorer.standalone;
 
+import com.mojang.blaze3d.platform.InputConstants;
+
 import me.seedexplorer.addon.loot.ChestLootOutput;
 import me.seedexplorer.addon.loot.ItemLoot;
 import me.seedexplorer.addon.loot.StandaloneStructureLootPredictor;
@@ -257,7 +259,7 @@ public final class StandaloneStructureDetailScreen extends Screen {
     @Override
     public boolean mouseClicked(MouseButtonEvent click, boolean doubled) {
         if (super.mouseClicked(click, doubled)) return true;
-        if (click.button() != 0) return false;
+        if (click.button() != InputConstants.MOUSE_BUTTON_LEFT) return false;
         int sidebar = Math.min(SIDEBAR_WIDTH, Math.max(120, width / 3));
         int headerHeight = headerHeight();
         if (click.x() >= sidebar || click.y() < headerHeight + 28) return false;

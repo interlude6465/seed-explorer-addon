@@ -1,5 +1,7 @@
 package me.seedexplorer.standalone;
 
+import com.mojang.blaze3d.platform.InputConstants;
+
 import me.seedexplorer.addon.loot.ChestLootOutput;
 import me.seedexplorer.addon.loot.StandaloneStructureLootPredictor;
 import me.seedexplorer.addon.ore.OrePatch;
@@ -105,6 +107,7 @@ public final class StandaloneSeedExplorerScreen extends Screen {
     private double lastMouseY;
     private double pressMouseX, pressMouseY;
     private boolean dragMoved;
+    private double queuedZoom, zoomMouseX, zoomMouseY;
     private List<MenuAction> contextActions = List.of();
     private int contextX, contextY, contextWidth;
     private volatile MapResult result;
@@ -126,6 +129,7 @@ public final class StandaloneSeedExplorerScreen extends Screen {
     @Override
     protected void init() {
         dragging = false;
+        queuedZoom = 0.0;
         setDragging(false);
         contextActions = List.of();
         if (!initialPositionSet) {
@@ -851,13 +855,16 @@ public final class StandaloneSeedExplorerScreen extends Screen {
             int x = left + (int) Math.round(mapWidth / 2.0 + (structure.x - map.centerX) / map.step * CELL_SIZE);
             int y = top + (int) Math.round(mapHeight / 2.0 + (structure.z - map.centerZ) / map.step * CELL_SIZE);
             if (x < left || x >= width - 10 || y < top || y >= height - 10) continue;
-            int radius = Math.max(2, (int) Math.round(2.0
-                * config.doubleValue("structure-marker-scale", 1.0, 0.5, 3.0)));
+            int radius = structureIconRadius();
             boolean dimmed = waypointPositions.contains(packedPosition(structure.x, structure.z))
                 || config.completed(dimension, structure.type.name(), structure.x, structure.z);
-            graphics.fill(x - radius - 1, y - radius - 1, x + radius + 2, y + radius + 2, 0xFF151918);
-            graphics.fill(x - radius, y - radius, x + radius + 1, y + radius + 1,
-                dimmed ? dimColor(markerColor(structure)) : markerColor(structure));
+            boolean selected = structure.equals(selectedStructure);
+            graphics.fill(x - radius - 1, y - radius - 1, x + radius + 1, y + radius + 1,
+                selected ? 0xFFE7FFF0 : 0xA5151918);
+            graphics.blit(StandaloneStructureIcons.texture(structure),
+                x - radius, y - radius, x + radius, y + radius,
+                0.0f, 1.0f, 0.0f, 1.0f);
+            if (dimmed) graphics.fill(x - radius, y - radius, x + radius, y + radius, 0x800A1110);
             if (Math.abs(mouseX - x) <= radius + 3 && Math.abs(mouseY - y) <= radius + 3) {
                 hovered = structure;
             }
@@ -900,6 +907,11 @@ public final class StandaloneSeedExplorerScreen extends Screen {
         }
     }
 
+    private int structureIconRadius() {
+        return Math.max(4, (int) Math.round(7.0
+            * config.doubleValue("structure-marker-scale", 1.0, 0.5, 3.0)));
+    }
+
     private int visibleStructureCount(MapResult map) {
         if (!config.booleanValue("structure-layer", true)) return 0;
         int count = 0;
@@ -928,7 +940,7 @@ public final class StandaloneSeedExplorerScreen extends Screen {
             int y = top + (int) Math.round(mapHeight / 2.0
                 + (structure.z - map.centerZ) / map.step * CELL_SIZE);
             double distance = Math.max(Math.abs(mouseX - x), Math.abs(mouseY - y));
-            if (distance <= 6.0 && distance < closestDistance) {
+            if (distance <= structureIconRadius() + 3.0 && distance < closestDistance) {
                 closest = structure;
                 closestDistance = distance;
             }
@@ -1159,7 +1171,7 @@ public final class StandaloneSeedExplorerScreen extends Screen {
     public boolean mouseClicked(MouseButtonEvent click, boolean doubled) {
         if (!contextActions.isEmpty()) {
             int row = (int) ((click.y() - contextY) / 22);
-            if (click.button() == 0 && click.x() >= contextX && click.x() < contextX + contextWidth
+            if (click.button() == InputConstants.MOUSE_BUTTON_LEFT && click.x() >= contextX && click.x() < contextX + contextWidth
                 && click.y() >= contextY && row >= 0 && row < contextActions.size()) {
                 Runnable action = contextActions.get(row).action();
                 contextActions = List.of();
@@ -1167,11 +1179,14 @@ public final class StandaloneSeedExplorerScreen extends Screen {
                 return true;
             }
             contextActions = List.of();
+            // Dismissing the menu consumes the gesture; it must not click the map below.
+            return true;
         }
-        if ((click.button() == 0 || click.button() == 1) && insideMap((int) click.x(), (int) click.y())) {
+        if ((click.button() == InputConstants.MOUSE_BUTTON_LEFT || click.button() == InputConstants.MOUSE_BUTTON_RIGHT) && insideMap((int) click.x(), (int) click.y())) {
             setFocused(null);
+            queuedZoom = 0.0;
             MapResult snapshot = result;
-            if (click.button() == 1) {
+            if (click.button() == InputConstants.MOUSE_BUTTON_RIGHT) {
                 dragging = false;
                 setDragging(false);
                 if (snapshot != null) openContextMenu(snapshot, click.x(), click.y());
@@ -1202,7 +1217,7 @@ public final class StandaloneSeedExplorerScreen extends Screen {
 
     @Override
     public boolean keyPressed(KeyEvent event) {
-        if (event.key() == 256 && !contextActions.isEmpty()) {
+        if (event.key() == InputConstants.KEY_ESCAPE && !contextActions.isEmpty()) {
             contextActions = List.of();
             return true;
         }
@@ -1282,7 +1297,7 @@ public final class StandaloneSeedExplorerScreen extends Screen {
 
     @Override
     public boolean mouseReleased(MouseButtonEvent click) {
-        if (click.button() == 0 && dragging) {
+        if (click.button() == InputConstants.MOUSE_BUTTON_LEFT && dragging) {
             dragging = false;
             setDragging(false);
             if (dragMoved) requestMap();
@@ -1293,7 +1308,7 @@ public final class StandaloneSeedExplorerScreen extends Screen {
 
     @Override
     public boolean mouseDragged(MouseButtonEvent click, double deltaX, double deltaY) {
-        if (!dragging || click.button() != 0) return super.mouseDragged(click, deltaX, deltaY);
+        if (!dragging || click.button() != InputConstants.MOUSE_BUTTON_LEFT) return super.mouseDragged(click, deltaX, deltaY);
         if (!dragMoved && Math.hypot(click.x() - pressMouseX, click.y() - pressMouseY) < 3.0) return true;
         double scale = result == null ? blocksPerPixel : result.step / CELL_SIZE;
         double moveX = dragMoved ? deltaX : click.x() - pressMouseX;
@@ -1308,25 +1323,39 @@ public final class StandaloneSeedExplorerScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
-        if (mouseY < mapTop()) return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+        if (!insideMap((int) mouseX, (int) mouseY)) {
+            return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+        }
+        if (!Double.isFinite(verticalAmount) || verticalAmount == 0.0) return true;
         contextActions = List.of();
+        // SDL touchpads emit many fractional events. Preserve their magnitude instead of
+        // treating every event as a wheel notch, and bound burst/backlog size.
+        queuedZoom = Math.max(-3.0, Math.min(3.0, queuedZoom + verticalAmount));
+        zoomMouseX = mouseX;
+        zoomMouseY = mouseY;
+        return true;
+    }
+
+    private void applyQueuedZoom() {
+        if (dragging || Math.abs(queuedZoom) < 1.0e-6) return;
+        double amount = Math.max(-0.25, Math.min(0.25, queuedZoom));
+        queuedZoom -= amount;
         double oldScale = blocksPerPixel;
         double zoomStep = config.doubleValue("zoom-step", 1.2, 1.01, 2.0);
-        blocksPerPixel = clampScale(blocksPerPixel
-            * (verticalAmount > 0 ? 1.0 / zoomStep : zoomStep));
-        double left = 10;
+        blocksPerPixel = clampScale(oldScale * Math.pow(zoomStep, -amount));
+        if (blocksPerPixel == oldScale) { queuedZoom = 0.0; return; }
         double top = mapTop();
-        double anchorX = (mouseX - width / 2.0) * oldScale;
-        double anchorZ = (mouseY - (top + (height - top - 10) / 2.0)) * oldScale;
-        centerX += anchorX / CELL_SIZE * CELL_SIZE * (1.0 - blocksPerPixel / oldScale);
-        centerZ += anchorZ / CELL_SIZE * CELL_SIZE * (1.0 - blocksPerPixel / oldScale);
+        double anchorX = (zoomMouseX - width / 2.0) * oldScale;
+        double anchorZ = (zoomMouseY - (top + (height - top - 10) / 2.0)) * oldScale;
+        centerX += anchorX * (1.0 - blocksPerPixel / oldScale);
+        centerZ += anchorZ * (1.0 - blocksPerPixel / oldScale);
         requestMap();
-        return true;
     }
 
     @Override
     public void tick() {
         super.tick();
+        applyQueuedZoom();
         MapResult snapshot = result;
         if (++refreshTicks >= 20 && snapshot != null && snapshot.request == activeRequest && !dragging) {
             refreshTicks = 0;

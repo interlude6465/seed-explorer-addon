@@ -1,5 +1,7 @@
 package me.seedexplorer.addon.enchant;
 
+import com.mojang.blaze3d.platform.InputConstants;
+
 import me.seedexplorer.addon.debug.PredictionDebugLogger;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -98,7 +100,7 @@ public final class EnchantingTableOverlay {
 
     /** Consumes a left-click when it lands inside the prediction controls. */
     public boolean mouseClicked(EnchantmentScreen screen, MouseButtonEvent click) {
-        if (click.button() != 0) return false;
+        if (click.button() != InputConstants.MOUSE_BUTTON_LEFT) return false;
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.level == null) return false;
         if (trackedScreen != screen || panelW <= 0) {
