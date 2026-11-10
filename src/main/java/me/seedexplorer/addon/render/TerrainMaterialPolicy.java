@@ -15,6 +15,13 @@ public final class TerrainMaterialPolicy {
         return !isLeaf(blockId);
     }
 
+    /** Map-only vegetation exclusions requested for visual clarity. */
+    public static boolean renderNaturalDecoration(String blockId) {
+        if (blockId == null) return false;
+        String id = blockId.substring(blockId.indexOf(':') + 1);
+        return !id.equals("pale_oak_leaves") && !id.equals("leaf_litter");
+    }
+
     public static boolean renderAtlasMaterial(boolean usesFallback) {
         return !usesFallback;
     }
@@ -40,7 +47,16 @@ public final class TerrainMaterialPolicy {
             || id.endsWith("_flower")
             || id.endsWith("_tulip")
             || id.endsWith("_mushroom")
+            || id.endsWith("_mushroom_block")
             || id.endsWith("_roots")
+            || id.endsWith("_fungus")
+            || id.endsWith("_coral")
+            || id.endsWith("_coral_fan")
+            || id.endsWith("_coral_wall_fan")
+            || id.endsWith("_dripleaf")
+            || id.endsWith("_dripleaf_stem")
+            || id.endsWith("_vines")
+            || id.endsWith("_vines_plant")
             || id.endsWith("_crop")
             || id.endsWith("_torch")
             || id.endsWith("_lantern")
@@ -63,6 +79,9 @@ public final class TerrainMaterialPolicy {
             || id.contains("lichen")
             || id.contains("bamboo")
             || id.contains("cactus")
+            || id.contains("azalea")
+            || id.contains("mangrove_roots")
+            || id.contains("hanging_moss")
             || id.contains("sugar_cane")
             || id.contains("kelp")
             || id.contains("seagrass")
@@ -97,9 +116,26 @@ public final class TerrainMaterialPolicy {
             || id.equals("rose_bush")
             || id.equals("peony")
             || id.equals("pink_petals")
+            || id.equals("wildflowers")
+            || id.equals("leaf_litter")
+            || id.equals("firefly_bush")
+            || id.equals("bush")
+            || id.equals("short_dry_grass")
+            || id.equals("tall_dry_grass")
             || id.equals("spore_blossom")
             || id.equals("hanging_roots")
-            || id.equals("cocoa"));
+            || id.equals("cocoa")
+            || id.equals("sea_pickle")
+            || id.equals("nether_sprouts")
+            || id.equals("pumpkin")
+            || id.equals("melon")
+            || id.equals("chorus_plant")
+            || id.equals("chorus_flower")
+            || id.equals("nether_wart_block")
+            || id.equals("warped_wart_block")
+            || id.equals("shroomlight")
+            || id.equals("bee_nest")
+            || id.equals("beehive"));
     }
 
     public static boolean includeCaveSample(int dimension, int blockY, String blockId) {

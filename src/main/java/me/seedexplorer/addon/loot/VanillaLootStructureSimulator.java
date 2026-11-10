@@ -2,8 +2,8 @@ package me.seedexplorer.addon.loot;
 
 import me.seedexplorer.addon.worldgen.WorldgenEngine;
 import me.seedexplorer.addon.worldgen.GeneratedTerrainHeightmap;
+import me.seedexplorer.addon.worldgen.PredictionContext;
 import me.seedexplorer.addon.worldgen.VanillaStructurePredictor;
-import me.seedexplorer.addon.seed.SeedManager;
 import me.seedexplorer.addon.structures.GeneratedStructure;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
@@ -21,6 +21,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.vehicle.ContainerEntity;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.ChestBlock;
 import net.minecraft.world.level.block.entity.BarrelBlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
@@ -30,6 +31,7 @@ import net.minecraft.world.level.block.entity.HopperBlockEntity;
 import net.minecraft.world.level.block.entity.ShulkerBoxBlockEntity;
 import net.minecraft.world.level.block.entity.SpawnerBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.ChestType;
 import net.minecraft.world.level.chunk.ChunkGenerator;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.levelgen.WorldGenSettings;
@@ -39,6 +41,7 @@ import net.minecraft.world.level.levelgen.XoroshiroRandomSource;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.levelgen.placement.PlacedFeature;
+import net.minecraft.world.level.levelgen.placement.FeaturePlacer;
 import net.minecraft.world.level.levelgen.placement.PlacementModifier;
 import net.minecraft.world.level.levelgen.placement.PlacementContext;
 import net.minecraft.world.level.levelgen.feature.MonsterRoomFeature;
@@ -89,6 +92,14 @@ public final class VanillaLootStructureSimulator {
     private VanillaLootStructureSimulator() {
     }
 
+    private static PredictionContext legacyContext(long seed, int dimension) {
+        return new PredictionContext(seed, "26.3", dimension);
+    }
+
+    private static PredictionContext legacyCurrentContext(int dimension) {
+        return new PredictionContext(0L, "26.3", dimension);
+    }
+
     /** Exposes the Unsafe-built fake ServerLevel for the real-loot-table A/B probe. */
     public static Object fakeLevelForProbe() {
         return CaptureWorld.fakeServerLevel(0L);
@@ -99,15 +110,30 @@ public final class VanillaLootStructureSimulator {
         return CaptureWorld.fakeServerLevel(seed);
     }
 
+    /**
+     * Exposes a fake ServerLevel whose chunk source can answer 26.3 worldgen
+     * height predicates with the active dimension's generator.
+     */
+    public static Object fakeLevelForSeed(long seed, ChunkGenerator generator) {
+        return CaptureWorld.fakeServerLevel(seed, generator);
+    }
+
     /** Generic simulation for any structure type (overworld default). */
     public static List<SimulatedContainer> simulate(long seed, ResourceKey<Structure> structureKey, int chunkX, int chunkZ) {
-        return simulate(seed, 0, structureKey, chunkX, chunkZ);
+        return simulate(legacyContext(seed, 0), structureKey, chunkX, chunkZ);
     }
 
     /** Generic simulation with explicit dimension. */
     public static List<SimulatedContainer> simulate(long seed, int dimension,
                                                      ResourceKey<Structure> structureKey, int chunkX, int chunkZ) {
-        return simulate(seed, dimension, structureKey, chunkX, chunkZ, decorationIndex(structureKey));
+        return simulate(legacyContext(seed, dimension), structureKey, chunkX, chunkZ);
+    }
+
+    public static List<SimulatedContainer> simulate(PredictionContext context,
+                                                     ResourceKey<Structure> structureKey,
+                                                     int chunkX, int chunkZ) {
+        return simulate(context.worldSeed(), context.dimension(), structureKey, chunkX, chunkZ,
+            decorationIndex(structureKey, context));
     }
 
     public static List<SimulatedContainer> simulate(long seed, int dimension,
@@ -195,8 +221,15 @@ public final class VanillaLootStructureSimulator {
     public static List<SimulatedMinecart> simulateMinecarts(long seed, int dimension,
                                                               ResourceKey<Structure> structureKey,
                                                               int chunkX, int chunkZ) {
+        return simulateMinecarts(legacyContext(seed, dimension), structureKey,
+            chunkX, chunkZ);
+    }
+
+    public static List<SimulatedMinecart> simulateMinecarts(PredictionContext context,
+                                                              ResourceKey<Structure> structureKey,
+                                                              int chunkX, int chunkZ) {
         LAST_MINECARTS.set(List.of());
-        simulate(seed, dimension, structureKey, chunkX, chunkZ);
+        simulate(context, structureKey, chunkX, chunkZ);
         return LAST_MINECARTS.get();
     }
 
@@ -370,12 +403,16 @@ public final class VanillaLootStructureSimulator {
                 // center. Dig at both radii to guarantee at least one opening
                 // regardless of the random room size chosen inside place().
                 java.util.List<PlacementModifier> mods = origFeature.placement();
-                java.util.stream.Stream<BlockPos> posStream = java.util.stream.Stream.of(origin);
+                java.util.List<BlockPos> positions = java.util.List.of(origin);
+                PlacementContext placementContext = new PlacementContext(
+                    level, gen, java.util.Optional.of(origFeature));
                 for (PlacementModifier mod : mods) {
-                    posStream = posStream.flatMap(p -> mod.getPositions(
-                        new PlacementContext(level, gen, java.util.Optional.of(origFeature)), random, p));
+                    java.util.List<BlockPos> next = new java.util.ArrayList<>();
+                    for (BlockPos position : positions) {
+                        mod.modify(placementContext, random, position, next::add);
+                    }
+                    positions = next;
                 }
-                java.util.List<BlockPos> positions = posStream.toList();
                 if (!positions.isEmpty()) {
                     BlockPos dungeonPos = positions.get(0);
                     int px = dungeonPos.getX(), py = dungeonPos.getY(), pz = dungeonPos.getZ();
@@ -395,7 +432,8 @@ public final class VanillaLootStructureSimulator {
                     }
                 }
                 random.setFeatureSeed(decorationSeed, idx, decorationStep);
-                boolean placedOk = origFeature.placeWithBiomeCheck(level, gen, random, origin);
+                boolean placedOk = new FeaturePlacer(level, gen)
+                    .placeWithBiomeCheck(origFeature, random, origin);
                 // Diagnostic: log placement result and block states at the first
                 // placement position when the feature fails.
                 if (!placedOk && !positions.isEmpty()) {
@@ -464,7 +502,8 @@ public final class VanillaLootStructureSimulator {
                 PlacedFeature feature = stepData.features().get(index);
                 try {
                     random.setFeatureSeed(decorationSeed, index, step);
-                    feature.placeWithBiomeCheck(level, generator, random, origin);
+                    new FeaturePlacer(level, generator)
+                        .placeWithBiomeCheck(feature, random, origin);
                 } catch (Throwable ignored) {
                     // A non-dungeon feature may require server-only context that is
                     // irrelevant to the monster-room terrain/opening checks. Vanilla
@@ -519,7 +558,7 @@ public final class VanillaLootStructureSimulator {
 
     private static boolean isMonsterRoom(PlacedFeature feature) {
         try {
-            return feature.feature().value().feature() instanceof MonsterRoomFeature;
+            return feature.feature().value() instanceof MonsterRoomFeature;
         } catch (Throwable ignored) {
             return false;
         }
@@ -536,7 +575,11 @@ public final class VanillaLootStructureSimulator {
     }
 
     public static int decorationIndex(ResourceKey<Structure> key) {
-        return decorationIndex(key, activeVersionProfile());
+        return decorationIndex(key, legacyCurrentContext(0));
+    }
+
+    public static int decorationIndex(ResourceKey<Structure> key, PredictionContext context) {
+        return decorationIndex(key, versionProfile(context));
     }
 
     public static int decorationIndex(ResourceKey<Structure> key, BundledLootTableLoader.VersionProfile profile) {
@@ -551,7 +594,8 @@ public final class VanillaLootStructureSimulator {
         // structures whose Paper index differs are pinned explicitly there.
         var lookup = WorldgenEngine.vanillaLookup().lookupOrThrow(Registries.STRUCTURE);
         Structure target = lookup.getOrThrow(key).value();
-        if (key.equals(BuiltinStructures.MINESHAFT) || key.equals(BuiltinStructures.MINESHAFT_MESA)) {
+        if (key.equals(BuiltinStructures.MINESHAFT) || key.equals(BuiltinStructures.MINESHAFT_MESA)
+            || keyStr.startsWith("minecraft:abandoned_camp_")) {
             // ChunkGenerator.applyBiomeDecoration groups the STRUCTURE registry by
             // decoration step, then increments the feature index once per structure.
             // Sort dynamic-registry keys so the headless datagen lookup mirrors the
@@ -580,16 +624,10 @@ public final class VanillaLootStructureSimulator {
         throw new IllegalStateException("Structure type not found: " + targetType);
     }
 
-    private static BundledLootTableLoader.VersionProfile activeVersionProfile() {
-        try {
-            SeedManager manager = SeedManager.get();
-            if (manager != null) {
-                String version = manager.getMcVersion();
-                if (version != null && !version.isBlank()) {
-                    return BundledLootTableLoader.VersionProfile.forVersion(version);
-                }
-            }
-        } catch (Throwable ignored) {
+    private static BundledLootTableLoader.VersionProfile versionProfile(PredictionContext context) {
+        String version = context == null ? "" : context.minecraftVersion();
+        if (version != null && !version.isBlank()) {
+            return BundledLootTableLoader.VersionProfile.forVersion(version);
         }
         return BundledLootTableLoader.runtimeProfile();
     }
@@ -620,7 +658,8 @@ public final class VanillaLootStructureSimulator {
      * depth, so they need prefill too.
      */
     private static boolean needsTerrainPrefill(ResourceKey<Structure> structureKey) {
-        return structureKey.equals(BuiltinStructures.STRONGHOLD)
+        return structureKey.identifier().toString().startsWith("minecraft:abandoned_camp_")
+            || structureKey.equals(BuiltinStructures.STRONGHOLD)
             || structureKey.equals(BuiltinStructures.BURIED_TREASURE)
             || structureKey.equals(BuiltinStructures.MINESHAFT)
             || structureKey.equals(BuiltinStructures.MINESHAFT_MESA)
@@ -642,7 +681,11 @@ public final class VanillaLootStructureSimulator {
             || type == StructureType.MINESHAFT;
     }
 
-    public record SimulatedContainer(int x, int y, int z, String lootTableId, long lootSeed) {
+    public record SimulatedContainer(int x, int y, int z, String lootTableId, long lootSeed,
+                                     boolean pairedChest) {
+        public SimulatedContainer(int x, int y, int z, String lootTableId, long lootSeed) {
+            this(x, y, z, lootTableId, lootSeed, false);
+        }
     }
 
     /** A container carried by a minecart entity rather than a placed block. */
@@ -667,6 +710,7 @@ public final class VanillaLootStructureSimulator {
         private final int maxBuildY;
         private final int seaLevel;
         private final RandomSource worldRandom;
+        private final ChunkGenerator generator;
         private final GeneratedTerrainHeightmap terrainHeightmap;
         private final boolean terrainFallback;
         private final Map<BlockPos, BlockState> blocks = new HashMap<>();
@@ -702,6 +746,7 @@ public final class VanillaLootStructureSimulator {
             this.maxBuildY = minBuildY + WorldgenEngine.overallHeight(seed, dimension) - 1;
             this.seaLevel = dimension == -1 ? 32 : 63;
             this.worldRandom = RandomSource.create(seed ^ 0x5EEDC0DEL);
+            this.generator = WorldgenEngine.chunkGenerator(seed, dimension);
             this.terrainHeightmap = new GeneratedTerrainHeightmap(seed, dimension, terrainStarts);
         }
 
@@ -712,6 +757,7 @@ public final class VanillaLootStructureSimulator {
             this.maxBuildY = prepared.maxBuildY;
             this.seaLevel = prepared.seaLevel;
             this.worldRandom = RandomSource.create(seed ^ 0x5EEDC0DEL);
+            this.generator = prepared.generator;
             this.terrainHeightmap = prepared.terrainHeightmap;
             this.terrainFallback = prepared.terrainFallback;
             this.blocks.putAll(prepared.blocks);
@@ -737,8 +783,12 @@ public final class VanillaLootStructureSimulator {
                     ResourceKey<LootTable> table = container.getLootTable();
                     if (table == null) continue;
                     BlockPos pos = entry.getKey();
+                    BlockState state = blocks.get(pos);
+                    boolean pairedChest = state != null && state.hasProperty(ChestBlock.TYPE)
+                        && state.getValue(ChestBlock.TYPE) != ChestType.SINGLE;
                     result.add(new SimulatedContainer(
-                        pos.getX(), pos.getY(), pos.getZ(), table.identifier().toString(), container.getLootTableSeed()));
+                        pos.getX(), pos.getY(), pos.getZ(), table.identifier().toString(),
+                        container.getLootTableSeed(), pairedChest));
                 }
             }
             result.addAll(capturedEntities);
@@ -912,7 +962,7 @@ public final class VanillaLootStructureSimulator {
                 return true;
             }
             if (name.equals("getLevel")) {
-                return fakeServerLevel(seed);
+                return fakeServerLevel(seed, generator);
             }
             if (name.equals("removeBlock") || name.equals("destroyBlock")) {
                 BlockPos pos = immutable((BlockPos) args[0]);
@@ -1031,11 +1081,20 @@ public final class VanillaLootStructureSimulator {
          */
         private static volatile Object fakeServerLevel;
         private static volatile long fakeServerLevelSeed = Long.MIN_VALUE;
+        private static volatile ChunkGenerator fakeServerLevelGenerator;
         private static Object fakeServerLevel(long seed) {
+            return fakeServerLevel(seed, null);
+        }
+
+        private static Object fakeServerLevel(long seed, ChunkGenerator generator) {
             Object cached = fakeServerLevel;
-            if (cached != null && fakeServerLevelSeed == seed) return cached;
+            if (cached != null && fakeServerLevelSeed == seed
+                && (generator == null || fakeServerLevelGenerator == generator)) return cached;
             synchronized (VanillaLootStructureSimulator.class) {
-                if (fakeServerLevel != null && fakeServerLevelSeed == seed) return fakeServerLevel;
+                if (fakeServerLevel != null && fakeServerLevelSeed == seed
+                    && (generator == null || fakeServerLevelGenerator == generator)) {
+                    return fakeServerLevel;
+                }
                 try {
                     sun.misc.Unsafe unsafe = unsafe();
 
@@ -1057,15 +1116,28 @@ public final class VanillaLootStructureSimulator {
 
                     Object server = unsafe.allocateInstance(concreteServerClass);
                     setField(unsafe, server, minecraftServerClass, worldDataClass, worldData);
+                    WorldOptions worldOptions = new WorldOptions(seed, true, false);
+                    WorldGenSettings settings;
                     try {
-                        WorldGenSettings settings =
-                            WorldGenSettings.of(new WorldOptions(seed, true, false), WorldgenEngine.offlineRegistryAccess());
-                        boolean wired = setFieldByName(unsafe, server, minecraftServerClass, "worldGenSettings", settings);
-                        if (!wired) {
-                            setField(unsafe, server, minecraftServerClass, WorldGenSettings.class, settings);
+                        settings = WorldGenSettings.of(
+                            worldOptions, WorldgenEngine.offlineRegistryAccess());
+                    } catch (Throwable unavailableDimensions) {
+                        // Structure/feature replay reads only options().seed(). The
+                        // headless registry may omit the level-stem registry, so an
+                        // options field is the correct minimal server stub. The public
+                        // constructor rejects a registry without an overworld stem.
+                        settings = (WorldGenSettings) unsafe.allocateInstance(
+                            WorldGenSettings.class);
+                        if (!setFieldByName(unsafe, settings, WorldGenSettings.class,
+                            "options", worldOptions)) {
+                            throw new IllegalStateException(
+                                "Cannot wire offline world options", unavailableDimensions);
                         }
-                    } catch (Throwable t) {
-                        probe("[fakeServerLevel] worldGenSettings wiring failed: " + t);
+                    }
+                    if (!setFieldByName(unsafe, server, minecraftServerClass,
+                        "worldGenSettings", settings)) {
+                        setField(unsafe, server, minecraftServerClass,
+                            WorldGenSettings.class, settings);
                     }
                     try {
                         setField(unsafe, server, minecraftServerClass,
@@ -1077,6 +1149,56 @@ public final class VanillaLootStructureSimulator {
 
                     Object level = unsafe.allocateInstance(serverLevelClass);
                     setField(unsafe, level, serverLevelClass, minecraftServerClass, server);
+
+                    Class<?> serverLevelDataClass = Class.forName(
+                        "net.minecraft.world.level.storage.ServerLevelData");
+                    Object levelData = Proxy.newProxyInstance(
+                        serverLevelDataClass.getClassLoader(),
+                        new Class<?>[] { serverLevelDataClass },
+                        (p, m, a) -> switch (m.getName()) {
+                            case "getDifficulty" -> net.minecraft.world.Difficulty.NORMAL;
+                            case "getGameType" -> net.minecraft.world.level.GameType.SURVIVAL;
+                            case "getLevelName" -> "Seed Explorer Offline Replay";
+                            case "isInitialized" -> true;
+                            default -> defaultValue(m.getReturnType());
+                        });
+                    setFieldByName(unsafe, level, serverLevelClass,
+                        "serverLevelData", levelData);
+                    setFieldByName(unsafe, level, serverLevelClass,
+                        "levelData", levelData);
+
+                    // 26.3 allocates entity ids through ServerLevel.chunkSource.
+                    // The replay never loads chunks through this object; it only
+                    // needs an empty tracking map so MinecartChest construction can
+                    // prove that a newly selected id is unused.
+                    try {
+                        Class<?> chunkSourceClass = Class.forName(
+                            "net.minecraft.server.level.ServerChunkCache");
+                        Class<?> chunkMapClass = Class.forName(
+                            "net.minecraft.server.level.ChunkMap");
+                        Object chunkMap = unsafe.allocateInstance(chunkMapClass);
+                        setFieldByName(unsafe, chunkMap, chunkMapClass, "entityMap",
+                            new it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap<>());
+                        if (generator != null) {
+                            var worldGenContext = new net.minecraft.world.level.chunk.status.WorldGenContext(
+                                (net.minecraft.server.level.ServerLevel) level,
+                                generator,
+                                WorldgenEngine.structureTemplateManager(),
+                                null,
+                                Runnable::run,
+                                ignored -> {
+                                });
+                            setFieldByName(unsafe, chunkMap, chunkMapClass,
+                                "worldGenContext", worldGenContext);
+                        }
+                        Object chunkSource = unsafe.allocateInstance(chunkSourceClass);
+                        setFieldByName(unsafe, chunkSource, chunkSourceClass,
+                            "chunkMap", chunkMap);
+                        setFieldByName(unsafe, level, serverLevelClass,
+                            "chunkSource", chunkSource);
+                    } catch (Throwable t) {
+                        probe("[fakeServerLevel] chunkSource wiring failed: " + t);
+                    }
 
                     // Some structure pieces (e.g. the End Ship's item frame) call
                     // level.playSound() during placement, which reads soundSeedGenerator.
@@ -1168,6 +1290,7 @@ public final class VanillaLootStructureSimulator {
 
                     fakeServerLevel = level;
                     fakeServerLevelSeed = seed;
+                    fakeServerLevelGenerator = generator;
                     return level;
                 } catch (Throwable t) {
                     probe("[fakeServerLevel] failed: " + t);
@@ -1246,10 +1369,7 @@ public final class VanillaLootStructureSimulator {
         private static BlockEntity blockEntityFor(BlockPos pos, BlockState state) {
             Block block = state.getBlock();
             if (block == Blocks.CHEST || block == Blocks.TRAPPED_CHEST
-                || block == Blocks.COPPER_CHEST || block == Blocks.EXPOSED_COPPER_CHEST
-                || block == Blocks.WEATHERED_COPPER_CHEST || block == Blocks.OXIDIZED_COPPER_CHEST
-                || block == Blocks.WAXED_COPPER_CHEST || block == Blocks.WAXED_EXPOSED_COPPER_CHEST
-                || block == Blocks.WAXED_WEATHERED_COPPER_CHEST || block == Blocks.WAXED_OXIDIZED_COPPER_CHEST) {
+                || Blocks.COPPER_CHEST.asList().contains(block)) {
                 return new ChestBlockEntity(pos, state);
             }
             if (block == Blocks.BARREL) return new BarrelBlockEntity(pos, state);
@@ -1262,15 +1382,7 @@ public final class VanillaLootStructureSimulator {
         }
 
         private static boolean isShulkerBox(Block block) {
-            return block == Blocks.SHULKER_BOX || block == Blocks.WHITE_SHULKER_BOX
-                || block == Blocks.ORANGE_SHULKER_BOX || block == Blocks.MAGENTA_SHULKER_BOX
-                || block == Blocks.LIGHT_BLUE_SHULKER_BOX || block == Blocks.YELLOW_SHULKER_BOX
-                || block == Blocks.LIME_SHULKER_BOX || block == Blocks.PINK_SHULKER_BOX
-                || block == Blocks.GRAY_SHULKER_BOX || block == Blocks.LIGHT_GRAY_SHULKER_BOX
-                || block == Blocks.CYAN_SHULKER_BOX || block == Blocks.PURPLE_SHULKER_BOX
-                || block == Blocks.BLUE_SHULKER_BOX || block == Blocks.BROWN_SHULKER_BOX
-                || block == Blocks.GREEN_SHULKER_BOX || block == Blocks.RED_SHULKER_BOX
-                || block == Blocks.BLACK_SHULKER_BOX;
+            return block == Blocks.SHULKER_BOX || Blocks.DYED_SHULKER_BOX.asList().contains(block);
         }
 
         private static Object defaultValue(Class<?> type) {

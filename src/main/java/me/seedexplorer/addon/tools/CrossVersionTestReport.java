@@ -151,7 +151,7 @@ public final class CrossVersionTestReport {
                         out.println("    " + ft);
                     }
                 } else {
-                    out.println("  (expected — " + profile.lootTablePathPrefix() + " resources not bundled)");
+                    out.println("  (expected — tables not present in this official version)");
                     for (String ft : failedTables) {
                         out.println("    " + ft);
                     }

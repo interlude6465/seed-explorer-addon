@@ -184,13 +184,14 @@ public final class OracleCaseComparator {
                 differences.add(position + " loot seed predicted=" + actual.lootSeed()
                     + " oracle=" + expected.lootSeed);
             }
-            Map<String, Integer> predictedItems = predictItems(actual, simulated);
+            Map<String, Integer> predictedItems = predictItems(actual, simulated, seed, dimension);
             if (!expected.items.equals(predictedItems)) {
                 differences.add(position + " item totals predicted=" + predictedItems
                     + " oracle=" + expected.items);
             }
             if (!expected.enchantments.isEmpty()) {
-                Map<String, Integer> predictedEnchantments = predictEnchantments(actual, simulated);
+                Map<String, Integer> predictedEnchantments = predictEnchantments(
+                    actual, simulated, seed, dimension);
                 if (!expected.enchantments.equals(predictedEnchantments)) {
                     differences.add(position + " enchantments predicted=" + predictedEnchantments
                         + " oracle=" + expected.enchantments);
@@ -234,20 +235,28 @@ public final class OracleCaseComparator {
     }
 
     private static Map<String, Integer> predictItems(VanillaLootStructureSimulator.SimulatedContainer target,
-                                                      List<VanillaLootStructureSimulator.SimulatedContainer> all) {
+                                                      List<VanillaLootStructureSimulator.SimulatedContainer> all,
+                                                      long worldSeed, int dimension) {
         Map<String, Integer> result = new HashMap<>();
         for (VanillaLootStructureSimulator.SimulatedContainer member : sharedChestMembers(target, all)) {
-            result.putAll(mergeCounts(result, predictItems(member.lootTableId(), member.lootSeed())));
+            result.putAll(mergeCounts(result, predictItems(member, worldSeed, dimension)));
         }
         return Map.copyOf(result);
     }
 
-    private static Map<String, Integer> predictItems(String tableId, long seed) {
-        return aggregate(simulateItems(tableId, seed));
+    private static Map<String, Integer> predictItems(
+        VanillaLootStructureSimulator.SimulatedContainer container,
+        long worldSeed, int dimension) {
+        return aggregate(simulateItems(container, worldSeed, dimension));
     }
 
-    private static List<ItemLoot> simulateItems(String tableId, long seed) {
-        List<ItemLoot> vanilla = LootTableSimulator.simulateVanilla(tableId, seed);
+    private static List<ItemLoot> simulateItems(
+        VanillaLootStructureSimulator.SimulatedContainer container,
+        long worldSeed, int dimension) {
+        String tableId = container.lootTableId();
+        long seed = container.lootSeed();
+        List<ItemLoot> vanilla = LootTableSimulator.simulateVanilla(tableId, seed,
+            worldSeed, dimension, container.x(), container.y(), container.z());
         if (vanilla != null) return vanilla;
         var table = VanillaLootTables.get(tableId);
         if (table == null) return List.of();
@@ -256,10 +265,11 @@ public final class OracleCaseComparator {
 
     private static Map<String, Integer> predictEnchantments(
         VanillaLootStructureSimulator.SimulatedContainer target,
-        List<VanillaLootStructureSimulator.SimulatedContainer> all) {
+        List<VanillaLootStructureSimulator.SimulatedContainer> all,
+        long worldSeed, int dimension) {
         Map<String, Integer> result = new HashMap<>();
         for (VanillaLootStructureSimulator.SimulatedContainer member : sharedChestMembers(target, all)) {
-            for (ItemLoot item : simulateItems(member.lootTableId(), member.lootSeed())) {
+            for (ItemLoot item : simulateItems(member, worldSeed, dimension)) {
                 for (Map.Entry<String, Integer> entry : parseSummary(item.enchantmentSummary()).entrySet()) {
                     result.merge(entry.getKey(), entry.getValue(), Integer::sum);
                 }

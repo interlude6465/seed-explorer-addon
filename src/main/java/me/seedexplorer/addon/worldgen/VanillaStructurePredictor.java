@@ -40,20 +40,39 @@ import java.util.Optional;
 /** Predicts supported structures using vanilla structure-set placement data. */
 public final class VanillaStructurePredictor {
     private static volatile Field templateNameField;
+    public static final ResourceKey<StructureSet> ABANDONED_CAMP_SET = ResourceKey.create(
+        Registries.STRUCTURE_SET, Identifier.parse("minecraft:abandoned_camp"));
 
     private VanillaStructurePredictor() {
     }
 
+    private static PredictionContext legacyContext(long seed, int dimension) {
+        return new PredictionContext(seed, "26.3", dimension);
+    }
+
     public static List<GeneratedStructure> predictOverworld(long seed, int chunkMinX, int chunkMinZ, int chunkMaxX, int chunkMaxZ) {
-        return predictOverworld(seed, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ, true);
+        return predictOverworld(legacyContext(seed, 0), chunkMinX, chunkMinZ,
+            chunkMaxX, chunkMaxZ, true, false);
     }
 
     public static List<GeneratedStructure> predictOverworld(long seed, int chunkMinX, int chunkMinZ, int chunkMaxX, int chunkMaxZ, boolean includeBuriedTreasure) {
-        return predictOverworld(seed, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ, includeBuriedTreasure, false);
+        return predictOverworld(legacyContext(seed, 0), chunkMinX, chunkMinZ,
+            chunkMaxX, chunkMaxZ, includeBuriedTreasure, false);
     }
 
     public static List<GeneratedStructure> predictOverworld(long seed, int chunkMinX, int chunkMinZ, int chunkMaxX, int chunkMaxZ, boolean includeBuriedTreasure, boolean includeMineshafts) {
+        return predictOverworld(legacyContext(seed, 0), chunkMinX, chunkMinZ,
+            chunkMaxX, chunkMaxZ, includeBuriedTreasure, includeMineshafts);
+    }
+
+    public static List<GeneratedStructure> predictOverworld(PredictionContext context,
+                                                             int chunkMinX, int chunkMinZ,
+                                                             int chunkMaxX, int chunkMaxZ,
+                                                             boolean includeBuriedTreasure,
+                                                             boolean includeMineshafts) {
+        long seed = context.worldSeed();
         List<GeneratedStructure> results = new ArrayList<>();
+        String version = context.minecraftVersion();
         addForSet(results, seed, BuiltinStructureSets.VILLAGES, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ);
         addForSet(results, seed, BuiltinStructureSets.DESERT_PYRAMIDS, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ);
         addForSet(results, seed, BuiltinStructureSets.ANCIENT_CITIES, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ);
@@ -67,22 +86,52 @@ public final class VanillaStructurePredictor {
         if (includeBuriedTreasure) addForSet(results, seed, BuiltinStructureSets.BURIED_TREASURES, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ);
         addForSet(results, seed, BuiltinStructureSets.RUINED_PORTALS, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ);
         addForSet(results, seed, BuiltinStructureSets.PILLAGER_OUTPOSTS, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ);
-        addForSet(results, seed, BuiltinStructureSets.TRAIL_RUINS, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ);
-        addForSet(results, seed, BuiltinStructureSets.TRIAL_CHAMBERS, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ);
+        if (PredictionVersionPolicy.supportsStructure(version, StructureType.TRAIL_RUINS)) {
+            addForSet(results, seed, BuiltinStructureSets.TRAIL_RUINS,
+                chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ);
+        }
+        if (PredictionVersionPolicy.supportsStructure(version, StructureType.TRIAL_CHAMBER)) {
+            addForSet(results, seed, BuiltinStructureSets.TRIAL_CHAMBERS,
+                chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ);
+        }
+        if (PredictionVersionPolicy.supportsStructure(version, StructureType.ABANDONED_CAMP)) {
+            addForSet(results, seed, ABANDONED_CAMP_SET,
+                chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ);
+        }
         if (includeMineshafts) addForSet(results, seed, BuiltinStructureSets.MINESHAFTS, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ);
         addStrongholds(results, seed, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ);
         return results;
     }
 
     public static List<GeneratedStructure> predictDimension(long seed, int dimension, int chunkMinX, int chunkMinZ, int chunkMaxX, int chunkMaxZ, boolean includeBuriedTreasure) {
-        return predictDimension(seed, dimension, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ, includeBuriedTreasure, false);
+        return predictDimension(legacyContext(seed, dimension), chunkMinX, chunkMinZ,
+            chunkMaxX, chunkMaxZ, includeBuriedTreasure, false);
     }
 
     public static List<GeneratedStructure> predictDimension(long seed, int dimension, int chunkMinX, int chunkMinZ, int chunkMaxX, int chunkMaxZ, boolean includeBuriedTreasure, boolean includeMineshafts) {
-        List<GeneratedStructure> raw = switch (dimension) {
+        return predictDimension(legacyContext(seed, dimension), chunkMinX, chunkMinZ,
+            chunkMaxX, chunkMaxZ, includeBuriedTreasure, includeMineshafts);
+    }
+
+    public static List<GeneratedStructure> predictDimension(PredictionContext context,
+                                                             int chunkMinX, int chunkMinZ,
+                                                             int chunkMaxX, int chunkMaxZ,
+                                                             boolean includeBuriedTreasure) {
+        return predictDimension(context, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ,
+            includeBuriedTreasure, false);
+    }
+
+    public static List<GeneratedStructure> predictDimension(PredictionContext context,
+                                                             int chunkMinX, int chunkMinZ,
+                                                             int chunkMaxX, int chunkMaxZ,
+                                                             boolean includeBuriedTreasure,
+                                                             boolean includeMineshafts) {
+        long seed = context.worldSeed();
+        List<GeneratedStructure> raw = switch (context.dimension()) {
             case -1 -> predictNether(seed, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ);
             case 1 -> predictEnd(seed, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ);
-            default -> predictOverworld(seed, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ, includeBuriedTreasure, includeMineshafts);
+            default -> predictOverworld(context, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ,
+                includeBuriedTreasure, includeMineshafts);
         };
         // A mixed structure set can expose the same start through more than one
         // placement query. Keep one marker per vanilla start/type/variant.
@@ -111,7 +160,16 @@ public final class VanillaStructurePredictor {
     }
 
     public static List<DebugCandidate> debugOverworld(long seed, int chunkMinX, int chunkMinZ, int chunkMaxX, int chunkMaxZ) {
+        return debugOverworld(legacyContext(seed, 0), chunkMinX, chunkMinZ,
+            chunkMaxX, chunkMaxZ);
+    }
+
+    public static List<DebugCandidate> debugOverworld(PredictionContext context,
+                                                       int chunkMinX, int chunkMinZ,
+                                                       int chunkMaxX, int chunkMaxZ) {
+        long seed = context.worldSeed();
         List<DebugCandidate> results = new ArrayList<>();
+        String version = context.minecraftVersion();
         addDebugForSet(results, seed, BuiltinStructureSets.VILLAGES, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ);
         addDebugForSet(results, seed, BuiltinStructureSets.DESERT_PYRAMIDS, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ);
         addDebugForSet(results, seed, BuiltinStructureSets.ANCIENT_CITIES, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ);
@@ -124,8 +182,18 @@ public final class VanillaStructurePredictor {
         addDebugForSet(results, seed, BuiltinStructureSets.OCEAN_RUINS, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ);
         addDebugForSet(results, seed, BuiltinStructureSets.RUINED_PORTALS, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ);
         addDebugForSet(results, seed, BuiltinStructureSets.PILLAGER_OUTPOSTS, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ);
-        addDebugForSet(results, seed, BuiltinStructureSets.TRAIL_RUINS, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ);
-        addDebugForSet(results, seed, BuiltinStructureSets.TRIAL_CHAMBERS, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ);
+        if (PredictionVersionPolicy.supportsStructure(version, StructureType.TRAIL_RUINS)) {
+            addDebugForSet(results, seed, BuiltinStructureSets.TRAIL_RUINS,
+                chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ);
+        }
+        if (PredictionVersionPolicy.supportsStructure(version, StructureType.TRIAL_CHAMBER)) {
+            addDebugForSet(results, seed, BuiltinStructureSets.TRIAL_CHAMBERS,
+                chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ);
+        }
+        if (PredictionVersionPolicy.supportsStructure(version, StructureType.ABANDONED_CAMP)) {
+            addDebugForSet(results, seed, ABANDONED_CAMP_SET,
+                chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ);
+        }
         addDebugForSet(results, seed, BuiltinStructureSets.MINESHAFTS, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ);
         addDebugForSet(results, seed, BuiltinStructureSets.BURIED_TREASURES, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ);
         addDebugStrongholds(results, seed, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ);
@@ -133,25 +201,46 @@ public final class VanillaStructurePredictor {
     }
 
     public static List<GeneratedStructure> predictOverworldStructure(long seed, String structureId, int chunkMinX, int chunkMinZ, int chunkMaxX, int chunkMaxZ) {
-        return predictStructure(seed, 0, structureId, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ);
+        return predictStructure(legacyContext(seed, 0), structureId,
+            chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ);
     }
 
     /** Predicts one exact vanilla structure key without scanning unrelated sets. */
     public static List<GeneratedStructure> predictStructure(long seed, int dimension, String structureId,
                                                              int chunkMinX, int chunkMinZ,
                                                              int chunkMaxX, int chunkMaxZ) {
+        return predictStructure(legacyContext(seed, dimension), structureId,
+            chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ);
+    }
+
+    public static List<GeneratedStructure> predictStructure(PredictionContext context, String structureId,
+                                                             int chunkMinX, int chunkMinZ,
+                                                             int chunkMaxX, int chunkMaxZ) {
+        long seed = context.worldSeed();
         List<GeneratedStructure> results = new ArrayList<>();
+        StructureType requestedType = structureId == null ? null : typeFor(structureId);
+        if (requestedType != null && !PredictionVersionPolicy.supportsStructure(
+            context.minecraftVersion(), requestedType)) {
+            return results;
+        }
         ResourceKey<StructureSet> key = setForStructureId(structureId);
         if (key == BuiltinStructureSets.STRONGHOLDS) {
             addStrongholds(results, seed, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ);
         } else if (key != null) {
-            addForSet(results, seed, dimension, key,
+            addForSet(results, seed, context.dimension(), key,
                 chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ, structureId);
         }
         return results;
     }
 
     public static GeneratedStructure predictInRegion(long seed, StructureType type, int regionX, int regionZ) {
+        return predictInRegion(legacyContext(seed, type.dimension), type, regionX, regionZ);
+    }
+
+    public static GeneratedStructure predictInRegion(PredictionContext context, StructureType type,
+                                                       int regionX, int regionZ) {
+        if (!PredictionVersionPolicy.supportsStructure(context.minecraftVersion(), type)) return null;
+        long seed = context.worldSeed();
         ResourceKey<StructureSet> setKey = setFor(type);
         if (setKey == null) return null;
 
@@ -161,9 +250,8 @@ public final class VanillaStructurePredictor {
                 .getOrThrow(setKey);
             StructureSet set = holder.value();
             if (set.placement() instanceof ConcentricRingsStructurePlacement) {
-                List<GeneratedStructure> structures = predictOverworldStructure(
-                    seed,
-                    "minecraft:stronghold",
+                List<GeneratedStructure> structures = predictStructure(
+                    context.withDimension(0), "minecraft:stronghold",
                     regionX * 64,
                     regionZ * 64,
                     regionX * 64 + 63,
@@ -241,17 +329,15 @@ public final class VanillaStructurePredictor {
 
     private static StructureSet.StructureSelectionEntry selectViableEntry(long seed, int dimension, ChunkPos chunk,
                                                                            StructureSet set, String exactStructureId) {
-        if (exactStructureId != null) {
-            StructureSet.StructureSelectionEntry entry = chooseEntry(seed, chunk, set, exactStructureId);
-            return entry != null && isViableEntry(seed, dimension, chunk, entry) ? entry : null;
-        }
-
         // Vanilla consumes the large-feature RNG once per weighted choice. If a
         // chosen entry cannot generate (usually because its biome predicate
         // rejects the candidate), it removes that entry and rolls again from
         // the remaining weighted list. Keeping that sequence matters for
         // mixed sets such as villages and Nether complexes: picking the first
         // viable entry would display the wrong variant at some candidates.
+        // Exact-key queries must replay the same sequence too: selecting the
+        // requested entry directly can expose both a fortress and a bastion at
+        // the same Nether-complex placement chunk.
         List<StructureSet.StructureSelectionEntry> remaining = new ArrayList<>(set.structures());
         WorldgenRandom random = chunkGenerateRandom(seed, chunk);
         while (!remaining.isEmpty()) {
@@ -273,7 +359,13 @@ public final class VanillaStructurePredictor {
             if (selectedIndex < 0) return null;
 
             StructureSet.StructureSelectionEntry selected = remaining.remove(selectedIndex);
-            if (isViableEntry(seed, dimension, chunk, selected)) return selected;
+            if (isViableEntry(seed, dimension, chunk, selected)) {
+                if (exactStructureId == null
+                    || structureId(selected.structure()).equals(exactStructureId)) {
+                    return selected;
+                }
+                return null;
+            }
         }
         return null;
     }
@@ -311,6 +403,9 @@ public final class VanillaStructurePredictor {
     }
 
     private static ResourceKey<Structure> exactStructureKey(String structureId) {
+        if (structureId != null && structureId.startsWith("minecraft:abandoned_camp_")) {
+            return ResourceKey.create(Registries.STRUCTURE, Identifier.parse(structureId));
+        }
         return switch (structureId) {
             case "minecraft:desert_pyramid" -> BuiltinStructures.DESERT_PYRAMID;
             case "minecraft:jungle_pyramid" -> BuiltinStructures.JUNGLE_TEMPLE;
@@ -469,7 +564,8 @@ public final class VanillaStructurePredictor {
             || type == StructureType.SHIPWRECK
             || type == StructureType.OCEAN_RUIN
             || type == StructureType.MINESHAFT
-            || type == StructureType.VILLAGE) {
+            || type == StructureType.VILLAGE
+            || type == StructureType.ABANDONED_CAMP) {
             return structureId;
         }
         return "";
@@ -671,6 +767,13 @@ public final class VanillaStructurePredictor {
 
     private static boolean isValidStructureCandidate(long seed, int dimension, ChunkPos chunk, Holder<Structure> structure, String structureId) {
         if (structureId.equals("minecraft:end_city")) return endCityGenerationPos(seed, chunk, structure) != null;
+        if (structureId.startsWith("minecraft:abandoned_camp_")) {
+            // Camp jigsaws project to WORLD_SURFACE_WG and their start templates
+            // have variant-specific offsets. A fixed chunk-center/Y=64 biome
+            // sample can reject valid mountain camps (or accept the wrong camp)
+            // before the exact start generator gets a chance to evaluate it.
+            return true;
+        }
         if (!isValidBiome(seed, dimension, chunk, structure, structureId)) return false;
         return true;
     }
@@ -768,6 +871,9 @@ public final class VanillaStructurePredictor {
     }
 
     private static boolean isValidBiome(String structureId, String biomeId) {
+        if (structureId != null && structureId.startsWith("minecraft:abandoned_camp_")) {
+            return abandonedCampBiome(structureId).equals(biomeId);
+        }
         return switch (structureId) {
             case "minecraft:village_plains" -> biomeId.equals("minecraft:plains") || biomeId.equals("minecraft:meadow");
             case "minecraft:village_desert", "minecraft:desert_pyramid" -> biomeId.equals("minecraft:desert");
@@ -817,6 +923,10 @@ public final class VanillaStructurePredictor {
                 || biomeId.equals("minecraft:end_highlands");
             default -> false;
         };
+    }
+
+    private static String abandonedCampBiome(String structureId) {
+        return "minecraft:" + structureId.substring("minecraft:abandoned_camp_".length());
     }
 
     private static int jigsawSampleQuart(int chunkCoordinate, int variantOffset, int variantSize) {
@@ -1201,6 +1311,7 @@ public final class VanillaStructurePredictor {
 
     private static StructureType typeFor(String id) {
         if (id.startsWith("minecraft:village_")) return StructureType.VILLAGE;
+        if (id.startsWith("minecraft:abandoned_camp_")) return StructureType.ABANDONED_CAMP;
         if (id.equals("minecraft:ruined_portal_nether")) return StructureType.NETHER_RUINED_PORTAL;
         if (id.startsWith("minecraft:ruined_portal")) return StructureType.RUINED_PORTAL;
         return switch (id) {
@@ -1251,6 +1362,7 @@ public final class VanillaStructurePredictor {
 
     private static boolean usesChunkCenterBiomeSample(String structureId) {
         return structureId.startsWith("minecraft:village_")
+            || structureId.startsWith("minecraft:abandoned_camp_")
             || structureId.equals("minecraft:trial_chambers")
             || structureId.equals("minecraft:desert_pyramid")
             || structureId.equals("minecraft:jungle_pyramid")
@@ -1280,6 +1392,7 @@ public final class VanillaStructurePredictor {
             case ANCIENT_CITY -> BuiltinStructureSets.ANCIENT_CITIES;
             case TRIAL_CHAMBER -> BuiltinStructureSets.TRIAL_CHAMBERS;
             case TRAIL_RUINS -> BuiltinStructureSets.TRAIL_RUINS;
+            case ABANDONED_CAMP -> ABANDONED_CAMP_SET;
             case RUINED_PORTAL -> BuiltinStructureSets.RUINED_PORTALS;
             case SHIPWRECK -> BuiltinStructureSets.SHIPWRECKS;
             case OCEAN_RUIN -> BuiltinStructureSets.OCEAN_RUINS;

@@ -6,37 +6,37 @@
 package me.seedexplorer.addon.render;
 
 import me.seedexplorer.addon.structures.StructureType;
-import meteordevelopment.meteorclient.utils.render.color.Color;
 
 /** Shared structure icon palette for map rendering and tooltips. */
 public final class StructureColors {
-    private static final Color VILLAGE = new Color(180, 60, 60, 220);
-    private static final Color DESERT = new Color(220, 200, 80, 220);
-    private static final Color JUNGLE = new Color(60, 200, 60, 220);
-    private static final Color WITCH = new Color(120, 40, 160, 220);
-    private static final Color IGLOO = new Color(200, 220, 240, 220);
-    private static final Color OUTPOST = new Color(120, 120, 120, 220);
-    private static final Color MONUMENT = new Color(40, 100, 220, 220);
-    private static final Color MANSION = new Color(160, 80, 40, 220);
-    private static final Color ANCIENT_CITY = new Color(40, 200, 180, 220);
-    private static final Color TRIAL_CHAMBER = new Color(80, 170, 210, 220);
-    private static final Color TRAIL_RUINS = new Color(170, 120, 70, 220);
-    private static final Color STRONGHOLD = new Color(140, 160, 90, 220);
-    private static final Color PORTAL = new Color(180, 40, 200, 220);
-    private static final Color SHIPWRECK = new Color(160, 120, 60, 220);
-    private static final Color RUIN = new Color(100, 140, 180, 220);
-    private static final Color MINESHAFT = new Color(150, 110, 70, 220);
-    private static final Color DUNGEON = new Color(130, 130, 130, 220);
-    private static final Color TREASURE = new Color(255, 215, 0, 220);
-    private static final Color GEODE = new Color(175, 120, 230, 220);
-    private static final Color FORTRESS = new Color(180, 40, 40, 220);
-    private static final Color BASTION = new Color(120, 60, 140, 220);
-    private static final Color END_CITY = new Color(160, 60, 200, 220);
+    private static final RgbaColor VILLAGE = new RgbaColor(180, 60, 60, 220);
+    private static final RgbaColor DESERT = new RgbaColor(220, 200, 80, 220);
+    private static final RgbaColor JUNGLE = new RgbaColor(60, 200, 60, 220);
+    private static final RgbaColor WITCH = new RgbaColor(120, 40, 160, 220);
+    private static final RgbaColor IGLOO = new RgbaColor(200, 220, 240, 220);
+    private static final RgbaColor OUTPOST = new RgbaColor(120, 120, 120, 220);
+    private static final RgbaColor MONUMENT = new RgbaColor(40, 100, 220, 220);
+    private static final RgbaColor MANSION = new RgbaColor(160, 80, 40, 220);
+    private static final RgbaColor ANCIENT_CITY = new RgbaColor(40, 200, 180, 220);
+    private static final RgbaColor TRIAL_CHAMBER = new RgbaColor(80, 170, 210, 220);
+    private static final RgbaColor TRAIL_RUINS = new RgbaColor(170, 120, 70, 220);
+    private static final RgbaColor ABANDONED_CAMP = new RgbaColor(214, 142, 72, 220);
+    private static final RgbaColor STRONGHOLD = new RgbaColor(140, 160, 90, 220);
+    private static final RgbaColor PORTAL = new RgbaColor(180, 40, 200, 220);
+    private static final RgbaColor SHIPWRECK = new RgbaColor(160, 120, 60, 220);
+    private static final RgbaColor RUIN = new RgbaColor(100, 140, 180, 220);
+    private static final RgbaColor MINESHAFT = new RgbaColor(150, 110, 70, 220);
+    private static final RgbaColor DUNGEON = new RgbaColor(130, 130, 130, 220);
+    private static final RgbaColor TREASURE = new RgbaColor(255, 215, 0, 220);
+    private static final RgbaColor GEODE = new RgbaColor(175, 120, 230, 220);
+    private static final RgbaColor FORTRESS = new RgbaColor(180, 40, 40, 220);
+    private static final RgbaColor BASTION = new RgbaColor(120, 60, 140, 220);
+    private static final RgbaColor END_CITY = new RgbaColor(160, 60, 200, 220);
 
     private StructureColors() {
     }
 
-    public static Color get(StructureType type) {
+    public static RgbaColor get(StructureType type) {
         return switch (type) {
             case VILLAGE -> VILLAGE;
             case DESERT_PYRAMID -> DESERT;
@@ -49,6 +49,7 @@ public final class StructureColors {
             case ANCIENT_CITY -> ANCIENT_CITY;
             case TRIAL_CHAMBER -> TRIAL_CHAMBER;
             case TRAIL_RUINS -> TRAIL_RUINS;
+            case ABANDONED_CAMP -> ABANDONED_CAMP;
             case STRONGHOLD -> STRONGHOLD;
             case RUINED_PORTAL -> PORTAL;
             case SHIPWRECK -> SHIPWRECK;

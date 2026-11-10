@@ -21,7 +21,7 @@ public abstract class ChatScreenPredictedMineMixin {
 
         Minecraft minecraft = Minecraft.getInstance();
         if (addToRecent && minecraft != null && minecraft.gui != null) {
-            minecraft.gui.getChat().addRecentChat(message);
+            minecraft.gui.hud.getChat().addRecentChat(message);
         }
 
         PredictedMineChatBridge.handleBaritoneStyleMine(message);

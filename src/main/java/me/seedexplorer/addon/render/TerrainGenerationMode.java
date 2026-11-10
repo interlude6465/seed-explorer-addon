@@ -1,6 +1,6 @@
 package me.seedexplorer.addon.render;
 
-/** Selects the experimental far-terrain sampler without adding a UI control. */
+/** Selects the fast far-terrain sampler without adding a UI control. */
 public final class TerrainGenerationMode {
     public static final String PROPERTY = "seedexplorer.terrainMode";
 
@@ -8,10 +8,10 @@ public final class TerrainGenerationMode {
     }
 
     /**
-     * Horizon-inspired density sampling is opt-in. Set
-     * {@code -Dseedexplorer.terrainMode=horizon} in the Minecraft JVM arguments.
+     * Horizon sampling is the interactive default. Set
+     * {@code -Dseedexplorer.terrainMode=vanilla} to force the slower column path.
      */
     public static boolean usesHorizonSampling() {
-        return "horizon".equalsIgnoreCase(System.getProperty(PROPERTY, "vanilla"));
+        return !"vanilla".equalsIgnoreCase(System.getProperty(PROPERTY, "horizon"));
     }
 }

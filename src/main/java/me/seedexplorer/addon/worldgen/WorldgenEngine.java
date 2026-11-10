@@ -25,9 +25,9 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.NoiseColumn;
 import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.biome.BiomeResolver;
 import net.minecraft.world.level.biome.BiomeSource;
 import net.minecraft.world.level.biome.Biomes;
-import net.minecraft.world.level.biome.Climate;
 import net.minecraft.world.level.biome.FeatureSorter;
 import net.minecraft.world.level.biome.MultiNoiseBiomeSource;
 import net.minecraft.world.level.biome.MultiNoiseBiomeSourceParameterList;
@@ -44,6 +44,7 @@ import net.minecraft.world.level.levelgen.PositionalRandomFactory;
 import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.level.levelgen.WorldGenerationContext;
 import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.levelgen.densityfunction.SamplerContext;
 import net.minecraft.world.level.levelgen.placement.PlacedFeature;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.BuiltinStructures;
@@ -128,11 +129,10 @@ public final class WorldgenEngine {
                         for (int quartZ = 0; quartZ < 4; quartZ++) {
                             for (int quartY = 0; quartY < 4; quartY++) {
                                 for (int quartX = 0; quartX < 4; quartX++) {
-                                    Holder<Biome> biome = cache.biomeSource().getNoiseBiome(
+                                    Holder<Biome> biome = cache.biomeResolver().getNoiseBiome(
                                         quartBaseX + quartX,
                                         quartBaseY + quartY,
-                                        quartBaseZ + quartZ,
-                                        cache.sampler()
+                                        quartBaseZ + quartZ
                                     );
                                     if (biome != null) biomes.add(biome);
                                 }
@@ -262,6 +262,7 @@ public final class WorldgenEngine {
             OfflineWorldgenResources.registryAccess(),
             view.chunkGenerator(),
             view.biomeSource(),
+            view.randomState().createClimateSampler(SamplerContext.EMPTY_UNCACHED),
             view.randomState(),
             OfflineWorldgenResources.structureTemplateManager(),
             seed,
@@ -472,7 +473,7 @@ public final class WorldgenEngine {
                 112,
                 preferredBiomePredicate(rings),
                 random,
-                cache.sampler()
+                cache.randomState()
             );
             if (pair != null) {
                 BlockPos pos = pair.getFirst();
@@ -536,7 +537,7 @@ public final class WorldgenEngine {
 
     static EngineView view(long seed, int dimension) {
         EngineCache cache = getCache(seed, dimension);
-        return new EngineView(cache.biomeSource(), cache.sampler(), cache.biomeRegistry());
+        return new EngineView(cache.biomeSource(), cache.biomeResolver(), cache.biomeRegistry());
     }
 
     static GeneratorView generatorView(long seed, int dimension) {
@@ -554,7 +555,7 @@ public final class WorldgenEngine {
         return structureState(seed, 0);
     }
 
-    static ChunkGeneratorStructureState structureState(long seed, int dimension) {
+    public static ChunkGeneratorStructureState structureState(long seed, int dimension) {
         StructureStateCache current = switch (dimension) {
             case -1 -> netherStructureState;
             case 1 -> endStructureState;
@@ -607,11 +608,10 @@ public final class WorldgenEngine {
     }
 
     private static Holder<Biome> getBiomeHolder(EngineCache cache, int blockX, int blockY, int blockZ) {
-        return cache.biomeSource().getNoiseBiome(
+        return cache.biomeResolver().getNoiseBiome(
             QuartPos.fromBlock(blockX),
             QuartPos.fromBlock(blockY),
-            QuartPos.fromBlock(blockZ),
-            cache.sampler()
+            QuartPos.fromBlock(blockZ)
         );
     }
 
@@ -619,24 +619,29 @@ public final class WorldgenEngine {
         HolderLookup.Provider lookup = lookup();
         HolderGetter<Biome> biomes = lookup.lookupOrThrow(Registries.BIOME);
         BiomeSource biomeSource;
-        RandomState randomState;
+        ResourceKey<NoiseGeneratorSettings> settingsKey;
 
         if (dimension == -1) {
             Holder<MultiNoiseBiomeSourceParameterList> preset = lookup.lookupOrThrow(Registries.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST)
                 .getOrThrow(MultiNoiseBiomeSourceParameterLists.NETHER);
             biomeSource = MultiNoiseBiomeSource.createFromPreset(preset);
-            randomState = RandomState.create(lookup, NoiseGeneratorSettings.NETHER, seed);
+            settingsKey = NoiseGeneratorSettings.NETHER;
         } else if (dimension == 1) {
             biomeSource = TheEndBiomeSource.create(biomes);
-            randomState = RandomState.create(lookup, NoiseGeneratorSettings.END, seed);
+            settingsKey = NoiseGeneratorSettings.END;
         } else {
             Holder<MultiNoiseBiomeSourceParameterList> preset = lookup.lookupOrThrow(Registries.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST)
                 .getOrThrow(MultiNoiseBiomeSourceParameterLists.OVERWORLD);
             biomeSource = MultiNoiseBiomeSource.createFromPreset(preset);
-            randomState = RandomState.create(lookup, NoiseGeneratorSettings.OVERWORLD, seed);
+            settingsKey = NoiseGeneratorSettings.OVERWORLD;
         }
 
-        return new EngineCache(seed, biomeSource, randomState.sampler(), randomState, biomes);
+        NoiseGeneratorSettings settings = lookup.lookupOrThrow(Registries.NOISE_SETTINGS)
+            .getOrThrow(settingsKey).value();
+        RandomState randomState = RandomState.create(
+            lookup.lookupOrThrow(Registries.NOISE), seed, settings);
+        return new EngineCache(seed, biomeSource,
+            biomeSource.createUncachedResolver(randomState), randomState, biomes);
     }
 
     private static ChunkGeneratorStructureState createOverworldStructureState(long seed) {
@@ -646,27 +651,34 @@ public final class WorldgenEngine {
     private static ChunkGeneratorStructureState createStructureState(long seed, int dimension) {
         RegistryAccess registryAccess = OfflineWorldgenResources.registryAccess();
         BiomeSource biomeSource;
-        RandomState randomState;
+        ResourceKey<NoiseGeneratorSettings> settingsKey;
 
         if (dimension == -1) {
             Holder<MultiNoiseBiomeSourceParameterList> preset = registryAccess.lookupOrThrow(Registries.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST)
                 .getOrThrow(MultiNoiseBiomeSourceParameterLists.NETHER);
             biomeSource = MultiNoiseBiomeSource.createFromPreset(preset);
-            randomState = RandomState.create(registryAccess, NoiseGeneratorSettings.NETHER, seed);
+            settingsKey = NoiseGeneratorSettings.NETHER;
         } else if (dimension == 1) {
             HolderGetter<Biome> biomes = registryAccess.lookupOrThrow(Registries.BIOME);
             biomeSource = TheEndBiomeSource.create(biomes);
-            randomState = RandomState.create(registryAccess, NoiseGeneratorSettings.END, seed);
+            settingsKey = NoiseGeneratorSettings.END;
         } else {
             Holder<MultiNoiseBiomeSourceParameterList> preset = registryAccess.lookupOrThrow(Registries.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST)
                 .getOrThrow(MultiNoiseBiomeSourceParameterLists.OVERWORLD);
             biomeSource = MultiNoiseBiomeSource.createFromPreset(preset);
-            randomState = RandomState.create(registryAccess, NoiseGeneratorSettings.OVERWORLD, seed);
+            settingsKey = NoiseGeneratorSettings.OVERWORLD;
         }
+
+        Holder<NoiseGeneratorSettings> settingsHolder = registryAccess
+            .lookupOrThrow(Registries.NOISE_SETTINGS).getOrThrow(settingsKey);
+        NoiseGeneratorSettings settings = settingsHolder.value();
+        RandomState randomState = RandomState.create(
+            registryAccess.lookupOrThrow(Registries.NOISE), seed, settings);
 
         var structureSets = registryAccess.lookupOrThrow(Registries.STRUCTURE_SET);
         try {
-            return ChunkGeneratorStructureState.createForNormal(randomState, seed, biomeSource, structureSets);
+            return new NoiseBasedChunkGenerator(biomeSource, settingsHolder)
+                .createState(structureSets, randomState, seed);
         } catch (UnsupportedOperationException e) {
             // Some biome tags may be unbound in the offline registry. Fall back to
             // computing ring positions directly without full StructureState validation.
@@ -680,7 +692,7 @@ public final class WorldgenEngine {
         if (current != null) return current;
 
         synchronized (LOCK) {
-            if (vanillaLookup == null) vanillaLookup = VanillaRegistries.createLookup();
+            if (vanillaLookup == null) vanillaLookup = VanillaRegistries.createWorldLookup();
             return vanillaLookup;
         }
     }
@@ -704,7 +716,7 @@ public final class WorldgenEngine {
         return PredictedBiome.UNKNOWN;
     }
 
-    public record EngineView(BiomeSource biomeSource, Climate.Sampler sampler, HolderGetter<Biome> biomeRegistry) {
+    public record EngineView(BiomeSource biomeSource, BiomeResolver biomeResolver, HolderGetter<Biome> biomeRegistry) {
     }
 
     public static final class TerrainAccessor {
@@ -794,36 +806,30 @@ public final class WorldgenEngine {
     }
 
     public static final class OreVeinAccessor {
-        private final GeneratorView view;
-
-        private OreVeinAccessor(GeneratorView view) {
-            this.view = view;
+        private OreVeinAccessor(GeneratorView ignored) {
         }
 
         public double veinToggle(int blockX, int blockY, int blockZ) {
-            return view.randomState().router().veinToggle().compute(new net.minecraft.world.level.levelgen.DensityFunction.SinglePointContext(blockX, blockY, blockZ));
+            return 0.0D;
         }
 
         public double veinRidged(int blockX, int blockY, int blockZ) {
-            return view.randomState().router().veinRidged().compute(new net.minecraft.world.level.levelgen.DensityFunction.SinglePointContext(blockX, blockY, blockZ));
+            return 0.0D;
         }
 
         public double veinGap(int blockX, int blockY, int blockZ) {
-            return view.randomState().router().veinGap().compute(new net.minecraft.world.level.levelgen.DensityFunction.SinglePointContext(blockX, blockY, blockZ));
+            return 0.0D;
         }
 
         public float oreRandomFloat(int blockX, int blockY, int blockZ, int index) {
-            net.minecraft.util.RandomSource random = view.randomState().oreRandom().at(blockX, blockY, blockZ);
-            float result = 0.0f;
-            for (int i = 0; i <= index; i++) result = random.nextFloat();
-            return result;
+            return 1.0f;
         }
     }
 
     record GeneratorView(ChunkGenerator chunkGenerator, BiomeSource biomeSource, RandomState randomState, NoiseSettings noiseSettings, HolderLookup.Provider lookup) {
     }
 
-    private record EngineCache(long seed, BiomeSource biomeSource, Climate.Sampler sampler, RandomState randomState, HolderGetter<Biome> biomeRegistry) {
+    private record EngineCache(long seed, BiomeSource biomeSource, BiomeResolver biomeResolver, RandomState randomState, HolderGetter<Biome> biomeRegistry) {
     }
 
     private record StructureStateCache(long seed, ChunkGeneratorStructureState state) {

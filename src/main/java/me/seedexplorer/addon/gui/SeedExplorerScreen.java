@@ -20,6 +20,7 @@ import me.seedexplorer.addon.ore.OreCache;
 import me.seedexplorer.addon.render.FreeCamera3D;
 import me.seedexplorer.addon.render.MapLayer;
 import me.seedexplorer.addon.render.MapRenderContext;
+import me.seedexplorer.addon.render.MeteorTerrainWorldDataSource;
 import me.seedexplorer.addon.render.MapRenderResult;
 import me.seedexplorer.addon.render.MapViewport;
 import me.seedexplorer.addon.render.MapLoadingMode;
@@ -33,6 +34,7 @@ import me.seedexplorer.addon.render.BlockTextureAtlas;
 import me.seedexplorer.addon.structures.GeneratedStructure;
 import me.seedexplorer.addon.structures.DungeonPredictor;
 import me.seedexplorer.addon.structures.StructureCache;
+import me.seedexplorer.addon.worldgen.PredictionVersionPolicy;
 import me.seedexplorer.addon.structures.StructurePredictionStore;
 import me.seedexplorer.addon.structures.StructureType;
 import me.seedexplorer.addon.seed.SeedManager;
@@ -42,14 +44,19 @@ import me.seedexplorer.addon.workers.WorkerManager;
 import me.seedexplorer.addon.worldgen.VanillaStructurePredictor;
 import meteordevelopment.meteorclient.gui.GuiTheme;
 import meteordevelopment.meteorclient.gui.WidgetScreen;
+import meteordevelopment.meteorclient.events.meteor.MouseClickEvent;
 import meteordevelopment.meteorclient.gui.widgets.containers.WHorizontalList;
 import meteordevelopment.meteorclient.gui.widgets.input.WDropdown;
 import meteordevelopment.meteorclient.gui.widgets.input.WTextBox;
+import meteordevelopment.meteorclient.gui.widgets.pressable.WButton;
 import meteordevelopment.meteorclient.renderer.Renderer2D;
 import meteordevelopment.meteorclient.renderer.Texture;
 import meteordevelopment.meteorclient.systems.modules.Modules;
 import meteordevelopment.meteorclient.utils.player.ChatUtils;
 import meteordevelopment.meteorclient.utils.render.color.Color;
+import meteordevelopment.meteorclient.utils.misc.input.KeyAction;
+import meteordevelopment.orbit.EventHandler;
+import meteordevelopment.orbit.EventPriority;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.util.Mth;
@@ -134,6 +141,7 @@ public class SeedExplorerScreen extends WidgetScreen {
     private static final DateTimeFormatter FILE_TIME = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
 
     private final SeedRenderer seedRenderer = new SeedRenderer();
+    private GuiGraphicsExtractor frameGraphics;
 
     private boolean mode3d;
     private boolean undergroundView;
@@ -212,6 +220,7 @@ public class SeedExplorerScreen extends WidgetScreen {
     private WTextBox seedBox;
     private WDropdown<String> versionDropdown;
     private WTextBox searchBar;
+    private WButton modeButton;
     private WHorizontalList topControls;
     private boolean suppressNextEnterAction;
     private boolean applyingSeed;
@@ -290,10 +299,16 @@ public class SeedExplorerScreen extends WidgetScreen {
         BIOME_NAME_TO_ID.put("pale garden", 46);
         BIOME_NAME_TO_ID.put("frozen ocean", 47);
         BIOME_NAME_TO_ID.put("frozen river", 48);
+        BIOME_NAME_TO_ID.put("dappled forest", 55);
+        BIOME_NAME_TO_ID.put("sulfur caves", 56);
+        BIOME_NAME_TO_ID.put("sulfur cave", 56);
+        BIOME_NAME_TO_ID.put("sulphur caves", 56);
+        BIOME_NAME_TO_ID.put("sulfer caves", 56);
     }
 
     public SeedExplorerScreen(GuiTheme theme) {
         super(theme, "Seed Explorer");
+        terrain3DRenderer.setWorldDataSource(MeteorTerrainWorldDataSource.get());
         centerOnCurrentPlayer();
         focusController.bindCamera(camera3d);
         focusController.bindFocusResolver(terrain3DRenderer::structureFocusTarget);
@@ -311,8 +326,12 @@ public class SeedExplorerScreen extends WidgetScreen {
 
         versionDropdown = theme.dropdown(supportedVersionLabels(), currentVersionSelection());
         versionDropdown.action = this::onVersionChanged;
-        versionDropdown.tooltip = "Loot/profile version selector. Terrain and structures use the running Minecraft worldgen engine.";
+        versionDropdown.tooltip = "Gates versioned structures, biome search, and loot. Terrain rendering uses the running Minecraft worldgen registry.";
         topControls.add(versionDropdown).minWidth(compactTop ? 45 : 56);
+
+        modeButton = theme.button(mode3d ? "Back to 2D" : "Open 3D");
+        modeButton.action = this::toggle3dMode;
+        topControls.add(modeButton).minWidth(compactTop ? 52 : 68);
 
         searchBar = theme.textBox("", "Coordinates, structure, or biome...");
         searchBar.action = this::updateSearchState;
@@ -346,11 +365,12 @@ public class SeedExplorerScreen extends WidgetScreen {
         for (String version : supported) {
             if (version.equals(current)) return version;
         }
-        return BundledLootTableLoader.VersionProfile.forVersion(current).minecraftVersion();
+        return BundledLootTableLoader.runtimeProfile().minecraftVersion();
     }
 
     @Override
     protected void onRenderBefore(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
+        frameGraphics = graphics;
         Minecraft mc = Minecraft.getInstance();
         double screenWidth = mc.getWindow().getWidth();
         double screenHeight = mc.getWindow().getHeight();
@@ -373,12 +393,6 @@ public class SeedExplorerScreen extends WidgetScreen {
 
         syncDimensionToPlayer(mc);
         updateSearchState();
-
-        // Keep the selected map area warm while the user is still on the 2D map.
-        // Generation and baking are bounded and run on the renderer's worker pools.
-        if (!mode3d && currentSeed != 0L) {
-            terrain3DRenderer.prepare(currentSeed, selectedDimension, offsetX, offsetZ);
-        }
 
         Renderer2D clear = Renderer2D.COLOR;
         clear.begin();
@@ -413,7 +427,7 @@ public class SeedExplorerScreen extends WidgetScreen {
 
         if (hoveredWaypoint != null && !contextMenuOpen && shouldShowWaypointTooltips(module)) {
             String tooltip = "Waypoint: " + hoveredWaypoint.name + " [" + hoveredWaypoint.x + ", " + hoveredWaypoint.z + "]";
-            theme.textRenderer().begin(1.0);
+            theme.textRenderer().begin(frameGraphics, 1.0);
             double tx = mouseX + 12;
             double ty = mouseY + 12;
             if (tx + 200 > screenWidth) tx = mouseX - 200;
@@ -480,7 +494,7 @@ public class SeedExplorerScreen extends WidgetScreen {
             searchStructureFilter,
             lootMatchedStructureKeys()
         );
-        MapRenderResult result = seedRenderer.render(context, theme);
+        MapRenderResult result = seedRenderer.render(context, theme, graphics);
         drawSearchChestMarkers(viewport, toRenderX(mouseX), toRenderY(mouseY));
 
         visibleStructures = result.structures();
@@ -540,9 +554,9 @@ public class SeedExplorerScreen extends WidgetScreen {
         );
 
         try {
-            terrain3DRenderer.render(camera3d, context3d, visibleStructures, visibleWaypoints,
+            terrain3DRenderer.render(graphics, camera3d, context3d, visibleStructures, visibleWaypoints,
                 hoveredStructure, hoveredWaypoint, caveView, textureDebugView, terrainDebugView,
-                focusController.target());
+                focusController.target(), SeedManager.get().getWorldSeed());
         } catch (RuntimeException | LinkageError error) {
             // Keep the user-facing fallback, but retain the real cause in the
             // log so renderer backend failures are actionable instead of only
@@ -660,6 +674,7 @@ public class SeedExplorerScreen extends WidgetScreen {
 
     private void toggle3dMode() {
         mode3d = !mode3d;
+        if (modeButton != null) modeButton.set(mode3d ? "Back to 2D" : "Open 3D");
         if (mode3d) {
             renderer3dFailureNotified = false;
             Minecraft mc = Minecraft.getInstance();
@@ -719,7 +734,7 @@ public class SeedExplorerScreen extends WidgetScreen {
         r.quad(dimensionX + width - 25, DIMENSION_BUTTON_Y + 3, 1, DIMENSION_BUTTON_HEIGHT - 6, UI_LINE);
         r.boxLines(dimensionX, DIMENSION_BUTTON_Y, width, DIMENSION_BUTTON_HEIGHT, UI_LINE);
         r.render();
-        theme.textRenderer().begin(1.0);
+        theme.textRenderer().begin(frameGraphics, 1.0);
         if (screenWidth >= 760) theme.textRenderer().render("SEED EXPLORER", 10, DIMENSION_BUTTON_Y + 6, UI_TEXT);
         theme.textRenderer().render("<", dimensionX + 9, DIMENSION_BUTTON_Y + 5, UI_MUTED);
         double labelAreaX = dimensionX + 24;
@@ -763,7 +778,7 @@ public class SeedExplorerScreen extends WidgetScreen {
             mode3d ? new Color(108, 151, 218, 220) : UI_ACCENT);
         r.render();
 
-        theme.textRenderer().begin(1.0);
+        theme.textRenderer().begin(frameGraphics, 1.0);
         theme.textRenderer().render("2D", modeX + (half - theme.textWidth("2D")) / 2.0, MODE_BUTTON_Y + 5,
             mode3d ? UI_MUTED : UI_TEXT);
         theme.textRenderer().render("3D", modeX + half + (modeWidth - half - theme.textWidth("3D")) / 2.0, MODE_BUTTON_Y + 5,
@@ -817,7 +832,7 @@ public class SeedExplorerScreen extends WidgetScreen {
         }
         r.render();
 
-        theme.textRenderer().begin(1.0);
+        theme.textRenderer().begin(frameGraphics, 1.0);
         theme.textRenderer().render(trimToWidth(text, width - 16 - cancelWidth), x + 9, y + 6, UI_TEXT);
         if (lootSearchRunning) {
             theme.textRenderer().render("Cancel", searchCancelX + 10, y + 6, new Color(255, 214, 218));
@@ -885,7 +900,7 @@ public class SeedExplorerScreen extends WidgetScreen {
             : searchChestMatches.containsKey(hovered) ? new Color(74, 201, 232) : UI_ACCENT);
         r.boxLines(x, y, width, 38, UI_LINE);
         r.render();
-        theme.textRenderer().begin(1.0);
+        theme.textRenderer().begin(frameGraphics, 1.0);
         theme.textRenderer().render(label, x + 9, y + 7, UI_TEXT);
         theme.textRenderer().render(loot, x + 9, y + 22, UI_MUTED);
         theme.textRenderer().end();
@@ -931,7 +946,7 @@ public class SeedExplorerScreen extends WidgetScreen {
         r.boxLines(x, y, width, 19, fallbackOnly ? new Color(232, 196, 108, 235) : UI_LINE);
         r.render();
 
-        theme.textRenderer().begin(1.0);
+        theme.textRenderer().begin(frameGraphics, 1.0);
         theme.textRenderer().render(text, x + 9, y + 5, fallbackOnly ? new Color(242, 208, 139) : UI_TEXT);
         theme.textRenderer().end();
     }
@@ -974,7 +989,7 @@ public class SeedExplorerScreen extends WidgetScreen {
             r.quad(x + 9, y + 9 + i * 14, 8, 8, colors[i]);
         }
         r.render();
-        theme.textRenderer().begin(1.0);
+        theme.textRenderer().begin(frameGraphics, 1.0);
         for (int i = 0; i < legend.length; i++) {
             theme.textRenderer().render(legend[i], x + 23, y + 8 + i * 14, UI_MUTED);
         }
@@ -1031,7 +1046,7 @@ public class SeedExplorerScreen extends WidgetScreen {
 
         r.render();
 
-        theme.textRenderer().begin(1.0);
+        theme.textRenderer().begin(frameGraphics, 1.0);
         for (int i = 0; i < PRIMARY_LAYERS.length; i++) {
             MapLayer layer = PRIMARY_LAYERS[i];
             int x = layout.primaryX(i);
@@ -1217,7 +1232,7 @@ public class SeedExplorerScreen extends WidgetScreen {
         r.quad(x, y, width, 19, UI_SURFACE);
         r.boxLines(x, y, width, 19, UI_LINE);
         r.render();
-        theme.textRenderer().begin(1.0);
+        theme.textRenderer().begin(frameGraphics, 1.0);
         theme.textRenderer().render(tooltip, x + 7, y + 5, UI_TEXT);
         theme.textRenderer().end();
     }
@@ -1270,7 +1285,7 @@ public class SeedExplorerScreen extends WidgetScreen {
         r.boxLines(boxX, boxY, boxW, boxH, UI_LINE);
         r.render();
 
-        text.begin(1.0, false, true);
+        text.begin(frameGraphics, 1.0, false, true);
         text.render(title, boxX + (boxW - titleW) / 2.0, boxY + 12, UI_TEXT);
         text.render(fittedHint, boxX + (boxW - hintW) / 2.0, boxY + 30, UI_MUTED);
         text.end();
@@ -1291,7 +1306,7 @@ public class SeedExplorerScreen extends WidgetScreen {
         r.boxLines(x, y, width, SEARCH_SUGGESTION_HEIGHT, UI_LINE);
         r.render();
 
-        Texture icon = searchStructureFilter == null ? null : StructureIcons.get(searchStructureFilter);
+        var icon = searchStructureFilter == null ? null : StructureIcons.get(searchStructureFilter);
         if (icon != null) {
             Renderer2D tex = Renderer2D.TEXTURE;
             tex.begin();
@@ -1305,7 +1320,7 @@ public class SeedExplorerScreen extends WidgetScreen {
             text = searchSuggestion + "  |  matched " + matched + ", checking " + lootFilterInFlight.size();
         }
 
-        theme.textRenderer().begin(1.0);
+        theme.textRenderer().begin(frameGraphics, 1.0);
         double textX = x + (icon == null ? 8 : 25);
         theme.textRenderer().render(trimToWidth(text, width - (textX - x) - 8), textX, y + 6, UI_TEXT);
         theme.textRenderer().end();
@@ -1441,7 +1456,7 @@ public class SeedExplorerScreen extends WidgetScreen {
         }
         r.render();
 
-        theme.textRenderer().begin(1.0);
+        theme.textRenderer().begin(frameGraphics, 1.0);
         for (int i = 0; i < items.length; i++) {
             theme.textRenderer().render(items[i], mx + 8, my + i * itemHeight + 4, UI_TEXT);
         }
@@ -1482,7 +1497,7 @@ public class SeedExplorerScreen extends WidgetScreen {
         r.triangle(pointerX - 8, my + STRUCTURE_POPUP_TOP_HEIGHT, pointerX + 8, my + STRUCTURE_POPUP_TOP_HEIGHT, pointerX, my + STRUCTURE_POPUP_TOP_HEIGHT + 8, UI_SURFACE);
         r.render();
 
-        Texture icon = StructureIcons.get(structure);
+        var icon = StructureIcons.get(structure);
         if (icon != null) {
             Renderer2D tex = Renderer2D.TEXTURE;
             tex.begin();
@@ -1494,7 +1509,7 @@ public class SeedExplorerScreen extends WidgetScreen {
         String coords = structure.y == GeneratedStructure.UNKNOWN_Y
             ? "X: " + structure.x + " Z: " + structure.z
             : "X: " + structure.x + " Y: " + structure.y + " Z: " + structure.z;
-        theme.textRenderer().begin(1.0);
+        theme.textRenderer().begin(frameGraphics, 1.0);
         theme.textRenderer().render(title, mx + 32, my + 9, UI_TEXT);
         theme.textRenderer().render(coords, mx + 32, my + 31, UI_MUTED);
         theme.textRenderer().end();
@@ -1510,7 +1525,7 @@ public class SeedExplorerScreen extends WidgetScreen {
         r.render();
 
         String completedText = "Completed";
-        theme.textRenderer().begin(1.0);
+        theme.textRenderer().begin(frameGraphics, 1.0);
         theme.textRenderer().render(completedText, mx + 40, completedY + 8, completed ? Color.WHITE : UI_MUTED);
         theme.textRenderer().end();
 
@@ -1522,7 +1537,7 @@ public class SeedExplorerScreen extends WidgetScreen {
             r.quad(mx, y, menuWidth, STRUCTURE_POPUP_ACTION_HEIGHT - 1, bg);
             r.boxLines(mx, y, menuWidth, STRUCTURE_POPUP_ACTION_HEIGHT - 1, UI_LINE);
             r.render();
-            theme.textRenderer().begin(1.0);
+            theme.textRenderer().begin(frameGraphics, 1.0);
             theme.textRenderer().render(actions[i], mx + 10, y + 5, UI_TEXT);
             theme.textRenderer().end();
         }
@@ -1568,7 +1583,7 @@ public class SeedExplorerScreen extends WidgetScreen {
             ? (structurePanelScroll + 1) + "-" + Math.min(types.size(), structurePanelScroll + visibleRows)
                 + " / " + types.size()
             : "";
-        theme.textRenderer().begin(1.0);
+        theme.textRenderer().begin(frameGraphics, 1.0);
         theme.textRenderer().render(trimToWidth(dimensionName(selectedDimension) + " Structures",
             panelWidth - 24 - (range.isBlank() ? 0 : theme.textWidth(range) + 12)), panelX + 12, panelY + 8, UI_TEXT);
         if (!range.isBlank()) {
@@ -1588,7 +1603,7 @@ public class SeedExplorerScreen extends WidgetScreen {
             if (enabled) r.quad(panelX + 15, y + 7, 4, 4, UI_ACCENT);
             r.render();
 
-            Texture icon = StructureIcons.get(type);
+            var icon = StructureIcons.get(type);
             if (icon != null) {
                 Renderer2D tex = Renderer2D.TEXTURE;
                 tex.begin();
@@ -1596,7 +1611,7 @@ public class SeedExplorerScreen extends WidgetScreen {
                 tex.render(icon.getTextureView(), icon.getSampler());
             }
 
-            theme.textRenderer().begin(1.0);
+            theme.textRenderer().begin(frameGraphics, 1.0);
             theme.textRenderer().render(trimToWidth(type.displayName, panelWidth - 64),
                 panelX + 52, y + 5, enabled ? UI_TEXT : UI_MUTED);
             theme.textRenderer().end();
@@ -1616,7 +1631,7 @@ public class SeedExplorerScreen extends WidgetScreen {
         r.boxLines(panel.x(), panel.y(), panel.width(), panel.height(), UI_LINE);
         r.render();
 
-        theme.textRenderer().begin(1.0);
+        theme.textRenderer().begin(frameGraphics, 1.0);
         theme.textRenderer().render("Display layers", panel.x() + 12, panel.y() + 8, UI_TEXT);
         theme.textRenderer().end();
 
@@ -1663,7 +1678,7 @@ public class SeedExplorerScreen extends WidgetScreen {
                 : terrainDebugOption ? "Terrain debug"
                     : loadMapOption ? "Load map" : layerLabel(layer);
             int textX = loadMapOption ? x + 10 : x + (icon == null ? 25 : 43);
-            theme.textRenderer().begin(1.0);
+            theme.textRenderer().begin(frameGraphics, 1.0);
             theme.textRenderer().render(trimToWidth(label, panel.rowWidth() - (textX - x) - 9),
                 textX, y + 6, loadMapOption || enabled ? UI_TEXT : UI_MUTED);
             theme.textRenderer().end();
@@ -1777,7 +1792,7 @@ public class SeedExplorerScreen extends WidgetScreen {
         progressText = trimToWidth(progressText, screenWidth - 32.0);
         activity = trimToWidth(activity, screenWidth - 32.0);
         frontier = trimToWidth(frontier, screenWidth - 32.0);
-        text.begin(1.0);
+        text.begin(frameGraphics, 1.0);
         text.render(title, (screenWidth - text.getWidth(title)) / 2.0,
             barY - 58, UI_TEXT);
         text.render(phase, (screenWidth - text.getWidth(phase)) / 2.0,
@@ -2002,17 +2017,13 @@ public class SeedExplorerScreen extends WidgetScreen {
 
         WorkerManager.get().submit(() -> {
             List<ChestLootOutput> results = new ArrayList<>(ChestLootPredictor.predictForStructure(gs));
-            if (gs.type == StructureType.MINESHAFT) {
-                results.addAll(ChestLootPredictor.predictMinecartsForStructure(
-                    SeedManager.get().getWorldSeed(), gs, 64));
-            }
             Minecraft.getInstance().execute(() -> openStructureViewer(gs, results));
         });
     }
 
     private void openStructureViewer(GeneratedStructure gs, List<ChestLootOutput> results) {
         long worldSeed = SeedManager.get().getWorldSeed();
-        Minecraft.getInstance().setScreen(new Structure3DViewerScreen(
+        Minecraft.getInstance().gui.setScreen(new Structure3DViewerScreen(
             worldSeed, gs, results));
     }
 
@@ -2025,10 +2036,6 @@ public class SeedExplorerScreen extends WidgetScreen {
         ChatUtils.info("Seed Explorer: Predicting loot for (highlight)" + gs.displayName() + "(default)...");
         WorkerManager.get().submit(() -> {
             List<ChestLootOutput> results = new ArrayList<>(ChestLootPredictor.predictForStructure(gs));
-            if (gs.type == StructureType.MINESHAFT) {
-                results.addAll(ChestLootPredictor.predictMinecartsForStructure(
-                    SeedManager.get().getWorldSeed(), gs, 64));
-            }
             Minecraft.getInstance().execute(() -> openStructureViewer(gs, results));
         });
     }
@@ -2048,10 +2055,6 @@ public class SeedExplorerScreen extends WidgetScreen {
         long request = ++chestOverlayRequestId;
         WorkerManager.get().submit(() -> {
             List<ChestLootOutput> results = new ArrayList<>(ChestLootPredictor.predictForStructure(structure));
-            if (structure.type == StructureType.MINESHAFT) {
-                results.addAll(ChestLootPredictor.predictMinecartsForStructure(
-                    SeedManager.get().getWorldSeed(), structure, 64));
-            }
             Minecraft.getInstance().execute(() -> {
                 if (request != chestOverlayRequestId) return;
                 chestOverlayLoading = false;
@@ -2089,13 +2092,13 @@ public class SeedExplorerScreen extends WidgetScreen {
         r.render();
 
         String title = chestOverlayStructure.displayName() + " chests";
-        theme.textRenderer().begin(1.0);
+        theme.textRenderer().begin(frameGraphics, 1.0);
         theme.textRenderer().render(trimToWidth(title, panelW - 28), panelX + 12, panelY + 9, UI_TEXT);
         theme.textRenderer().render("x", panelX + panelW - 16, panelY + 9, UI_MUTED);
         theme.textRenderer().end();
 
         if (chestOverlayLoading) {
-            theme.textRenderer().begin(1.0);
+            theme.textRenderer().begin(frameGraphics, 1.0);
             theme.textRenderer().render(trimToWidth("Predicting chest positions...", panelW - 24),
                 panelX + 12, panelY + 34, UI_MUTED);
             theme.textRenderer().end();
@@ -2103,7 +2106,7 @@ public class SeedExplorerScreen extends WidgetScreen {
         }
 
         if (chestOverlayChests.isEmpty()) {
-            theme.textRenderer().begin(1.0);
+            theme.textRenderer().begin(frameGraphics, 1.0);
             theme.textRenderer().render(trimToWidth("No predicted chests for this structure.", panelW - 24),
                 panelX + 12, panelY + 34, UI_MUTED);
             theme.textRenderer().end();
@@ -2132,14 +2135,14 @@ public class SeedExplorerScreen extends WidgetScreen {
         drawSmallButton(chestPanelExportX, chestPanelExportY, chestPanelExportW, chestPanelExportH, true, "Export");
 
         if (selected3dChest == null) {
-            theme.textRenderer().begin(1.0);
+            theme.textRenderer().begin(frameGraphics, 1.0);
             theme.textRenderer().render("Click a highlighted chest marker.", panelX + 12, panelY + 34, UI_MUTED);
             theme.textRenderer().end();
             return;
         }
 
         String indexText = (selected3dChestIndex + 1) + " / " + chestOverlayChests.size();
-        theme.textRenderer().begin(1.0);
+        theme.textRenderer().begin(frameGraphics, 1.0);
         theme.textRenderer().render(indexText, chestPanelNextX + chestPanelNextW + 10, panelY + 36, UI_MUTED);
         theme.textRenderer().end();
 
@@ -2246,7 +2249,7 @@ public class SeedExplorerScreen extends WidgetScreen {
         r.quad(x, y, w, h, bg);
         r.boxLines(x, y, w, h, border);
         r.render();
-        theme.textRenderer().begin(1.0);
+        theme.textRenderer().begin(frameGraphics, 1.0);
         theme.textRenderer().render(text, x + Math.max(1, (w - theme.textWidth(text)) / 2), y + 4,
             enabled ? UI_TEXT : UI_MUTED);
         theme.textRenderer().end();
@@ -2294,7 +2297,7 @@ public class SeedExplorerScreen extends WidgetScreen {
     private void drawChestItemList(int x, int y, int width, int maxY, ChestLootOutput chest) {
         String subtitle = chest.blockX() + ", " + chest.blockY() + ", " + chest.blockZ()
             + "  " + (chest.exact() ? "exact" : "approx");
-        theme.textRenderer().begin(1.0);
+        theme.textRenderer().begin(frameGraphics, 1.0);
         theme.textRenderer().render(trimToWidth(subtitle, width), x, y, chest.exact() ? new Color(126, 216, 138) : new Color(216, 180, 90));
         y += 14;
         if (chest.predictedItems() == null || chest.predictedItems().isEmpty()) {
@@ -2339,7 +2342,7 @@ public class SeedExplorerScreen extends WidgetScreen {
             case MONUMENT, MANSION -> "diamond";
             case ANCIENT_CITY -> "star";
             case TRIAL_CHAMBER -> "diamond";
-            case TRAIL_RUINS, RUINED_PORTAL, OCEAN_RUIN, MINESHAFT -> "circle";
+            case TRAIL_RUINS, ABANDONED_CAMP, RUINED_PORTAL, OCEAN_RUIN, MINESHAFT -> "circle";
             case FORTRESS, BASTION -> "skull";
             case END_CITY -> "star";
             default -> "circle";
@@ -2549,7 +2552,7 @@ public class SeedExplorerScreen extends WidgetScreen {
         List<ItemLootRequest> current = lootItemFilters.stream()
             .map(term -> new ItemLootRequest(term, lootItemQuantities.getOrDefault(term, 1)))
             .toList();
-        Minecraft.getInstance().setScreen(new ItemSearchScreen(theme, current, this::startItemLootSearch));
+        Minecraft.getInstance().gui.setScreen(new ItemSearchScreen(theme, current, this::startItemLootSearch));
     }
 
     private void startItemLootSearch(List<ItemLootRequest> requests) {
@@ -2826,7 +2829,7 @@ public class SeedExplorerScreen extends WidgetScreen {
             + " (" + dimensionName(result.dimension()) + ")";
         searchSuggestion = "Found " + wanted + " in " + location
             + (result.combinedMatch() ? " (one chest)" : " (split across chests)");
-        if (Minecraft.getInstance().screen == this) {
+        if (Minecraft.getInstance().gui.screen() == this) {
             selectedDimension = result.dimension();
             dimensionPinned = true;
             centerMap(result.chest().blockX(), result.chest().blockZ());
@@ -2890,7 +2893,7 @@ public class SeedExplorerScreen extends WidgetScreen {
         SeedManager.get().setMcVersion(version);
         clearPredictionCaches();
         ChatUtils.info("Seed Explorer: Set prediction version profile to (highlight)" + version
-            + "(default). Loot profiles use this selector; terrain and structures still use the active Minecraft runtime.");
+            + "(default). Versioned structures, biome search, and loot are gated; terrain rendering still uses the active Minecraft runtime.");
     }
 
     private String selectedVersion() {
@@ -3045,6 +3048,10 @@ public class SeedExplorerScreen extends WidgetScreen {
             case OUTPOST -> aliases.add("pillager tower");
             case MONUMENT -> aliases.add("ocean monument");
             case MANSION -> aliases.add("woodland mansion");
+            case ABANDONED_CAMP -> {
+                aliases.add("camp");
+                aliases.add("abandoned campsite");
+            }
             case TREASURE -> aliases.add("buried treasure chest");
             case FORTRESS -> aliases.add("nether fortress");
             case BASTION -> {
@@ -3244,6 +3251,15 @@ public class SeedExplorerScreen extends WidgetScreen {
         }
 
         if (biomeId == null) return false;
+        String versionedBiome = biomeId == 55 ? "minecraft:dappled_forest"
+            : biomeId == 56 ? "minecraft:sulfur_caves" : null;
+        if (versionedBiome != null
+            && !PredictionVersionPolicy.supportsBiome(selectedVersion(), versionedBiome)) {
+            ChatUtils.info("Seed Explorer: (highlight)" + query
+                + "(default) is not available in prediction profile (highlight)"
+                + selectedVersion() + "(default).");
+            return true;
+        }
 
         long seed = SeedManager.get().getWorldSeed();
         if (seed == 0) {
@@ -3263,8 +3279,7 @@ public class SeedExplorerScreen extends WidgetScreen {
             // Top and bottom edges
             for (int bx = -radius; bx <= radius; bx += step) {
                 if (radius == 0) {
-                    int id = BiomeGenerator.getBiome(centerBlockX, centerBlockZ, seed);
-                    if (id == biomeId) {
+                    if (matchesBiome(centerBlockX, centerBlockZ, seed, biomeId)) {
                         centerMap(centerBlockX, centerBlockZ);
                         ChatUtils.info("Seed Explorer: Found biome at (highlight)" + centerBlockX + ", " + centerBlockZ + "(default).");
                         return true;
@@ -3273,16 +3288,14 @@ public class SeedExplorerScreen extends WidgetScreen {
                 }
 
                 // Top edge: z = -radius
-                int idTop = BiomeGenerator.getBiome(centerBlockX + bx, centerBlockZ - radius, seed);
-                if (idTop == biomeId) {
+                if (matchesBiome(centerBlockX + bx, centerBlockZ - radius, seed, biomeId)) {
                     centerMap(centerBlockX + bx, centerBlockZ - radius);
                     ChatUtils.info("Seed Explorer: Found biome at (highlight)" + (centerBlockX + bx) + ", " + (centerBlockZ - radius) + "(default).");
                     return true;
                 }
 
                 // Bottom edge: z = radius
-                int idBottom = BiomeGenerator.getBiome(centerBlockX + bx, centerBlockZ + radius, seed);
-                if (idBottom == biomeId) {
+                if (matchesBiome(centerBlockX + bx, centerBlockZ + radius, seed, biomeId)) {
                     centerMap(centerBlockX + bx, centerBlockZ + radius);
                     ChatUtils.info("Seed Explorer: Found biome at (highlight)" + (centerBlockX + bx) + ", " + (centerBlockZ + radius) + "(default).");
                     return true;
@@ -3292,16 +3305,14 @@ public class SeedExplorerScreen extends WidgetScreen {
             // Left and right edges (excluding corners already checked)
             for (int bz = -radius + step; bz <= radius - step; bz += step) {
                 // Left edge: x = -radius
-                int idLeft = BiomeGenerator.getBiome(centerBlockX - radius, centerBlockZ + bz, seed);
-                if (idLeft == biomeId) {
+                if (matchesBiome(centerBlockX - radius, centerBlockZ + bz, seed, biomeId)) {
                     centerMap(centerBlockX - radius, centerBlockZ + bz);
                     ChatUtils.info("Seed Explorer: Found biome at (highlight)" + (centerBlockX - radius) + ", " + (centerBlockZ + bz) + "(default).");
                     return true;
                 }
 
                 // Right edge: x = radius
-                int idRight = BiomeGenerator.getBiome(centerBlockX + radius, centerBlockZ + bz, seed);
-                if (idRight == biomeId) {
+                if (matchesBiome(centerBlockX + radius, centerBlockZ + bz, seed, biomeId)) {
                     centerMap(centerBlockX + radius, centerBlockZ + bz);
                     ChatUtils.info("Seed Explorer: Found biome at (highlight)" + (centerBlockX + radius) + ", " + (centerBlockZ + bz) + "(default).");
                     return true;
@@ -3310,6 +3321,18 @@ public class SeedExplorerScreen extends WidgetScreen {
         }
 
         ChatUtils.info("Seed Explorer: No (highlight)" + query + "(default) biome found within " + maxRadius + " blocks.");
+        return false;
+    }
+
+    private static boolean matchesBiome(int blockX, int blockZ, long seed, int biomeId) {
+        if (biomeId != 56) return BiomeGenerator.getBiome(blockX, blockZ, seed) == biomeId;
+        // Cave biomes vary vertically. Sample the underground quart bands rather
+        // than the surface-only Y=64 lookup used by the 2D biome layer.
+        for (int y = 48; y >= -48; y -= 16) {
+            if (BiomeGenerator.getPredictedBiome(blockX, y, blockZ, seed, 0).legacyId() == biomeId) {
+                return true;
+            }
+        }
         return false;
     }
 
@@ -3356,6 +3379,10 @@ public class SeedExplorerScreen extends WidgetScreen {
         }
 
         if (click.button() == 0 && handleDimensionSelectorClick(mouseX, mouseY)) {
+            return true;
+        }
+
+        if (click.button() == 0 && handleModeSelectorClick(mouseX, mouseY)) {
             return true;
         }
 
@@ -3634,15 +3661,6 @@ public class SeedExplorerScreen extends WidgetScreen {
         if (module == null) return false;
 
         double screenWidth = Minecraft.getInstance().getWindow().getWidth();
-        int modeX = modeButtonX(screenWidth);
-        int modeWidth = modeButtonWidth(screenWidth);
-        if (mouseX >= modeX && mouseX <= modeX + modeWidth
-            && mouseY >= MODE_BUTTON_Y && mouseY <= MODE_BUTTON_Y + MODE_BUTTON_HEIGHT) {
-            boolean want3d = mouseX >= modeX + modeWidth / 2.0;
-            if (want3d != mode3d) toggle3dMode();
-            return true;
-        }
-
         ToolbarLayout layout = toolbarLayout(screenWidth);
         for (int i = 0; i < PRIMARY_LAYERS.length; i++) {
             MapLayer layer = PRIMARY_LAYERS[i];
@@ -3683,6 +3701,33 @@ public class SeedExplorerScreen extends WidgetScreen {
         }
 
         return false;
+    }
+
+    private boolean handleModeSelectorClick(double mouseX, double mouseY) {
+        double screenWidth = Minecraft.getInstance().getWindow().getWidth();
+        int modeX = modeButtonX(screenWidth);
+        int modeWidth = modeButtonWidth(screenWidth);
+        if (mouseX >= modeX && mouseX <= modeX + modeWidth
+            && mouseY >= MODE_BUTTON_Y && mouseY <= MODE_BUTTON_Y + MODE_BUTTON_HEIGHT) {
+            boolean want3d = mouseX >= modeX + modeWidth / 2.0;
+            if (want3d != mode3d) toggle3dMode();
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Minecraft 26.3 can lose the normal Screen mouse callback when another
+     * Meteor listener consumes the raw event. Handle this independent selector
+     * before module keybind listeners and cancel only clicks inside its bounds.
+     */
+    @EventHandler(priority = EventPriority.HIGHEST + 1_000)
+    private void onRawModeSelectorClick(MouseClickEvent event) {
+        if (event.action != KeyAction.Press || event.button() != 0
+            || Minecraft.getInstance().gui.screen() != this) return;
+        if (handleModeSelectorClick(toRenderX(event.click.x()), toRenderY(event.click.y()))) {
+            event.cancel();
+        }
     }
 
     private boolean handleDisplayPanelClick(double mouseX, double mouseY) {
@@ -3871,11 +3916,13 @@ public class SeedExplorerScreen extends WidgetScreen {
     }
 
     private double toRenderX(double guiX) {
-        return guiX * Minecraft.getInstance().getWindow().getGuiScale();
+        var window = Minecraft.getInstance().getWindow();
+        return guiX * window.getWidth() / Math.max(1.0, window.getGuiScaledWidth());
     }
 
     private double toRenderY(double guiY) {
-        return guiY * Minecraft.getInstance().getWindow().getGuiScale();
+        var window = Minecraft.getInstance().getWindow();
+        return guiY * window.getHeight() / Math.max(1.0, window.getGuiScaledHeight());
     }
 
     @Override
@@ -4015,7 +4062,7 @@ public class SeedExplorerScreen extends WidgetScreen {
     }
 
     private boolean isKeyHeld(int key) {
-        return InputConstants.isKeyDown(Minecraft.getInstance().getWindow(), key);
+        return InputConstants.isKeyDown(key);
     }
 
     private double movementInput(int key) {

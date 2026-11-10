@@ -18,6 +18,8 @@ public final class TerrainLodPolicy {
     public static final double EXACT_STEP_2_DISTANCE_BLOCKS = 1_024.0;
     public static final double EXACT_STEP_4_DISTANCE_BLOCKS = 4_096.0;
     public static final double LOD_HYSTERESIS_FRACTION = 0.10;
+    /** Stable per-chunk threshold variation turns a hard LOD ring into a broad handoff. */
+    public static final double LOD_TRANSITION_VARIATION = 0.16;
     public static final int UNINITIALIZED_ANCHOR = Integer.MIN_VALUE;
 
     private TerrainLodPolicy() {
@@ -26,6 +28,15 @@ public final class TerrainLodPolicy {
     public static int sampleStep(int chunkDistance) {
         if (chunkDistance <= FULL_DETAIL_CHUNKS) return 1;
         if (chunkDistance <= MID_DETAIL_CHUNKS) return MID_SAMPLE_STEP;
+        return COARSE_SAMPLE_STEP;
+    }
+
+    /** Fast source quality for the interactive 3D viewport; bulk loading is separate. */
+    public static int interactiveSampleStep(int chunkDistance) {
+        int distance = Math.max(0, chunkDistance);
+        if (distance <= 4) return 1;
+        if (distance <= 16) return 4;
+        if (distance <= 32) return 8;
         return COARSE_SAMPLE_STEP;
     }
 
@@ -82,6 +93,24 @@ public final class TerrainLodPolicy {
     public static boolean shouldBakeUndergroundGeometry(boolean requested, int dimension,
                                                         int surfaceStep) {
         return requested && dimension != 1;
+    }
+
+    /** Pre-bake the compact cave window with nearby exact surface chunks. */
+    public static boolean shouldPrebakeUndergroundGeometry(
+        int dimension, int chunkDistance, int caveRadius, boolean exactSurface
+    ) {
+        return exactSurface && dimension != 1
+            && chunkDistance >= 0 && chunkDistance <= Math.max(0, caveRadius);
+    }
+
+    /** Keep the active cave window resident when the broad surface cache is compacted. */
+    public static boolean protectsPrebakedUndergroundGeometry(
+        int cameraX, int cameraZ, int chunkX, int chunkZ, int caveRadius,
+        boolean cavesIncluded
+    ) {
+        return cavesIncluded && cameraX != UNINITIALIZED_ANCHOR
+            && cameraZ != UNINITIALIZED_ANCHOR
+            && retentionRing(cameraX, cameraZ, chunkX, chunkZ) <= Math.max(0, caveRadius);
     }
 
     /** A surface-only bake cannot change the geometry shown by an underground pass. */
@@ -195,6 +224,33 @@ public final class TerrainLodPolicy {
             default -> cameraDistanceBlocks <= EXACT_STEP_4_DISTANCE_BLOCKS
                 ? requested : EXACT_DISPLAY_MAX_STEP;
         };
+    }
+
+    public static int exactDisplayStepWithHysteresis(Integer previousStep,
+                                                     double cameraDistanceBlocks,
+                                                     int chunkX, int chunkZ) {
+        return exactDisplayStepWithHysteresis(previousStep,
+            cameraDistanceBlocks / lodThresholdScale(chunkX, chunkZ));
+    }
+
+    /** Deterministic noise is stable while moving and avoids a visible geometric ring. */
+    public static double lodThresholdScale(int chunkX, int chunkZ) {
+        long hash = (long) chunkX * 0x9E3779B97F4A7C15L
+            ^ (long) chunkZ * 0xC2B2AE3D27D4EB4FL;
+        hash ^= hash >>> 30;
+        hash *= 0xBF58476D1CE4E5B9L;
+        hash ^= hash >>> 27;
+        hash *= 0x94D049BB133111EBL;
+        hash ^= hash >>> 31;
+        double unit = (hash >>> 11) * 0x1.0p-53;
+        return 1.0 + (unit * 2.0 - 1.0) * LOD_TRANSITION_VARIATION;
+    }
+
+    public static int tiledSurfaceQuadCount(int width, int depth, int repeatSpan) {
+        int span = Math.max(1, repeatSpan);
+        int x = Math.max(1, (Math.max(1, width) + span - 1) / span);
+        int z = Math.max(1, (Math.max(1, depth) + span - 1) / span);
+        return x * z;
     }
 
     /** True only when camera movement changes a batch's requested LOD signature. */

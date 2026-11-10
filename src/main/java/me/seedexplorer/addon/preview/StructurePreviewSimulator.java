@@ -214,7 +214,10 @@ public final class StructurePreviewSimulator {
                     container.x(), container.y(), container.z(), Blocks.CHEST.defaultBlockState()));
             }
         }
-        return buildModel(blocks);
+        // The base geometry may already be capped. Exact predicted containers
+        // are a small, required overlay and must not be discarded by a second
+        // Y-sorted truncation (large bastions commonly hit the geometry cap).
+        return buildModel(blocks, false, model.truncated());
     }
 
     private static StructurePreviewModel extractDirectModel(StructureStart start) {
@@ -364,11 +367,19 @@ public final class StructurePreviewSimulator {
     }
 
     private static StructurePreviewModel buildModel(List<StructurePreviewModel.PreviewBlock> blocks) {
+        return buildModel(blocks, true, false);
+    }
+
+    private static StructurePreviewModel buildModel(
+        List<StructurePreviewModel.PreviewBlock> blocks,
+        boolean enforceBlockCap,
+        boolean alreadyTruncated
+    ) {
         blocks.sort(Comparator.comparingInt(StructurePreviewModel.PreviewBlock::y)
             .thenComparingInt(StructurePreviewModel.PreviewBlock::z)
             .thenComparingInt(StructurePreviewModel.PreviewBlock::x));
-        boolean truncated = false;
-        if (blocks.size() > MAX_CAPTURED_BLOCKS) {
+        boolean truncated = alreadyTruncated;
+        if (enforceBlockCap && blocks.size() > MAX_CAPTURED_BLOCKS) {
             truncated = true;
             blocks = new ArrayList<>(blocks.subList(0, MAX_CAPTURED_BLOCKS));
         }
@@ -404,6 +415,7 @@ public final class StructurePreviewSimulator {
             case ANCIENT_CITY -> BuiltinStructures.ANCIENT_CITY;
             case TRIAL_CHAMBER -> BuiltinStructures.TRIAL_CHAMBERS;
             case TRAIL_RUINS -> BuiltinStructures.TRAIL_RUINS;
+            case ABANDONED_CAMP -> dynamicStructureKey(structure.variant);
             case STRONGHOLD -> BuiltinStructures.STRONGHOLD;
             case RUINED_PORTAL -> ruinedPortalKeyForVariant(seed, structure);
             case SHIPWRECK -> variantStructureKey(structure, shipwreckKeyForBiome(seed, structure),
@@ -420,6 +432,12 @@ public final class StructurePreviewSimulator {
             case NETHER_FOSSIL -> BuiltinStructures.NETHER_FOSSIL;
             default -> null;
         };
+    }
+
+    private static ResourceKey<Structure> dynamicStructureKey(String id) {
+        if (id == null || !id.startsWith("minecraft:abandoned_camp_")) return null;
+        return ResourceKey.create(net.minecraft.core.registries.Registries.STRUCTURE,
+            net.minecraft.resources.Identifier.parse(id));
     }
 
     private static ResourceKey<Structure> villageKeyForBiome(long seed, GeneratedStructure structure) {
@@ -705,15 +723,7 @@ public final class StructurePreviewSimulator {
         }
 
         private static boolean isShulkerBox(Block block) {
-            return block == Blocks.SHULKER_BOX || block == Blocks.WHITE_SHULKER_BOX
-                || block == Blocks.ORANGE_SHULKER_BOX || block == Blocks.MAGENTA_SHULKER_BOX
-                || block == Blocks.LIGHT_BLUE_SHULKER_BOX || block == Blocks.YELLOW_SHULKER_BOX
-                || block == Blocks.LIME_SHULKER_BOX || block == Blocks.PINK_SHULKER_BOX
-                || block == Blocks.GRAY_SHULKER_BOX || block == Blocks.LIGHT_GRAY_SHULKER_BOX
-                || block == Blocks.CYAN_SHULKER_BOX || block == Blocks.PURPLE_SHULKER_BOX
-                || block == Blocks.BLUE_SHULKER_BOX || block == Blocks.BROWN_SHULKER_BOX
-                || block == Blocks.GREEN_SHULKER_BOX || block == Blocks.RED_SHULKER_BOX
-                || block == Blocks.BLACK_SHULKER_BOX;
+            return block == Blocks.SHULKER_BOX || Blocks.DYED_SHULKER_BOX.asList().contains(block);
         }
 
         private static Object defaultValue(Class<?> type) {

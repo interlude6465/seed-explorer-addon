@@ -78,7 +78,7 @@ public final class PredictedChestOverlay {
     public void renderOnScreen(GuiGraphicsExtractor graphics, int screenWidth, int screenHeight,
                                int guiLeft, int guiTop, int guiWidth, int guiHeight) {
         Minecraft mc = Minecraft.getInstance();
-        if (mc.screen == null || !isContainerScreen(mc.screen)) return;
+        if (mc.gui.screen() == null || !isContainerScreen(mc.gui.screen())) return;
         if (active == null) active = nearestRememberedChest();
         if (active == null) return;
 

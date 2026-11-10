@@ -79,6 +79,8 @@ final class BiomeColorPalette {
         put("minecraft:jagged_peaks", 54, 0xFFA8A8B8);
         put("minecraft:flower_forest", 10, 0xFF4F8C62);
         put("minecraft:windswept_savanna", 20, 0xFF4A9A9F);
+        put("minecraft:dappled_forest", 55, 0xFF5E7F4D);
+        put("minecraft:sulfur_caves", 56, 0xFF4AA7C6);
     }
 
     private BiomeColorPalette() {

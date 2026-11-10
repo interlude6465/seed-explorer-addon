@@ -19,6 +19,7 @@ import me.seedexplorer.addon.ore.OrePatch;
 import me.seedexplorer.addon.ore.OrePredictor;
 import me.seedexplorer.addon.ore.OreType;
 import me.seedexplorer.addon.render.BlockTextureAtlas;
+import me.seedexplorer.addon.seed.ActivePredictionContext;
 import me.seedexplorer.addon.seed.SeedManager;
 import me.seedexplorer.addon.structures.DungeonPredictor;
 import me.seedexplorer.addon.structures.GeneratedStructure;
@@ -225,7 +226,7 @@ public class SeedExplorerCommand extends Command {
                 error("Join a world first.");
                 return SINGLE_SUCCESS;
             }
-            mc.setScreen(new me.seedexplorer.addon.gui.SeedExplorerScreen(
+            mc.gui.setScreen(new me.seedexplorer.addon.gui.SeedExplorerScreen(
                 meteordevelopment.meteorclient.gui.GuiThemes.get()));
             return SINGLE_SUCCESS;
         }));
@@ -288,10 +289,15 @@ public class SeedExplorerCommand extends Command {
                 version == null || version.isBlank() ? "" : " version " + version,
                 chunkX,
                 chunkZ);
-            List<GeneratedStructure> structures = VanillaStructurePredictor.predictOverworld(seed, chunkX - 160, chunkZ - 160, chunkX + 160, chunkZ + 160);
+            var predictionContext = ActivePredictionContext.forSeed(seed, 0);
+            List<GeneratedStructure> structures = VanillaStructurePredictor.predictOverworld(
+                predictionContext, chunkX - 160, chunkZ - 160, chunkX + 160, chunkZ + 160,
+                true, false);
 
             if (structures.isEmpty()) {
-                List<VanillaStructurePredictor.DebugCandidate> candidates = VanillaStructurePredictor.debugOverworld(seed, chunkX - 160, chunkZ - 160, chunkX + 160, chunkZ + 160);
+                List<VanillaStructurePredictor.DebugCandidate> candidates =
+                    VanillaStructurePredictor.debugOverworld(predictionContext,
+                        chunkX - 160, chunkZ - 160, chunkX + 160, chunkZ + 160);
                 if (candidates.isEmpty()) {
                     warning("No vanilla placement candidates found nearby.");
                     appendLine(report, "result=no vanilla placement candidates nearby");
@@ -3244,7 +3250,7 @@ public class SeedExplorerCommand extends Command {
         if (mc.gameMode == null || mc.player == null) return;
         BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(pos), Direction.UP, pos, false);
         mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, hit);
-        mc.player.swing(InteractionHand.MAIN_HAND);
+        mc.player.swing(InteractionHand.MAIN_HAND, mc.player.getMainHandItem().getInteractAnimation(), false);
         PredictionDebugLogger.append("event=loot_tp_test_open_attempt"
             + " index=" + tpLootIndex + "/" + tpLootTargets.size()
             + " pos=" + pos.getX() + "," + pos.getY() + "," + pos.getZ()
@@ -3256,7 +3262,7 @@ public class SeedExplorerCommand extends Command {
         if (mc.gameMode == null || mc.player == null || minecart == null) return;
         EntityHitResult hit = new EntityHitResult(minecart, minecart.position());
         mc.gameMode.interact(mc.player, minecart, hit, InteractionHand.MAIN_HAND);
-        mc.player.swing(InteractionHand.MAIN_HAND);
+        mc.player.swing(InteractionHand.MAIN_HAND, mc.player.getMainHandItem().getInteractAnimation(), false);
         PredictionDebugLogger.append("event=loot_tp_test_open_minecart_attempt"
             + " index=" + tpLootIndex + "/" + tpLootTargets.size()
             + " entityId=" + minecart.getId()
@@ -3888,7 +3894,9 @@ public class SeedExplorerCommand extends Command {
         appendLine(report, "chunk=" + chunkX + "," + chunkZ);
         info("Checking structures near (highlight)%d, %d(default) using seed (highlight)%d(default).", x, z, seed);
 
-        List<GeneratedStructure> structures = VanillaStructurePredictor.predictOverworld(seed, chunkX - 32, chunkZ - 32, chunkX + 32, chunkZ + 32);
+        List<GeneratedStructure> structures = VanillaStructurePredictor.predictOverworld(
+            ActivePredictionContext.forSeed(seed, 0),
+            chunkX - 32, chunkZ - 32, chunkX + 32, chunkZ + 32, true, false);
         if (!structures.isEmpty()) {
             structures.stream()
                 .sorted(Comparator.comparingLong(s -> distanceSquared(x, z, s.x, s.z)))

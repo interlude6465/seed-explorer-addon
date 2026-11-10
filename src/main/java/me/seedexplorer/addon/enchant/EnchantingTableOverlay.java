@@ -86,7 +86,7 @@ public final class EnchantingTableOverlay {
     public void renderOnScreen(GuiGraphicsExtractor graphics, int screenWidth, int screenHeight,
                                int guiLeft, int guiTop, int guiWidth, int guiHeight) {
         Minecraft mc = Minecraft.getInstance();
-        if (!(mc.screen instanceof EnchantmentScreen screen) || mc.player == null || mc.level == null) {
+        if (!(mc.gui.screen() instanceof EnchantmentScreen screen) || mc.player == null || mc.level == null) {
             clear();
             return;
         }

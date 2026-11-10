@@ -7,8 +7,8 @@ package me.seedexplorer.addon.map;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.textures.FilterMode;
-import com.mojang.blaze3d.textures.TextureFormat;
+import com.mojang.renderpearl.api.GpuFormat;
+import com.mojang.renderpearl.api.textures.FilterMode;
 import me.seedexplorer.addon.events.SeedChangeEvent;
 import me.seedexplorer.addon.seed.SeedManager;
 import me.seedexplorer.addon.worldgen.WorldgenEngine;
@@ -20,11 +20,16 @@ import net.minecraft.client.Minecraft;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /** Manages map chunk tiles, their generation, and caching. */
 public class MinimapManager {
     private static final MinimapManager INSTANCE = new MinimapManager();
+    private static final int MAX_CACHED_TILES = 8_192;
     private final Map<TileKey, ChunkTile> cache = new ConcurrentHashMap<>();
+    private final ConcurrentLinkedQueue<TileKey> insertionOrder = new ConcurrentLinkedQueue<>();
+    private final AtomicInteger frameGenerationBudget = new AtomicInteger();
     private volatile int generation = 0;
 
     private MinimapManager() {
@@ -57,11 +62,40 @@ public class MinimapManager {
         TileKey key = new TileKey(x, z, dimension);
         ChunkTile tile = cache.get(key);
         if (tile == null) {
-            tile = new ChunkTile(x, z, dimension);
-            cache.put(key, tile);
+            ChunkTile created = new ChunkTile(x, z, dimension);
+            ChunkTile existing = cache.putIfAbsent(key, created);
+            tile = existing == null ? created : existing;
+            if (existing == null) {
+                insertionOrder.add(key);
+                trimCache();
+            }
+        }
+        if (tile.texture == null && !tile.generating && claimGenerationBudget()) {
             generateAsync(tile);
         }
         return tile;
+    }
+
+    private void trimCache() {
+        while (cache.size() > MAX_CACHED_TILES) {
+            TileKey eldest = insertionOrder.poll();
+            if (eldest == null) return;
+            ChunkTile removed = cache.remove(eldest);
+            if (removed != null) removed.dispose();
+        }
+    }
+
+    /** Limits new 256-sample biome jobs submitted by one rendered map frame. */
+    public void beginFrame(int maximumNewTiles) {
+        frameGenerationBudget.set(Math.max(0, maximumNewTiles));
+    }
+
+    private boolean claimGenerationBudget() {
+        while (true) {
+            int current = frameGenerationBudget.get();
+            if (current <= 0) return false;
+            if (frameGenerationBudget.compareAndSet(current, current - 1)) return true;
+        }
     }
 
     /** Queues nearby biome tiles center-first so a focused map does not remain blank. */
@@ -69,6 +103,7 @@ public class MinimapManager {
         int centerX = Math.floorDiv(blockX, 16);
         int centerZ = Math.floorDiv(blockZ, 16);
         int radius = Math.max(0, radiusChunks);
+        beginFrame(12);
         getTile(centerX, centerZ, dimension);
         for (int ring = 1; ring <= radius; ring++) {
             for (int offset = -ring; offset <= ring; offset++) {
@@ -114,7 +149,7 @@ public class MinimapManager {
                             tile.texture.close();
                         }
 
-                        Texture texture = new Texture(16, 16, TextureFormat.RGBA8, FilterMode.NEAREST, FilterMode.NEAREST);
+                        Texture texture = new Texture(16, 16, GpuFormat.RGBA8_UNORM, FilterMode.NEAREST, FilterMode.NEAREST);
                         RenderSystem.getDevice().createCommandEncoder().writeToTexture(texture.getTexture(), readyImage);
                         tile.texture = texture;
                     } finally {
@@ -139,6 +174,7 @@ public class MinimapManager {
             tile.dispose();
         }
         cache.clear();
+        insertionOrder.clear();
     }
 
     private record TileKey(int x, int z, int dimension) {

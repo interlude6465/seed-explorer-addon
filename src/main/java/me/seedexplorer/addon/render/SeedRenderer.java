@@ -17,11 +17,13 @@ import me.seedexplorer.addon.structures.StructureType;
 import me.seedexplorer.addon.structures.StructureCache;
 import me.seedexplorer.addon.waypoints.SeedWaypoint;
 import me.seedexplorer.addon.waypoints.WaypointManager;
+import me.seedexplorer.addon.workers.WorkerManager;
 import meteordevelopment.meteorclient.gui.GuiTheme;
 import meteordevelopment.meteorclient.renderer.Renderer2D;
 import meteordevelopment.meteorclient.renderer.Texture;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -32,6 +34,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Handles ordered map layer rendering for the Seed Explorer screen. */
 public class SeedRenderer {
@@ -43,8 +47,9 @@ public class SeedRenderer {
     private static final Color CENTER_CROSSHAIR_COLOR = new Color(255, 255, 255, 210);
     private static final Color PLAYER_OUTLINE_COLOR = new Color(12, 16, 22, 220);
     private static final Color STATUS_BAR_COLOR = new Color(12, 14, 18, 185);
-    private static final int MAX_DETAILED_BIOME_TILES = 8192;
+    private static final int MAX_DETAILED_BIOME_TILES = 256;
     private static final int MAX_OVERVIEW_COLOR_CACHE = 65536;
+    private static final int MAX_OVERVIEW_SAMPLES_PER_FRAME = 128;
     private static final double OVERVIEW_TARGET_CELL_SIZE = 9.0;
     private static final int MAX_STRUCTURE_CACHE_REGIONS = 256;
     private static final double TREASURE_MAX_METERS_PER_PIXEL = 2.8;
@@ -54,9 +59,13 @@ public class SeedRenderer {
     private static final double ICON_TEXTURE_PADDING = 1.18;
 
     private final OreOverlay oreOverlay = new OreOverlay();
-    private final Map<OverviewBiomeKey, Integer> overviewBiomeColorCache = new HashMap<>();
+    private final Map<OverviewBiomeKey, Integer> overviewBiomeColorCache = new ConcurrentHashMap<>();
+    private final AtomicBoolean overviewBatchInFlight = new AtomicBoolean();
+    private long overviewCacheSeed = Long.MIN_VALUE;
+    private int overviewSampleCursor;
+    private volatile int overviewGeneration;
 
-    public MapRenderResult render(MapRenderContext context, GuiTheme theme) {
+    public MapRenderResult render(MapRenderContext context, GuiTheme theme, GuiGraphicsExtractor graphics) {
         List<GeneratedStructure> structures = context.enabled(MapLayer.STRUCTURES)
             ? getVisibleStructures(context)
             : List.of();
@@ -78,10 +87,10 @@ public class SeedRenderer {
         if (context.enabled(MapLayer.WAYPOINTS)) hoveredWaypoint = renderWaypoints(context, waypoints, hoveredStructure);
         if (context.enabled(MapLayer.PLAYER)) {
             renderPlayer(context);
-            if (context.showPlayerInfo()) renderPlayerInfo(context, theme);
+            if (context.showPlayerInfo()) renderPlayerInfo(context, theme, graphics);
         }
         if (context.enabled(MapLayer.CHUNK_BORDERS)) renderChunkBorders(context);
-        if (context.enabled(MapLayer.COORDINATES)) renderCoordinates(context, theme);
+        if (context.enabled(MapLayer.COORDINATES)) renderCoordinates(context, theme, graphics);
 
         return new MapRenderResult(structures, waypoints, ores, hoveredStructure, hoveredWaypoint);
     }
@@ -361,9 +370,33 @@ public class SeedRenderer {
         Renderer2D renderer = Renderer2D.TEXTURE;
         int margin = Math.max(0, context.biomeTileMargin());
         Color tileColor = new Color(255, 255, 255, context.biomeOpacity());
+        MinimapManager.get().beginFrame(4);
 
-        for (int cz = viewport.startChunkZ() - margin; cz <= viewport.endChunkZ() + margin; cz++) {
-            for (int cx = viewport.startChunkX() - margin; cx <= viewport.endChunkX() + margin; cx++) {
+        int startChunkX = viewport.startChunkX() - margin;
+        int endChunkX = viewport.endChunkX() + margin;
+        int startChunkZ = viewport.startChunkZ() - margin;
+        int endChunkZ = viewport.endChunkZ() + margin;
+        int centerChunkX = startChunkX + (endChunkX - startChunkX) / 2;
+        int centerChunkZ = startChunkZ + (endChunkZ - startChunkZ) / 2;
+        int maxRing = Math.max(Math.max(centerChunkX - startChunkX, endChunkX - centerChunkX),
+            Math.max(centerChunkZ - startChunkZ, endChunkZ - centerChunkZ));
+        for (int ring = 0; ring <= maxRing; ring++) {
+            int minX = Math.max(startChunkX, centerChunkX - ring);
+            int maxX = Math.min(endChunkX, centerChunkX + ring);
+            int minZ = Math.max(startChunkZ, centerChunkZ - ring);
+            int maxZ = Math.min(endChunkZ, centerChunkZ + ring);
+            for (int cz = minZ; cz <= maxZ; cz++) {
+                for (int cx = minX; cx <= maxX; cx++) {
+                    if (Math.max(Math.abs(cx - centerChunkX),
+                        Math.abs(cz - centerChunkZ)) != ring) continue;
+                    MinimapManager.get().getTile(cx, cz, context.dimension());
+                }
+            }
+        }
+        MinimapManager.get().beginFrame(0);
+
+        for (int cz = startChunkZ; cz <= endChunkZ; cz++) {
+            for (int cx = startChunkX; cx <= endChunkX; cx++) {
                 ChunkTile tile = MinimapManager.get().getTile(cx, cz, context.dimension());
                 if (tile.texture == null) continue;
 
@@ -383,24 +416,70 @@ public class SeedRenderer {
         long seed = SeedManager.get().getWorldSeed();
         if (seed == 0) return;
 
+        if (overviewCacheSeed != seed) {
+            overviewBiomeColorCache.clear();
+            overviewCacheSeed = seed;
+            overviewGeneration++;
+            overviewSampleCursor = 0;
+        }
+
         int cellBlocks = overviewCellBlocks(viewport.zoom());
         int startX = Math.floorDiv((int) Math.floor(viewport.worldX(0)), cellBlocks) * cellBlocks;
         int startZ = Math.floorDiv((int) Math.floor(viewport.worldZ(0)), cellBlocks) * cellBlocks;
         int endX = Math.floorDiv((int) Math.ceil(viewport.worldX(viewport.width())), cellBlocks) * cellBlocks + cellBlocks;
         int endZ = Math.floorDiv((int) Math.ceil(viewport.worldZ(viewport.height())), cellBlocks) * cellBlocks + cellBlocks;
 
+        int cellsX = Math.max(0, (endX - startX) / cellBlocks + 1);
+        int cellsZ = Math.max(0, (endZ - startZ) / cellBlocks + 1);
+        int visibleCellCount = cellsX * cellsZ;
+        if (visibleCellCount > 0 && overviewBatchInFlight.compareAndSet(false, true)) {
+            int startIndex = Math.floorMod(overviewSampleCursor, visibleCellCount);
+            List<OverviewBiomeSample> samples = new ArrayList<>(MAX_OVERVIEW_SAMPLES_PER_FRAME);
+            int examined = 0;
+            while (samples.size() < MAX_OVERVIEW_SAMPLES_PER_FRAME
+                && examined < visibleCellCount) {
+                int index = (startIndex + examined++) % visibleCellCount;
+                int column = index % cellsX;
+                int row = index / cellsX;
+                int x = startX + column * cellBlocks;
+                int z = startZ + row * cellBlocks;
+                OverviewBiomeKey key = new OverviewBiomeKey(seed, context.dimension(), cellBlocks,
+                    Math.floorDiv(x, cellBlocks), Math.floorDiv(z, cellBlocks));
+                if (overviewBiomeColorCache.containsKey(key)) continue;
+                samples.add(new OverviewBiomeSample(key, x + cellBlocks / 2,
+                    z + cellBlocks / 2));
+            }
+            overviewSampleCursor = (startIndex + Math.max(1, examined)) % visibleCellCount;
+            int requestedGeneration = overviewGeneration;
+            int dimension = context.dimension();
+            if (samples.isEmpty() || !WorkerManager.get().submit(() -> {
+                try {
+                    for (OverviewBiomeSample sample : samples) {
+                        int color = BiomeGenerator.getBiomeColor(
+                            sample.x(), sample.z(), seed, dimension);
+                        if (overviewGeneration != requestedGeneration) return;
+                        overviewBiomeColorCache.put(sample.key(), color);
+                    }
+                } finally {
+                    overviewBatchInFlight.set(false);
+                }
+            })) {
+                overviewBatchInFlight.set(false);
+            }
+        }
+
         if (overviewBiomeColorCache.size() > MAX_OVERVIEW_COLOR_CACHE) {
             overviewBiomeColorCache.clear();
+            overviewSampleCursor = 0;
         }
 
         Renderer2D renderer = Renderer2D.COLOR;
         renderer.begin();
         for (int z = startZ; z <= endZ; z += cellBlocks) {
             for (int x = startX; x <= endX; x += cellBlocks) {
-                int sampleX = x + cellBlocks / 2;
-                int sampleZ = z + cellBlocks / 2;
                 OverviewBiomeKey key = new OverviewBiomeKey(seed, context.dimension(), cellBlocks, Math.floorDiv(x, cellBlocks), Math.floorDiv(z, cellBlocks));
-                int abgr = overviewBiomeColorCache.computeIfAbsent(key, ignored -> BiomeGenerator.getBiomeColor(sampleX, sampleZ, context.dimension()));
+                Integer cachedColor = overviewBiomeColorCache.get(key);
+                int abgr = cachedColor != null ? cachedColor : overviewPlaceholder(context.dimension());
                 Color color = colorFromAbgr(abgr, context.biomeOpacity());
 
                 double sx = viewport.screenX(x);
@@ -411,6 +490,14 @@ public class SeedRenderer {
             }
         }
         renderer.render();
+    }
+
+    private static int overviewPlaceholder(int dimension) {
+        return switch (dimension) {
+            case -1 -> 0xFF28245C;
+            case 1 -> 0xFF7EBCBC;
+            default -> 0xFF3E5636;
+        };
     }
 
     private int overviewCellBlocks(double zoom) {
@@ -452,7 +539,7 @@ public class SeedRenderer {
             double sx = viewport.screenX(structure.x);
             double sy = viewport.screenY(structure.z);
 
-            Color color = StructureColors.get(structure.type);
+            Color color = MeteorColorAdapter.toMeteor(StructureColors.get(structure.type));
             if (context.dimWaypointStructures() && WaypointManager.get().hasWaypointAt(structure.x, structure.z, context.dimension())) {
                 color = new Color(color.r / 2, color.g / 2, color.b / 2, color.a / 2);
             }
@@ -537,7 +624,7 @@ public class SeedRenderer {
             case NETHER_FOSSIL -> 42.0;
             case MINESHAFT -> 20.0;
             case SHIPWRECK, OCEAN_RUIN, RUINED_PORTAL, TRAIL_RUINS -> 18.0;
-            case DESERT_PYRAMID, JUNGLE_TEMPLE, WITCH_HUT, IGLOO, OUTPOST -> 45.0;
+            case DESERT_PYRAMID, JUNGLE_TEMPLE, WITCH_HUT, IGLOO, OUTPOST, ABANDONED_CAMP -> 45.0;
             case VILLAGE -> 85.0;
             case MONUMENT, MANSION, ANCIENT_CITY, TRIAL_CHAMBER, STRONGHOLD,
                  FORTRESS, BASTION, END_CITY -> 160.0;
@@ -564,7 +651,7 @@ public class SeedRenderer {
     private void renderStructureIcon(GeneratedStructure structure, double x, double y, double size, Color fallbackColor) {
         renderIconBackplate(x, y, size, fallbackColor);
 
-        Texture texture = StructureIcons.get(structure);
+        var texture = StructureIcons.get(structure);
         if (texture != null) {
             Color tint = new Color(255, 255, 255, fallbackColor.a);
             Renderer2D renderer = Renderer2D.TEXTURE;
@@ -720,7 +807,7 @@ public class SeedRenderer {
         renderer.render();
     }
 
-    private void renderPlayerInfo(MapRenderContext context, GuiTheme theme) {
+    private void renderPlayerInfo(MapRenderContext context, GuiTheme theme, GuiGraphicsExtractor graphics) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.level == null) return;
 
@@ -732,7 +819,7 @@ public class SeedRenderer {
         }
 
         Color color = playerDimension == context.dimension() ? new Color(240, 32, 36, 245) : new Color(165, 165, 170, 220);
-        theme.textRenderer().begin(1.0);
+        theme.textRenderer().begin(graphics, 1.0);
         theme.textRenderer().render(info, 10, context.viewport().height() - 40, color);
         theme.textRenderer().end();
     }
@@ -785,7 +872,7 @@ public class SeedRenderer {
         renderer.render();
     }
 
-    private void renderCoordinates(MapRenderContext context, GuiTheme theme) {
+    private void renderCoordinates(MapRenderContext context, GuiTheme theme, GuiGraphicsExtractor graphics) {
         MapViewport viewport = context.viewport();
         double worldX = viewport.worldX(context.mouseX());
         double worldZ = viewport.worldZ(context.mouseY());
@@ -798,7 +885,7 @@ public class SeedRenderer {
         renderer.quad(0, viewport.height() - 46, viewport.width(), 46, STATUS_BAR_COLOR);
         renderer.render();
 
-        theme.textRenderer().begin(1.0);
+        theme.textRenderer().begin(graphics, 1.0);
         theme.textRenderer().render(coords, 10, viewport.height() - 20, theme.textColor());
         theme.textRenderer().render("+", viewport.width() / 2.0 - 3, viewport.height() / 2.0 - 4, CENTER_CROSSHAIR_COLOR);
         theme.textRenderer().end();
@@ -812,6 +899,9 @@ public class SeedRenderer {
     }
 
     private record OverviewBiomeKey(long seed, int dimension, int cellBlocks, int cellX, int cellZ) {
+    }
+
+    private record OverviewBiomeSample(OverviewBiomeKey key, int x, int z) {
     }
 
     private static final class FossilCluster {

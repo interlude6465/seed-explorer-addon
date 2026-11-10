@@ -5,7 +5,7 @@
 
 package me.seedexplorer.addon.render;
 
-import com.mojang.blaze3d.textures.FilterMode;
+import com.mojang.renderpearl.api.textures.FilterMode;
 import meteordevelopment.meteorclient.renderer.Texture;
 
 import java.util.HashMap;

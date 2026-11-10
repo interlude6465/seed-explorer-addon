@@ -91,10 +91,9 @@ public final class EnchantingTablePredictor {
             return null;
         }
 
-        EnchantingSeedCracker.observe(level, player, menu);
-        Integer crackedSeed = EnchantingSeedCracker.resolvedSeed(menu.getEnchantmentSeed());
-        return current(level, player, crackedSeed == null ? menu.getEnchantmentSeed() : crackedSeed,
-            crackedSeed != null);
+        // The shared predictor does not own seed recovery. Frontends with a cracker should
+        // call the explicit-seed overload once they have resolved the masked menu value.
+        return current(level, player, menu.getEnchantmentSeed(), false);
     }
 
     /** Reads the active menu while using a recovered full XP seed when available. */

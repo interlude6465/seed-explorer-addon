@@ -4,8 +4,9 @@ import me.seedexplorer.addon.worldgen.GeneratedTerrainHeightmap;
 import me.seedexplorer.addon.worldgen.WorldgenEngine;
 import net.minecraft.SharedConstants;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.Bootstrap;
-import net.minecraft.tags.BlockTags;
+import net.minecraft.tags.TagKey;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.levelgen.structure.BuiltinStructures;
 
@@ -29,13 +30,18 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Fail-fast, version-pinned regression suite for every strict real-server loot
- * oracle currently accepted by the product, plus the controlled terrain case
- * that exposed missing vanilla carver tags.
+ * Fail-fast legacy regression suite for the real-server loot oracles captured
+ * on 26.1.2, plus the controlled terrain case that exposed missing vanilla
+ * carver tags. This suite intentionally skips on every other runtime version;
+ * passing it must never be presented as certification for current-version data.
  */
 public final class PredictionRegressionSuite {
     private static final PrintStream OUT = System.out;
-    private static final String MINECRAFT_VERSION = "26.1.2";
+    private static final String LEGACY_ORACLE_VERSION = "26.1.2";
+    private static final TagKey<net.minecraft.world.level.block.Block>
+        LEGACY_OVERWORLD_CARVER_REPLACEABLES = TagKey.create(
+            Registries.BLOCK,
+            Identifier.fromNamespaceAndPath("minecraft", "overworld_carver_replaceables"));
     private static final int EXPECTED_CARVER_REPLACEABLES = 52;
     private static final String TERRAIN_HEIGHT_SHA256 =
         "0cc0e2ff0a42b5daeed1649bb54888a1823c5b6d8f013de767fb9b2da1feb2d8";
@@ -50,15 +56,16 @@ public final class PredictionRegressionSuite {
 
         List<String> failures = new ArrayList<>();
         String runtimeVersion = SharedConstants.getCurrentVersion().name();
-        if (!runtimeVersion.equals(MINECRAFT_VERSION)) {
-            failures.add("Minecraft version expected=" + MINECRAFT_VERSION
-                + " actual=" + runtimeVersion);
+        if (!runtimeVersion.equals(LEGACY_ORACLE_VERSION)) {
+            OUT.println("SKIPPED legacy prediction regression suite: captured_oracle_version="
+                + LEGACY_ORACLE_VERSION + " runtime_version=" + runtimeVersion);
+            return;
         }
 
         int replaceableCount = 0;
         for (var ignored : WorldgenEngine.offlineRegistryAccess()
             .lookupOrThrow(Registries.BLOCK)
-            .getTagOrEmpty(BlockTags.OVERWORLD_CARVER_REPLACEABLES)) {
+            .getTagOrEmpty(LEGACY_OVERWORLD_CARVER_REPLACEABLES)) {
             replaceableCount++;
         }
         OUT.println("carver_replaceables=" + replaceableCount);

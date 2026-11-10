@@ -1,3 +1,5 @@
+import java.util.zip.ZipFile
+
 // Simple Java project that compiles the addon against the meteor-client jar and Minecraft dependencies
 plugins {
     java
@@ -16,9 +18,72 @@ repositories {
 
 val generatedResourcesDir = layout.buildDirectory.dir("generated/seedExplorerResources")
 
+val coreModel by sourceSets.creating
+val standaloneFabric by sourceSets.creating
+
 sourceSets {
     main {
         resources.srcDir(generatedResourcesDir)
+        compileClasspath += coreModel.output
+        runtimeClasspath += coreModel.output
+    }
+    named("standaloneFabric") {
+        java.srcDir("src/main/java")
+        java.include("me/seedexplorer/standalone/**/*.java")
+        java.include("me/seedexplorer/addon/enchant/EnchantingTablePredictor.java")
+        java.include("me/seedexplorer/addon/enchant/EnchantingTargetPlanner.java")
+        java.include("me/seedexplorer/addon/worldgen/BiomeColorPalette.java")
+        java.include("me/seedexplorer/addon/worldgen/OfflineWorldgenResources.java")
+        java.include("me/seedexplorer/addon/worldgen/WorldgenEngine.java")
+        java.include("me/seedexplorer/addon/worldgen/VanillaStructurePredictor.java")
+        java.include("me/seedexplorer/addon/worldgen/GeneratedTerrainHeightmap.java")
+        java.include("me/seedexplorer/addon/worldgen/HorizonTerrainSampler.java")
+        java.include("me/seedexplorer/addon/live/LiveChunkSnapshot.java")
+        java.include("me/seedexplorer/addon/ore/OrePatch.java")
+        java.include("me/seedexplorer/addon/ore/OrePredictor.java")
+        java.include("me/seedexplorer/addon/ore/OreType.java")
+        java.include("me/seedexplorer/addon/preview/StructurePreviewModel.java")
+        java.include("me/seedexplorer/addon/preview/StructurePreviewSimulator.java")
+        java.include("me/seedexplorer/addon/waypoints/SeedWaypoint.java")
+        java.include("me/seedexplorer/addon/render/BlockTextureAtlas.java")
+        java.include("me/seedexplorer/addon/render/FreeCamera3D.java")
+        java.include("me/seedexplorer/addon/render/GpuTextureResource.java")
+        java.include("me/seedexplorer/addon/render/MapLayer.java")
+        java.include("me/seedexplorer/addon/render/MapRenderContext.java")
+        java.include("me/seedexplorer/addon/render/MapViewport.java")
+        java.include("me/seedexplorer/addon/render/MeshUniformBuffer.java")
+        java.include("me/seedexplorer/addon/render/RgbaColor.java")
+        java.include("me/seedexplorer/addon/render/SeedExplorerRenderPipelines.java")
+        java.include("me/seedexplorer/addon/render/StructureColors.java")
+        java.include("me/seedexplorer/addon/render/StructureIcons.java")
+        java.include("me/seedexplorer/addon/render/Terrain3DRenderer.java")
+        java.include("me/seedexplorer/addon/render/TerrainDiskCache.java")
+        java.include("me/seedexplorer/addon/render/TerrainFocusTarget.java")
+        java.include("me/seedexplorer/addon/render/TerrainGenerationMode.java")
+        java.include("me/seedexplorer/addon/render/TerrainLodPolicy.java")
+        java.include("me/seedexplorer/addon/render/TerrainMaterialPolicy.java")
+        java.include("me/seedexplorer/addon/render/TerrainOverlayRenderer.java")
+        java.include("me/seedexplorer/addon/render/TerrainOverlayRenderers.java")
+        java.include("me/seedexplorer/addon/render/TerrainPresentationFrontier.java")
+        java.include("me/seedexplorer/addon/render/TerrainStreamingCursor.java")
+        java.include("me/seedexplorer/addon/render/TerrainStreamStateStore.java")
+        java.include("me/seedexplorer/addon/render/TerrainWorldDataSource.java")
+        java.include("me/seedexplorer/addon/render/TextureRegion.java")
+        java.include("me/seedexplorer/addon/loot/BundledLootTableLoader.java")
+        java.include("me/seedexplorer/addon/loot/ChestLootOutput.java")
+        java.include("me/seedexplorer/addon/loot/ItemLoot.java")
+        java.include("me/seedexplorer/addon/loot/ItemLootRequest.java")
+        java.include("me/seedexplorer/addon/loot/LootSearchParser.java")
+        java.include("me/seedexplorer/addon/loot/LootSearchTerm.java")
+        java.include("me/seedexplorer/addon/loot/LootPool.java")
+        java.include("me/seedexplorer/addon/loot/LootRandom.java")
+        java.include("me/seedexplorer/addon/loot/LootTableDef.java")
+        java.include("me/seedexplorer/addon/loot/LootTableSimulator.java")
+        java.include("me/seedexplorer/addon/loot/StandaloneStructureLootPredictor.java")
+        java.include("me/seedexplorer/addon/loot/VanillaLootStructureSimulator.java")
+        java.include("me/seedexplorer/addon/loot/VanillaLootTables.java")
+        compileClasspath += coreModel.output
+        runtimeClasspath += coreModel.output
     }
 }
 
@@ -43,40 +108,43 @@ dependencies {
 
     val meteorClientClasses = file("../build/classes/java/main")
     val meteorClientResources = file("../build/resources/main")
-    val minecraftMergedJar = file("../.gradle/loom-cache/minecraftMaven/net/minecraft/minecraft-merged-ea76bb5afc/26.1.2/minecraft-merged-ea76bb5afc-26.1.2.jar")
-    val brigadierJar = cachedJar("com.mojang", "brigadier", "1.3.10")
+    val minecraftMergedJar = file("../.gradle/loom-cache/minecraftMaven/net/minecraft/minecraft-merged-b374768f74/26.3/minecraft-merged-b374768f74-26.3.jar")
+    val brigadierJar = cachedJar("com.mojang", "brigadier", "1.3.11")
     val orbitJar = cachedJar("meteordevelopment", "orbit", "0.2.4")
-    val fabricLoaderJar = cachedJar("net.fabricmc", "fabric-loader", "0.19.2")
-    val mixinJar = cachedJar("net.fabricmc", "sponge-mixin", "0.17.2+mixin.0.8.7")
+    val fabricLoaderJar = cachedJar("net.fabricmc", "fabric-loader", "0.19.5")
+    val mixinJar = cachedJar("net.fabricmc", "sponge-mixin", "0.17.4+mixin.0.8.7")
     val jspecifyJar = cachedJar("org.jspecify", "jspecify", "1.0.0")
     val fastutilJar = cachedJar("it.unimi.dsi", "fastutil", "8.5.18")
-    val gsonJar = cachedJar("com.google.code.gson", "gson", "2.13.2")
-    val guavaJar = cachedJar("com.google.guava", "guava", "33.5.0-jre")
+    val gsonJar = cachedJar("com.google.code.gson", "gson", "2.14.0")
+    val guavaJar = cachedJar("com.google.guava", "guava", "33.6.0-jre")
     val failureAccessJar = cachedJar("com.google.guava", "failureaccess", "1.0.3")
-    val log4jApiJar = cachedJar("org.apache.logging.log4j", "log4j-api", "2.25.2")
-    val log4jCoreJar = cachedJar("org.apache.logging.log4j", "log4j-core", "2.25.2")
+    val log4jApiJar = cachedJar("org.apache.logging.log4j", "log4j-api", "2.26.0")
+    val log4jCoreJar = cachedJar("org.apache.logging.log4j", "log4j-core", "2.26.0")
     val slf4jJar = cachedJar("org.slf4j", "slf4j-api", "2.0.17")
-    val datafixerupperJar = cachedJar("com.mojang", "datafixerupper", "9.0.19")
-    val jomlJar = cachedJar("org.joml", "joml", "1.10.8")
-    val icu4jJar = cachedJar("com.ibm.icu", "icu4j", "77.1")
-    val authlibJar = cachedJar("com.mojang", "authlib", "7.0.63")
-    val mojangLoggingJar = cachedJar("com.mojang", "logging", "1.6.11")
-    val jtracyJar = cachedJar("com.mojang", "jtracy", "1.0.37")
+    val datafixerupperJar = cachedJar("com.mojang", "datafixerupper", "10.0.21")
+    val jomlJar = cachedJar("org.joml", "joml", "1.10.9")
+    val icu4jJar = cachedJar("com.ibm.icu", "icu4j", "78.3")
+    val authlibJar = cachedJar("com.mojang", "authlib", "10.0.77")
+    val mojangLoggingJar = cachedJar("com.mojang", "logging", "1.7.12")
+    val jtracyJar = cachedJar("com.mojang", "jtracy", "1.14.38")
     val lz4Jar = cachedJar("at.yawk.lz4", "lz4-java", "1.10.1")
-    val nettyCommonJar = cachedJar("io.netty", "netty-common", "4.2.7.Final")
-    val nettyBufferJar = cachedJar("io.netty", "netty-buffer", "4.2.7.Final")
-    val nettyTransportJar = cachedJar("io.netty", "netty-transport", "4.2.7.Final")
-    val nettyResolverJar = cachedJar("io.netty", "netty-resolver", "4.2.7.Final")
-    val nettyCodecBaseJar = cachedJar("io.netty", "netty-codec-base", "4.2.7.Final")
-    val nettyHandlerJar = cachedJar("io.netty", "netty-handler", "4.2.7.Final")
-    val commonsLang3Jar = cachedJar("org.apache.commons", "commons-lang3", "3.19.0")
-    val fabricApiBaseJar = cachedJar("net.fabricmc.fabric-api", "fabric-api-base", "2.0.3+ece063234c")
-    val fabricResourceLoaderJar = cachedJar("net.fabricmc.fabric-api", "fabric-resource-loader-v1", "2.0.9+d871b99e4c")
+    val nettyCommonJar = cachedJar("io.netty", "netty-common", "4.2.16.Final")
+    val nettyBufferJar = cachedJar("io.netty", "netty-buffer", "4.2.16.Final")
+    val nettyTransportJar = cachedJar("io.netty", "netty-transport", "4.2.16.Final")
+    val nettyResolverJar = cachedJar("io.netty", "netty-resolver", "4.2.16.Final")
+    val nettyCodecBaseJar = cachedJar("io.netty", "netty-codec-base", "4.2.16.Final")
+    val nettyHandlerJar = cachedJar("io.netty", "netty-handler", "4.2.16.Final")
+    val commonsLang3Jar = cachedJar("org.apache.commons", "commons-lang3", "3.20.0")
+    val fabricApiBaseJar = cachedJar("net.fabricmc.fabric-api", "fabric-api-base", "2.0.6+fcdff87f5d")
+    val fabricResourceLoaderJar = cachedJar("net.fabricmc.fabric-api", "fabric-resource-loader-v1", "3.0.4+ba0d6c0d5d")
+    val fabricKeyMappingJar = cachedJar("net.fabricmc.fabric-api", "fabric-key-mapping-api-v1", "2.0.8+3434d6d95d")
+    val fabricLifecycleJar = cachedJar("net.fabricmc.fabric-api", "fabric-lifecycle-events-v1", "4.1.9+ffef5f675d")
+    val fabricRenderingJar = cachedJar("net.fabricmc.fabric-api", "fabric-rendering-v1", "27.2.0+eb9fe70b5d")
     // LWJGL: needed at compile time to stitch block textures into an atlas via STBImage
     // (BufferUtils/MemoryUtil/MemoryStack in core, STBImage in stb). Already on the
     // runtime classpath transitively via Minecraft; these make them compile-visible.
-    val lwjglJar = cachedJar("org.lwjgl", "lwjgl", "3.4.1")
-    val lwjglStbJar = cachedJar("org.lwjgl", "lwjgl-stb", "3.4.1")
+    val lwjglJar = cachedJar("org.lwjgl", "lwjgl", "3.4.3")
+    val lwjglStbJar = cachedJar("org.lwjgl", "lwjgl-stb", "3.4.3")
 
     compileOnly(files(
         meteorClientClasses, meteorClientResources, minecraftMergedJar, brigadierJar, orbitJar, fabricLoaderJar,
@@ -85,6 +153,17 @@ dependencies {
         icu4jJar, authlibJar, mojangLoggingJar, jtracyJar, lz4Jar,
         nettyCommonJar, nettyBufferJar, nettyTransportJar, nettyResolverJar, nettyCodecBaseJar, nettyHandlerJar,
         commonsLang3Jar, fabricApiBaseJar, fabricResourceLoaderJar, lwjglJar, lwjglStbJar
+    ))
+
+    add(standaloneFabric.compileOnlyConfigurationName, files(
+        minecraftMergedJar, brigadierJar, fabricLoaderJar, mixinJar, jspecifyJar, fastutilJar,
+        gsonJar, guavaJar, failureAccessJar, log4jApiJar, log4jCoreJar, slf4jJar,
+        datafixerupperJar, jomlJar, icu4jJar, authlibJar, mojangLoggingJar, jtracyJar,
+        lz4Jar, nettyCommonJar, nettyBufferJar, nettyTransportJar, nettyResolverJar,
+        nettyCodecBaseJar, nettyHandlerJar, commonsLang3Jar,
+        fabricApiBaseJar, fabricResourceLoaderJar, fabricKeyMappingJar, fabricLifecycleJar,
+        fabricRenderingJar,
+        lwjglJar, lwjglStbJar
     ))
 }
 
@@ -95,6 +174,275 @@ java {
 }
 
 tasks {
+    val verifyCoreModelIsolation by registering {
+        group = "verification"
+        description = "Ensures the standalone core model has no Minecraft, Fabric, or Meteor dependencies."
+        inputs.files(coreModel.allJava)
+
+        doLast {
+            val forbidden = listOf("meteordevelopment.", "net.minecraft.", "net.fabricmc.")
+            val violations = coreModel.allJava.files.flatMap { source ->
+                source.readLines().mapIndexedNotNull { index, line ->
+                    val dependency = forbidden.firstOrNull(line::contains) ?: return@mapIndexedNotNull null
+                    "${source.relativeTo(projectDir)}:${index + 1}: $dependency"
+                }
+            }
+            check(violations.isEmpty()) {
+                "Standalone core model contains forbidden dependencies:\n${violations.joinToString("\n")}"
+            }
+        }
+    }
+
+    named(coreModel.classesTaskName) {
+        dependsOn(verifyCoreModelIsolation)
+    }
+
+    compileJava {
+        dependsOn(named(coreModel.classesTaskName))
+    }
+
+    register<Jar>("coreModelJar") {
+        group = "build"
+        description = "Builds the dependency-free Seed Explorer prediction model."
+        archiveClassifier.set("core-model")
+        from(coreModel.output)
+    }
+
+    val verifyStandaloneFabricIsolation by registering {
+        group = "verification"
+        description = "Ensures the standalone Fabric frontend has no Meteor dependencies."
+        inputs.files(standaloneFabric.allJava)
+
+        doLast {
+            val violations = standaloneFabric.allJava.files.flatMap { source ->
+                source.readLines().mapIndexedNotNull { index, line ->
+                    if (!line.contains("meteordevelopment.")) return@mapIndexedNotNull null
+                    "${source.relativeTo(projectDir)}:${index + 1}"
+                }
+            }
+            check(violations.isEmpty()) {
+                "Standalone Fabric frontend contains Meteor dependencies:\n${violations.joinToString("\n")}"
+            }
+
+            val parentBuildClasses = projectDir.parentFile.resolve("build/classes").toPath()
+                .toAbsolutePath().normalize()
+            val parentBuildResources = projectDir.parentFile.resolve("build/resources").toPath()
+                .toAbsolutePath().normalize()
+            val forbiddenClasspath = standaloneFabric.compileClasspath.files.filter { entry ->
+                val path = entry.toPath().toAbsolutePath().normalize()
+                path.startsWith(parentBuildClasses)
+                    || path.startsWith(parentBuildResources)
+                    || entry.name.contains("meteor-client", ignoreCase = true)
+                    || entry.path.contains("meteordevelopment", ignoreCase = true)
+            }
+            check(forbiddenClasspath.isEmpty()) {
+                "Standalone compile classpath contains Meteor build outputs:\n" +
+                    forbiddenClasspath.joinToString("\n")
+            }
+        }
+    }
+
+    named(standaloneFabric.classesTaskName) {
+        dependsOn(verifyStandaloneFabricIsolation, named(coreModel.classesTaskName))
+    }
+
+    named<ProcessResources>(standaloneFabric.processResourcesTaskName) {
+        val propertyMap = mapOf(
+            "version" to project.version,
+            "jdk_version" to "25",
+            "minecraft_version" to "26.3",
+            "loader_version" to "0.19.5"
+        )
+        inputs.properties(propertyMap)
+        filesMatching("fabric.mod.json") {
+            expand(propertyMap)
+        }
+    }
+
+    val standaloneFabricJar by registering(Jar::class) {
+        group = "build"
+        description = "Builds the Meteor-independent Fabric client frontend."
+        dependsOn(named(standaloneFabric.classesTaskName), "generateBlockTextureIndex")
+        archiveBaseName.set("seed-explorer")
+        archiveClassifier.set("standalone-fabric")
+        from(coreModel.output)
+        from(standaloneFabric.output)
+        from("src/main/resources/data/meteor-seed-explorer/versioned_loot") {
+            into("data/seed-explorer/versioned_loot")
+            include("26.1.2/**", "26.2/**", "26.3/**", "provenance.tsv")
+        }
+        from("src/main/resources") {
+            include("assets/meteor-seed-explorer/shaders/**")
+            include("assets/meteor-seed-explorer/textures/blocks/**")
+            include("assets/meteor-seed-explorer/textures/structures/**")
+        }
+        from(generatedResourcesDir) {
+            include("assets/meteor-seed-explorer/textures/blocks/index.txt")
+        }
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    }
+
+    val verifyStandaloneFabricJar by registering {
+        group = "verification"
+        description = "Rejects Meteor symbols and compatibility resources in the standalone jar."
+        dependsOn(standaloneFabricJar)
+
+        doLast {
+            val artifact = standaloneFabricJar.get().archiveFile.get().asFile
+            ZipFile(artifact).use { zip ->
+                val forbiddenEntries = zip.entries().asSequence()
+                    .map { it.name }
+                    .filter {
+                        it.startsWith("meteordevelopment/")
+                            || it.startsWith("assets/meteor-client/")
+                    }
+                    .toList()
+                check(forbiddenEntries.isEmpty()) {
+                    "Standalone jar contains Meteor compatibility entries:\n${forbiddenEntries.joinToString("\n")}"
+                }
+
+                val forbiddenSymbols = listOf(
+                    "meteordevelopment/",
+                    "meteordevelopment.",
+                    "me/seedexplorer/addon/seed/",
+                    "me.seedexplorer.addon.seed.",
+                    "me/seedexplorer/addon/gui/",
+                    "me.seedexplorer.addon.gui.",
+                    "me/seedexplorer/addon/modules/",
+                    "me.seedexplorer.addon.modules.",
+                    "meteor-client"
+                )
+                val forbiddenClasses = zip.entries().asSequence()
+                    .filter { !it.isDirectory && it.name.endsWith(".class") }
+                    .filter { entry ->
+                        zip.getInputStream(entry).use { stream ->
+                            val bytecode = String(stream.readBytes(), Charsets.ISO_8859_1)
+                            forbiddenSymbols.any(bytecode::contains)
+                        }
+                    }
+                    .map { it.name }
+                    .toList()
+                check(forbiddenClasses.isEmpty()) {
+                    "Standalone jar contains Meteor bytecode references:\n${forbiddenClasses.joinToString("\n")}"
+                }
+
+                val entries = zip.entries().asSequence()
+                    .filter { !it.isDirectory }
+                    .map { it.name }
+                    .toSet()
+                val internalReference = Regex("me/seedexplorer/[A-Za-z0-9_$/]+")
+                val dottedInternalReference = Regex("me\\.seedexplorer\\.[A-Za-z0-9_$.]+")
+                val missingInternalClasses = zip.entries().asSequence()
+                    .filter { !it.isDirectory && it.name.endsWith(".class") }
+                    .flatMap { entry ->
+                        val bytecode = zip.getInputStream(entry).use { stream ->
+                            String(stream.readBytes(), Charsets.ISO_8859_1)
+                        }
+                        val references = internalReference.findAll(bytecode)
+                            .mapTo(mutableListOf()) { match -> match.value + ".class" }
+                        dottedInternalReference.findAll(bytecode)
+                            .mapTo(references) { match ->
+                                match.value.replace('.', '/') + ".class"
+                            }
+                        references.asSequence()
+                    }
+                    .filter { it !in entries }
+                    .distinct()
+                    .sorted()
+                    .toList()
+                check(missingInternalClasses.isEmpty()) {
+                    "Standalone jar has missing Seed Explorer class references:\n" +
+                        missingInternalClasses.joinToString("\n")
+                }
+
+                val metadataEntry = zip.getEntry("fabric.mod.json")
+                    ?: error("Standalone jar is missing fabric.mod.json")
+                val metadata = zip.getInputStream(metadataEntry).bufferedReader().use { it.readText() }
+                check(!metadata.contains("${'$'}{")) {
+                    "Standalone fabric.mod.json contains unexpanded placeholders"
+                }
+                check(!metadata.contains("meteor", ignoreCase = true)) {
+                    "Standalone fabric.mod.json contains Meteor metadata"
+                }
+                val entrypoint = "me.seedexplorer.standalone.SeedExplorerFabricClient"
+                check(metadata.contains(entrypoint)) {
+                    "Standalone fabric.mod.json does not declare $entrypoint"
+                }
+                check("me/seedexplorer/standalone/SeedExplorerFabricClient.class" in entries) {
+                    "Standalone jar is missing its declared client entrypoint"
+                }
+            }
+        }
+    }
+    standaloneFabricJar.configure {
+        finalizedBy(verifyStandaloneFabricJar)
+    }
+
+    register<JavaExec>("standaloneEngineProbe") {
+        group = "verification"
+        description = "Loads biome and structure prediction from the packaged standalone artifact."
+        dependsOn(standaloneFabricJar)
+        mainClass.set("me.seedexplorer.standalone.StandaloneEngineProbe")
+        classpath = files(standaloneFabricJar.flatMap { it.archiveFile })
+            .plus(standaloneFabric.compileClasspath)
+    }
+
+    register<JavaExec>("standaloneRendererProbe") {
+        group = "verification"
+        description = "Links and initializes the packaged 3D renderer without Meteor."
+        dependsOn(standaloneFabricJar)
+        mainClass.set("me.seedexplorer.standalone.StandaloneRendererProbe")
+        classpath = files(standaloneFabricJar.flatMap { it.archiveFile })
+            .plus(standaloneFabric.compileClasspath)
+    }
+
+    register<JavaExec>("standaloneOreProbe") {
+        group = "verification"
+        description = "Runs deterministic ore prediction from the packaged standalone artifact."
+        dependsOn(standaloneFabricJar)
+        mainClass.set("me.seedexplorer.standalone.StandaloneOreProbe")
+        classpath = files(standaloneFabricJar.flatMap { it.archiveFile })
+            .plus(standaloneFabric.compileClasspath)
+    }
+
+    register<JavaExec>("standaloneLootProbe") {
+        group = "verification"
+        description = "Replays exact 26.3 structure loot from the packaged standalone artifact."
+        dependsOn(standaloneFabricJar)
+        mainClass.set("me.seedexplorer.standalone.StandaloneLootProbe")
+        classpath = files(standaloneFabricJar.flatMap { it.archiveFile })
+            .plus(standaloneFabric.compileClasspath)
+        jvmArgs("--add-opens", "java.base/jdk.internal.misc=ALL-UNNAMED",
+            "--add-opens", "java.base/java.lang=ALL-UNNAMED")
+    }
+
+    register<JavaExec>("standaloneMinimapProbe") {
+        group = "verification"
+        description = "Checks the standalone minimap's fixed frame-time and memory bounds."
+        dependsOn(standaloneFabricJar)
+        mainClass.set("me.seedexplorer.standalone.StandaloneMinimapProbe")
+        classpath = files(standaloneFabricJar.flatMap { it.archiveFile })
+            .plus(standaloneFabric.compileClasspath)
+    }
+
+    register<JavaExec>("standaloneWaypointProbe") {
+        group = "verification"
+        description = "Verifies standalone waypoint persistence and config isolation."
+        dependsOn(standaloneFabricJar)
+        mainClass.set("me.seedexplorer.standalone.StandaloneWaypointProbe")
+        classpath = files(standaloneFabricJar.flatMap { it.archiveFile })
+            .plus(standaloneFabric.compileClasspath)
+    }
+
+    register<JavaExec>("standaloneSettingsProbe") {
+        group = "verification"
+        description = "Validates the complete native settings contract and reset behavior."
+        dependsOn(standaloneFabricJar)
+        mainClass.set("me.seedexplorer.standalone.StandaloneSettingsProbe")
+        classpath = files(standaloneFabricJar.flatMap { it.archiveFile })
+            .plus(standaloneFabric.compileClasspath)
+    }
+
     val generateBlockTextureIndex by registering {
         val textureDir = layout.projectDirectory.dir("src/main/resources/assets/meteor-seed-explorer/textures/blocks")
         val indexFile = generatedResourcesDir.map {
@@ -116,11 +464,14 @@ tasks {
 
     processResources {
         dependsOn(generateBlockTextureIndex)
+        from("src/main/resources/data/meteor-seed-explorer/versioned_loot") {
+            into("data/seed-explorer/versioned_loot")
+        }
         val propertyMap = mapOf(
             "version" to project.version,
             "jdk_version" to "25",
-            "minecraft_version" to "26.1.2",
-            "loader_version" to "0.19.2"
+            "minecraft_version" to "26.3",
+            "loader_version" to "0.19.5"
         )
 
         inputs.properties(propertyMap)
@@ -130,6 +481,7 @@ tasks {
     }
 
     jar {
+        from(coreModel.output)
         from("src/main/resources")
         duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     }
@@ -698,6 +1050,35 @@ tasks {
         )
     }
 
+    register<JavaExec>("terrainThroughputProbe") {
+        group = "verification"
+        description = "Measures sustained parallel exact and interactive terrain throughput."
+        dependsOn(classes)
+        mainClass.set("me.seedexplorer.addon.tools.TerrainThroughputProbe")
+        classpath = sourceSets.main.get().runtimeClasspath + sourceSets.main.get().compileClasspath
+        args(
+            providers.gradleProperty("seed").orElse("42").get(),
+            providers.gradleProperty("chunks").orElse("96").get(),
+            providers.gradleProperty("threads").orElse("16").get()
+        )
+    }
+
+    register<JavaExec>("abandonedCampPolicyProbe") {
+        group = "verification"
+        description = "Checks the 26.3 abandoned-camp placement, variants, and bundled loot tables."
+        dependsOn(classes)
+        mainClass.set("me.seedexplorer.addon.tools.AbandonedCampPolicyProbe")
+        classpath = sourceSets.main.get().runtimeClasspath + sourceSets.main.get().compileClasspath
+    }
+
+    register<JavaExec>("predictionVersionPolicyProbe") {
+        group = "verification"
+        description = "Checks selected-profile introduction gates without invoking worldgen."
+        dependsOn(classes)
+        mainClass.set("me.seedexplorer.addon.tools.PredictionVersionPolicyProbe")
+        classpath = sourceSets.main.get().runtimeClasspath + sourceSets.main.get().compileClasspath
+    }
+
     register<JavaExec>("naturalFeatureSearchProbe") {
         group = "verification"
         description = "Searches one seed region for a circular ridge around a river-biome center."
@@ -720,6 +1101,14 @@ tasks {
         description = "Checks End City predictions distinguish ship and no-ship variants."
         dependsOn(classes)
         mainClass.set("me.seedexplorer.addon.tools.EndCityShipPredictionSmoke")
+        classpath = sourceSets.main.get().runtimeClasspath + sourceSets.main.get().compileClasspath
+    }
+
+    register<JavaExec>("exactStructureQueryParityProbe") {
+        group = "verification"
+        description = "Checks exact-key queries preserve vanilla mixed-set weighted selection."
+        dependsOn(classes)
+        mainClass.set("me.seedexplorer.addon.tools.ExactStructureQueryParityProbe")
         classpath = sourceSets.main.get().runtimeClasspath + sourceSets.main.get().compileClasspath
     }
 

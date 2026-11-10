@@ -11,6 +11,9 @@ import java.util.Optional;
 public final class EnchantingTargetPlanner {
     public static final int DEFAULT_MAX_ITEM_THROWS = 49_152;
     private static final int MAX_BOOKSHELF_POWER = EnchantingTableBlock.BOOKSHELF_OFFSETS.size();
+    private static final long JAVA_LCG_MULTIPLIER = 0x5deece66dL;
+    private static final long JAVA_LCG_ADDEND = 0xbL;
+    private static final long JAVA_LCG_MASK = (1L << 48) - 1;
 
     private EnchantingTargetPlanner() {
     }
@@ -116,7 +119,7 @@ public final class EnchantingTargetPlanner {
             return new FutureSearch(null, null);
         }
 
-        long stateAfterDrops = playerSeed & EnchantingPlayerRng.MASK;
+        long stateAfterDrops = playerSeed & JAVA_LCG_MASK;
         PartialPlan bestPartial = null;
         for (int itemThrows = 0; itemThrows <= maxItemThrows; itemThrows++) {
             long xpState = advance(stateAfterDrops);
@@ -215,8 +218,7 @@ public final class EnchantingTargetPlanner {
     }
 
     private static long advance(long seed) {
-        return (seed * EnchantingPlayerRng.MULTIPLIER + EnchantingPlayerRng.ADDEND)
-            & EnchantingPlayerRng.MASK;
+        return (seed * JAVA_LCG_MULTIPLIER + JAVA_LCG_ADDEND) & JAVA_LCG_MASK;
     }
 
     /** Chooses the least expensive available offer as a safe reroll suggestion. */

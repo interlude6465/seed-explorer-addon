@@ -5,7 +5,8 @@
 
 package me.seedexplorer.addon.structures;
 
-import me.seedexplorer.addon.seed.SeedManager;
+import me.seedexplorer.addon.seed.ActivePredictionContext;
+import me.seedexplorer.addon.worldgen.PredictionContext;
 import me.seedexplorer.addon.worldgen.VanillaStructurePredictor;
 
 import java.util.ArrayList;
@@ -45,15 +46,23 @@ public class StructurePredictor {
     public static List<GeneratedStructure> predict(int regionMinX, int regionMinZ,
                                                     int regionMaxX, int regionMaxZ,
                                                     int dimension) {
-        long seed = SeedManager.get().getWorldSeed();
-        if (seed == 0) return new ArrayList<>();
+        return predict(ActivePredictionContext.current(dimension), regionMinX, regionMinZ,
+            regionMaxX, regionMaxZ);
+    }
+
+    /** Explicit-context entry point for standalone and offline callers. */
+    public static List<GeneratedStructure> predict(PredictionContext context,
+                                                    int regionMinX, int regionMinZ,
+                                                    int regionMaxX, int regionMaxZ) {
+        if (context == null || context.worldSeed() == 0L) return new ArrayList<>();
 
         int chunkMinX = regionMinX * REGION_CHUNKS;
         int chunkMinZ = regionMinZ * REGION_CHUNKS;
         int chunkMaxX = regionMaxX * REGION_CHUNKS + (REGION_CHUNKS - 1);
         int chunkMaxZ = regionMaxZ * REGION_CHUNKS + (REGION_CHUNKS - 1);
 
-        return VanillaStructurePredictor.predictDimension(seed, dimension, chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ, false);
+        return VanillaStructurePredictor.predictDimension(context, chunkMinX, chunkMinZ,
+            chunkMaxX, chunkMaxZ, false);
     }
 
     /**

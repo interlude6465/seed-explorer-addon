@@ -65,7 +65,8 @@ public class OreCache {
         if (!WorkerManager.get().submit(() -> {
             try {
                 List<OrePatch> patches = OrePredictor.predictInChunkRange(
-                    chunkStartX, chunkStartZ, chunkEndX, chunkEndZ, dimension
+                    chunkStartX, chunkStartZ, chunkEndX, chunkEndZ,
+                    SeedManager.get().getWorldSeed(), dimension
                 );
                 if (generation == requestedGeneration && lastDimension == dimension) {
                     cache.put(regionKey, patches);

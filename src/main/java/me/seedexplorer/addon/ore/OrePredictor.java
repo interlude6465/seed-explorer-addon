@@ -5,9 +5,8 @@
 
 package me.seedexplorer.addon.ore;
 
-import me.seedexplorer.addon.seed.SeedManager;
+import me.seedexplorer.addon.worldgen.PredictionContext;
 import me.seedexplorer.addon.worldgen.WorldgenEngine;
-import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderLookup;
@@ -17,19 +16,18 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.util.Mth;
 import net.minecraft.util.valueproviders.IntProvider;
-import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.biome.FeatureSorter;
-import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.levelgen.GenerationStep;
 import net.minecraft.world.level.levelgen.VerticalAnchor;
 import net.minecraft.world.level.levelgen.WorldgenRandom;
 import net.minecraft.world.level.levelgen.WorldGenerationContext;
 import net.minecraft.world.level.levelgen.XoroshiroRandomSource;
-import net.minecraft.world.level.levelgen.feature.ConfiguredFeature;
+import net.minecraft.world.level.levelgen.feature.AbstractOreFeature;
+import net.minecraft.world.level.levelgen.feature.BlockReplacement;
+import net.minecraft.world.level.levelgen.feature.Feature;
 import net.minecraft.world.level.levelgen.feature.ScatteredOreFeature;
-import net.minecraft.world.level.levelgen.feature.configurations.OreConfiguration;
 import net.minecraft.world.level.levelgen.heightproviders.HeightProvider;
 import net.minecraft.world.level.levelgen.placement.BiomeFilter;
 import net.minecraft.world.level.levelgen.placement.CountPlacement;
@@ -71,40 +69,32 @@ public class OrePredictor {
      * @return List of predicted OrePatch objects for this chunk
      */
     public static List<OrePatch> predictInChunk(int chunkX, int chunkZ, long seed, int dimension) {
-        if (seed == 0L) return List.of();
         return predictedChunkOres(chunkX, chunkZ, seed, dimension);
+    }
+
+    public static List<OrePatch> predictInChunk(PredictionContext context, int chunkX, int chunkZ) {
+        return predictInChunk(chunkX, chunkZ, context.worldSeed(), context.dimension());
     }
 
     /**
      * Predicts one ore type inside a single chunk. Intended for debug reports.
      */
     public static List<OrePatch> predictInChunk(int chunkX, int chunkZ, long seed, int dimension, OreType oreType, int maxResults) {
-        if (seed == 0L || oreType.dimension != dimension || maxResults <= 0) return List.of();
+        if (oreType.dimension != dimension || maxResults <= 0) return List.of();
         return filterType(predictedChunkOres(chunkX, chunkZ, seed, dimension), oreType, maxResults);
     }
 
-    /**
-     * Finds nearby in-world ore markers for a single target ore using prediction only.
-     */
-    public static List<OrePatch> predictInChunkRadius(int centerChunkX, int centerChunkZ,
-                                                       int radiusChunks, int dimension,
-                                                       OreType oreType, int maxResults) {
-        int centerBlockX = (centerChunkX << 4) + 8;
-        int centerBlockZ = (centerChunkZ << 4) + 8;
-        int centerBlockY = Math.max(oreType.minY, Math.min(oreType.maxY, 64));
-        return predictInChunkRadius(centerChunkX, centerChunkZ, radiusChunks, dimension, oreType, maxResults, centerBlockX, centerBlockY, centerBlockZ);
+    public static List<OrePatch> predictInChunk(PredictionContext context, int chunkX, int chunkZ,
+                                                 OreType oreType, int maxResults) {
+        return predictInChunk(chunkX, chunkZ, context.worldSeed(), context.dimension(), oreType, maxResults);
     }
 
-    /**
-     * Finds nearby in-world ore markers for a single target ore using prediction only.
-     * Scans the whole requested radius, then keeps the closest predicted blocks.
-     */
-    public static List<OrePatch> predictInChunkRadius(int centerChunkX, int centerChunkZ,
-                                                       int radiusChunks, int dimension,
-                                                       OreType oreType, int maxResults,
+    public static List<OrePatch> predictInChunkRadius(PredictionContext context,
+                                                       int centerChunkX, int centerChunkZ,
+                                                       int radiusChunks, OreType oreType, int maxResults,
                                                        int centerBlockX, int centerBlockY, int centerBlockZ) {
-        long seed = SeedManager.get().getWorldSeed();
-        return predictInChunkRadius(centerChunkX, centerChunkZ, radiusChunks, dimension, oreType, maxResults, centerBlockX, centerBlockY, centerBlockZ, seed);
+        return predictInChunkRadius(centerChunkX, centerChunkZ, radiusChunks, context.dimension(), oreType,
+            maxResults, centerBlockX, centerBlockY, centerBlockZ, context.worldSeed());
     }
 
     /**
@@ -115,7 +105,7 @@ public class OrePredictor {
                                                        OreType oreType, int maxResults,
                                                        int centerBlockX, int centerBlockY, int centerBlockZ,
                                                        long seed) {
-        if (seed == 0L || oreType.dimension != dimension || maxResults <= 0) return List.of();
+        if (oreType.dimension != dimension || maxResults <= 0) return List.of();
 
         int radius = Math.max(0, Math.min(radiusChunks, 12));
         List<OrePatch> range = predictOreTypeInChunkRangeFast(
@@ -145,7 +135,7 @@ public class OrePredictor {
                                                                  int chunkMaxX, int chunkMaxZ,
                                                                  long seed, int dimension,
                                                                  OreType oreType) {
-        if (seed == 0L || oreType.dimension != dimension) return List.of();
+        if (oreType.dimension != dimension) return List.of();
 
         int minChunkX = Math.min(chunkMinX, chunkMaxX);
         int minChunkZ = Math.min(chunkMinZ, chunkMaxZ);
@@ -194,65 +184,11 @@ public class OrePredictor {
         return List.copyOf(results);
     }
 
-    /**
-     * Debug helper only. Normal ore ESP does not use loaded chunks.
-     */
-    public static List<OrePatch> scanLoadedChunks(int centerChunkX, int centerChunkZ,
-                                                   int radiusChunks, int dimension,
-                                                   OreType oreType, int maxResults) {
-        List<OrePatch> results = new ArrayList<>();
-        Minecraft mc = Minecraft.getInstance();
-        Level level = mc.level;
-        if (level == null || oreType.dimension != dimension || maxResults <= 0) return results;
-
-        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
-        int minY = Math.max(level.getMinY(), oreType.minY);
-        int maxY = Math.min(level.getMaxY() - 1, oreType.maxY);
-        if (minY > maxY) return results;
-
-        for (int dz = -radiusChunks; dz <= radiusChunks; dz++) {
-            for (int dx = -radiusChunks; dx <= radiusChunks; dx++) {
-                int chunkX = centerChunkX + dx;
-                int chunkZ = centerChunkZ + dz;
-                LevelChunk chunk = level.getChunkSource().getChunkNow(chunkX, chunkZ);
-                if (chunk == null) continue;
-
-                int baseX = chunkX << 4;
-                int baseZ = chunkZ << 4;
-                for (int y = minY; y <= maxY; y++) {
-                    for (int z = 0; z < 16; z++) {
-                        for (int x = 0; x < 16; x++) {
-                            pos.set(baseX + x, y, baseZ + z);
-                            if (!oreType.matches(chunk.getBlockState(pos))) continue;
-
-                            results.add(new OrePatch(pos.getX(), pos.getY(), pos.getZ(), oreType, true));
-                            if (results.size() >= maxResults) return results;
-                        }
-                    }
-                }
-            }
-        }
-
-        return results;
-    }
-
-    /**
-     * Predicts all ore patches for a range of chunks.
-     *
-     * @param chunkMinX Minimum chunk X (inclusive)
-     * @param chunkMinZ Minimum chunk Z (inclusive)
-     * @param chunkMaxX Maximum chunk X (inclusive)
-     * @param chunkMaxZ Maximum chunk Z (inclusive)
-     * @param dimension The dimension to predict for
-     * @return List of predicted OrePatch objects
-     */
-    public static List<OrePatch> predictInChunkRange(int chunkMinX, int chunkMinZ,
-                                                      int chunkMaxX, int chunkMaxZ,
-                                                      int dimension) {
-        long seed = SeedManager.get().getWorldSeed();
-        if (seed == 0L) return List.of();
-
-        return predictInChunkRange(chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ, seed, dimension);
+    public static List<OrePatch> predictInChunkRange(PredictionContext context,
+                                                      int chunkMinX, int chunkMinZ,
+                                                      int chunkMaxX, int chunkMaxZ) {
+        return predictInChunkRange(chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ,
+            context.worldSeed(), context.dimension());
     }
 
     /**
@@ -263,8 +199,6 @@ public class OrePredictor {
     public static List<OrePatch> predictInChunkRange(int chunkMinX, int chunkMinZ,
                                                       int chunkMaxX, int chunkMaxZ,
                                                       long seed, int dimension) {
-        if (seed == 0L) return List.of();
-
         int minChunkX = Math.min(chunkMinX, chunkMaxX);
         int minChunkZ = Math.min(chunkMinZ, chunkMaxZ);
         int maxChunkX = Math.max(chunkMinX, chunkMaxX);
@@ -330,17 +264,17 @@ public class OrePredictor {
 
                 PlacedFeature placedFeature = holder.value();
                 FeatureLocation location = locations.get(id);
-                ConfiguredFeature<?, ?> configured = placedFeature.feature().value();
-                String config = configured.config() instanceof OreConfiguration oreConfig
-                    ? "ore size=" + oreConfig.size + " discard=" + oreConfig.discardChanceOnAirExposure
-                    : configured.config().getClass().getSimpleName();
+                Feature configured = placedFeature.feature().value();
+                String config = configured instanceof AbstractOreFeature oreConfig
+                    ? "ore size=" + oreConfig.size() + " discard=" + oreConfig.discardChanceOnAirExposure()
+                    : configured.getClass().getSimpleName();
                 boolean inStep = location != null;
                 PlacementData placement = inStep ? placedFeatureData(id, placedFeature, seed, dimension) : null;
                 lines.add("  " + id
                     + " step=" + (location == null ? -1 : location.stepIndex())
                     + " index=" + (location == null ? -1 : location.featureIndex())
                     + " in_step=" + inStep
-                    + " feature=" + configured.feature().getClass().getSimpleName()
+                    + " feature=" + configured.getClass().getSimpleName()
                     + " config=" + config
                     + " placement=" + placedFeature.placement()
                     + " resolved=" + (!inStep ? "not_in_dimension_step" : placement == null ? "unsupported" : placement.describe()));
@@ -355,12 +289,12 @@ public class OrePredictor {
                     PlacementData placement = id == null ? null : placedFeatureData(id, feature, seed, dimension);
                     if (placement == null) continue;
 
-                    ConfiguredFeature<?, ?> configured = feature.feature().value();
-                    if (configured.config() instanceof OreConfiguration oreConfig) {
+                    Feature configured = feature.feature().value();
+                    if (configured instanceof AbstractOreFeature oreConfig) {
                         lines.add("  step=" + stepIndex + " index=" + featureIndex + " id=" + id
-                            + " feature=" + configured.feature().getClass().getSimpleName()
-                            + " size=" + oreConfig.size
-                            + " discard=" + oreConfig.discardChanceOnAirExposure
+                            + " feature=" + configured.getClass().getSimpleName()
+                            + " size=" + oreConfig.size()
+                            + " discard=" + oreConfig.discardChanceOnAirExposure()
                             + " placement=" + feature.placement()
                             + " resolved=" + placement.describe()
                             + " simulated=true");
@@ -380,7 +314,7 @@ public class OrePredictor {
     public static List<String> debugOrePlacementTrace(long seed, int dimension, OreType oreType,
                                                        int centerChunkX, int centerChunkZ,
                                                        int radiusChunks, int sampleLimit) {
-        if (seed == 0L || oreType.dimension != dimension || sampleLimit <= 0) return List.of();
+        if (oreType.dimension != dimension || sampleLimit <= 0) return List.of();
 
         List<OreFeatureSpec> specs = oreStepFeatures(seed, dimension).stream()
             .filter(spec -> specTargetsType(spec, oreType))
@@ -454,8 +388,8 @@ public class OrePredictor {
 
                             BlockState baseState = terrain.block(x, y, z);
                             boolean targetMatch = false;
-                            for (OreConfiguration.TargetBlockState targetState : spec.targetStates()) {
-                                if (canReplaceTarget(spec, targetState, baseState, random)) {
+                            for (BlockReplacement targetState : spec.targetStates()) {
+                                if (canReplaceTarget(spec, targetState, baseState, random, x, y, z)) {
                                     targetMatch = true;
                                     break;
                                 }
@@ -760,17 +694,17 @@ public class OrePredictor {
     private static BlockState placeStateOrNull(SimulatedTerrain terrain,
                                                OreFeatureSpec spec,
                                                WorldgenRandom random,
-                                               List<OreConfiguration.TargetBlockState> targetStates,
+                                               List<BlockReplacement> targetStates,
                                                float discardChanceOnAirExposure,
                                                int x,
                                                int y,
                                                int z) {
         BlockState baseState = terrain.block(x, y, z);
 
-        for (OreConfiguration.TargetBlockState targetState : targetStates) {
-            if (!canReplaceTarget(spec, targetState, baseState, random)) continue;
-            if (shouldSkipAirCheck(random, discardChanceOnAirExposure)) return targetState.state;
-            if (!isAdjacentToAir(terrain, x, y, z)) return targetState.state;
+        for (BlockReplacement targetState : targetStates) {
+            if (!canReplaceTarget(spec, targetState, baseState, random, x, y, z)) continue;
+            if (shouldSkipAirCheck(random, discardChanceOnAirExposure)) return targetState.state();
+            if (!isAdjacentToAir(terrain, x, y, z)) return targetState.state();
         }
 
         return null;
@@ -888,8 +822,8 @@ public class OrePredictor {
                     FeatureSorter.StepFeatureData step = steps.get(stepIndex);
                     for (int featureIndex = 0; featureIndex < step.features().size(); featureIndex++) {
                         PlacedFeature placedFeature = step.features().get(featureIndex);
-                        ConfiguredFeature<?, ?> configured = placedFeature.feature().value();
-                        if (!(configured.config() instanceof OreConfiguration oreConfig)) continue;
+                        Feature configured = placedFeature.feature().value();
+                        if (!(configured instanceof AbstractOreFeature oreConfig)) continue;
 
                         String id = idsByFeature.get(placedFeature);
                         PlacementData placement = id == null ? null : placedFeatureData(id, placedFeature, seed, dimension);
@@ -901,10 +835,10 @@ public class OrePredictor {
                             stepIndex,
                             featureIndex,
                             placement,
-                            oreConfig.targetStates,
-                            oreConfig.size,
-                            oreConfig.discardChanceOnAirExposure,
-                            configured.feature() instanceof ScatteredOreFeature
+                            oreConfig.targetStates(),
+                            oreConfig.size(),
+                            oreConfig.discardChanceOnAirExposure(),
+                            configured instanceof ScatteredOreFeature
                         ));
                     }
                 }
@@ -1005,11 +939,12 @@ public class OrePredictor {
     }
 
     private static boolean canReplaceTarget(OreFeatureSpec spec,
-                                            OreConfiguration.TargetBlockState targetState,
+                                            BlockReplacement targetState,
                                             BlockState baseState,
-                                            WorldgenRandom random) {
-        if (targetState.target.test(baseState, random)) return true;
-        return canReplaceByVanillaFallback(spec, targetState.state, baseState);
+                                            WorldgenRandom random,
+                                            int x, int y, int z) {
+        if (targetState.target().test(baseState, new BlockPos(x, y, z), random)) return true;
+        return canReplaceByVanillaFallback(spec, targetState.state(), baseState);
     }
 
     private static boolean canReplaceByVanillaFallback(OreFeatureSpec spec, BlockState targetState, BlockState baseState) {
@@ -1091,8 +1026,8 @@ public class OrePredictor {
     }
 
     private static boolean specTargetsType(OreFeatureSpec spec, OreType oreType) {
-        for (OreConfiguration.TargetBlockState targetState : spec.targetStates()) {
-            if (oreType.matches(targetState.state)) return true;
+        for (BlockReplacement targetState : spec.targetStates()) {
+            if (oreType.matches(targetState.state())) return true;
         }
         return false;
     }
@@ -1252,7 +1187,7 @@ public class OrePredictor {
     private record ChunkOreKey(long seed, int dimension, int chunkX, int chunkZ) {
     }
 
-    private record OreFeatureSpec(String sourceId, PlacedFeature placedFeature, int stepIndex, int featureIndex, PlacementData placement, List<OreConfiguration.TargetBlockState> targetStates, int size, float discardChanceOnAirExposure, boolean scattered) {
+    private record OreFeatureSpec(String sourceId, PlacedFeature placedFeature, int stepIndex, int featureIndex, PlacementData placement, List<BlockReplacement> targetStates, int size, float discardChanceOnAirExposure, boolean scattered) {
     }
 
     private record FeatureLocation(int stepIndex, int featureIndex) {

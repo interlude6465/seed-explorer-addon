@@ -32,9 +32,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Supplies the full vanilla data registries and structure templates to the
@@ -144,7 +146,8 @@ final class OfflineWorldgenResources {
                     .pushJarResources()
                     .exposeNamespace("minecraft")
                     .build(location);
-                List<PackResources> packs = new ArrayList<>(List.of(vanillaPack));
+                List<PackResources> packs = new ArrayList<>();
+                packs.add(vanillaPack.fullResources());
 
                 // The auto-detection in pushJarResources may fail in an offline
                 // Gradle-exec context.  Fall back to scanning the classpath for
@@ -211,15 +214,25 @@ final class OfflineWorldgenResources {
 
     private static <T> Registry<T> copyTypedRegistry(HolderLookup.RegistryLookup<T> source) {
         MappedRegistry<T> target = new MappedRegistry<>(registryKey(source), Lifecycle.stable());
-        source.listElements().forEach(holder ->
-            target.register(holder.key(), holder.value(), RegistrationInfo.BUILT_IN));
+        Set<T> registeredValues = java.util.Collections.newSetFromMap(new IdentityHashMap<>());
+        source.listElements().forEach(holder -> {
+            // Datagen lookups may expose aliases that intentionally share the same
+            // value object. Runtime MappedRegistry values are identity-unique, so
+            // retain the first canonical key and resolve alias tag members through
+            // that holder below.
+            if (registeredValues.add(holder.value())) {
+                target.register(holder.key(), holder.value(), RegistrationInfo.BUILT_IN);
+            }
+        });
 
         try {
             Map<TagKey<T>, List<Holder<T>>> tags = new HashMap<>();
             source.listTags().forEach(named -> {
                 List<Holder<T>> members = named.stream()
                     .map(holder -> holder.unwrapKey()
-                        .<Holder<T>>map(target::getOrThrow)
+                        .<Holder<T>>map(key -> target.get(key)
+                            .<Holder<T>>map(reference -> reference)
+                            .orElseGet(() -> target.wrapAsHolder(holder.value())))
                         .orElseGet(() -> Holder.direct(holder.value())))
                     .toList();
                 tags.put(named.key(), members);

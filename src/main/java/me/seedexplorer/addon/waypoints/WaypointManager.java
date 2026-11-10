@@ -71,7 +71,7 @@ public class WaypointManager {
         }
 
         SeedWaypoint seedWp = new SeedWaypoint(name, x, z, dimension, icon, structureType);
-        Waypoint waypoint = seedWp.toWaypoint();
+        Waypoint waypoint = MeteorWaypointAdapter.toMeteor(seedWp);
 
         boolean alreadyExists = Waypoints.get().add(waypoint);
         if (!alreadyExists) {
@@ -312,7 +312,7 @@ public class WaypointManager {
      */
     public void refreshFromMeteorWaypoints() {
         for (Waypoint wp : Waypoints.get()) {
-            SeedWaypoint sw = SeedWaypoint.fromWaypoint(wp);
+            SeedWaypoint sw = MeteorWaypointAdapter.fromMeteor(wp);
             if (!seedWaypoints.contains(sw)) {
                 seedWaypoints.add(sw);
             }
@@ -325,7 +325,7 @@ public class WaypointManager {
      */
     public void syncToMeteorWaypoints() {
         for (SeedWaypoint sw : seedWaypoints) {
-            Waypoint wp = sw.toWaypoint();
+            Waypoint wp = MeteorWaypointAdapter.toMeteor(sw);
             Waypoints.get().add(wp);
         }
     }

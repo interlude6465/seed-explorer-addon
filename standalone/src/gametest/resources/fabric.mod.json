@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "seed-explorer-client-test",
+  "version": "${version}",
+  "name": "Seed Explorer Client Tests",
+  "environment": "client",
+  "entrypoints": {
+    "fabric-client-gametest": [
+      "me.seedexplorer.standalone.test.StandaloneClientSmokeTest"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "minecraft": "${minecraft_version}",
+    "java": ">=${jdk_version}",
+    "seed-explorer": "*"
+  }
+}

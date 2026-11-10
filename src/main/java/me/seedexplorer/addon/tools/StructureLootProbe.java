@@ -38,7 +38,8 @@ public final class StructureLootProbe {
             long seed = args.length > 1 ? Long.parseLong(args[1]) : 2026071501L;
             int radius = args.length > 3 ? Integer.parseInt(args[3]) : 900;
             int dim = type.dimension;
-            ResourceKey<Structure> key = keyFor(type);
+            ResourceKey<Structure> key = type == StructureType.ABANDONED_CAMP
+                ? null : keyFor(type);
 
             // Direct-chunk mode: a "chunk=X,Z" arg skips the slow dimension scan and
             // simulates that exact start chunk. Used to verify a specific structure from
@@ -48,6 +49,10 @@ public final class StructureLootProbe {
                     String[] parts = a.substring("chunk=".length()).split(",");
                     int cx = Integer.parseInt(parts[0].trim());
                     int cz = Integer.parseInt(parts[1].trim());
+                    if (key == null) {
+                        throw new IllegalArgumentException(
+                            "direct chunk mode requires a fixed-key structure; camps need a predicted biome variant");
+                    }
                     OUT.println("type=" + type + " key=" + key + " seed=" + seed
                         + " dim=" + dim + " decorationIndex="
                         + VanillaLootStructureSimulator.decorationIndex(key)
@@ -72,15 +77,21 @@ public final class StructureLootProbe {
                 + " dim=" + dim + " radius=" + radius + " found=" + found.size());
 
             for (GeneratedStructure s : found) {
+                ResourceKey<Structure> selectedKey = type == StructureType.ABANDONED_CAMP
+                    ? keyForVariant(s.variant) : key;
+                if (selectedKey == null) {
+                    OUT.println("  skipped invalid structure variant=" + s.variant);
+                    continue;
+                }
                 var start = me.seedexplorer.addon.worldgen.WorldgenEngine
-                    .generateSelectedStructureStart(seed, dim, key,
+                    .generateSelectedStructureStart(seed, dim, selectedKey,
                         new net.minecraft.world.level.ChunkPos(s.startChunkX, s.startChunkZ));
-                OUT.println("  " + type + " at=" + s.x + "," + s.z
+                OUT.println("  " + type + " key=" + selectedKey + " at=" + s.x + "," + s.z
                     + " variant=" + s.variant + " startChunk=" + s.startChunkX + "," + s.startChunkZ
                     + " startValid=" + (start != null && start.isValid())
                     + " pieces=" + (start == null ? -1 : start.getPieces().size()));
                 var containers = VanillaLootStructureSimulator.simulate(
-                    seed, dim, key, s.startChunkX, s.startChunkZ);
+                    seed, dim, selectedKey, s.startChunkX, s.startChunkZ);
                 OUT.println("    simulate -> " + containers.size() + " containers");
                 for (var c : containers) {
                     List<ItemLoot> loot = ChestLootPredictor.predictChest(
@@ -196,5 +207,11 @@ public final class StructureLootProbe {
             case MANSION -> BuiltinStructures.WOODLAND_MANSION;
             default -> throw new IllegalArgumentException("no key mapping for " + type);
         };
+    }
+
+    private static ResourceKey<Structure> keyForVariant(String structureId) {
+        if (structureId == null || !structureId.startsWith("minecraft:abandoned_camp_")) return null;
+        return ResourceKey.create(net.minecraft.core.registries.Registries.STRUCTURE,
+            net.minecraft.resources.Identifier.parse(structureId));
     }
 }

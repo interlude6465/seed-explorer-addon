@@ -33,13 +33,8 @@ public final class BundledLootTableLoader {
             for (VersionProfile profile : SUPPORTED_VERSIONS) {
                 if (profile.minecraftVersion.equals(version)) return profile;
             }
-            int bestIdx = 0;
-            for (int i = 1; i < SUPPORTED_VERSIONS.length; i++) {
-                if (compareVersions(version, SUPPORTED_VERSIONS[i].minecraftVersion) >= 0) {
-                    bestIdx = i;
-                }
-            }
-            return SUPPORTED_VERSIONS[bestIdx];
+            throw new IllegalArgumentException(
+                "Unsupported Minecraft prediction version: " + version);
         }
 
         public int major() { return parseComponent(minecraftVersion, 0); }
@@ -65,12 +60,13 @@ public final class BundledLootTableLoader {
     private static final VersionProfile[] SUPPORTED_VERSIONS = {
         new VersionProfile("1.19.4", "loot_tables", indexOverrides_1_19_4()),
         new VersionProfile("1.20.4", "loot_tables", indexOverrides_1_20_4()),
-        new VersionProfile("1.21", "loot_tables", indexOverrides_1_21()),
-        new VersionProfile("1.21.4", "loot_tables", indexOverrides_1_21_4()),
-        new VersionProfile("1.21.5", "loot_tables", indexOverrides_1_21_5()),
+        new VersionProfile("1.21", "loot_table", indexOverrides_1_21()),
+        new VersionProfile("1.21.4", "loot_table", indexOverrides_1_21_4()),
+        new VersionProfile("1.21.5", "loot_table", indexOverrides_1_21_5()),
         new VersionProfile("1.21.11", "loot_table", indexOverrides_1_21_11()),
         new VersionProfile("26.1.2", "loot_table", indexOverrides_26_1_2()),
         new VersionProfile("26.2", "loot_table", indexOverrides_26_1_2()),
+        new VersionProfile("26.3", "loot_table", indexOverrides_26_1_2()),
     };
 
     static {
@@ -85,7 +81,11 @@ public final class BundledLootTableLoader {
         } catch (Throwable ignored) {
         }
         LOOT_TABLE_DIR = dir;
-        RUNTIME_PROFILE = detected != null ? detected : new VersionProfile("26.1.2", "loot_table", Map.of());
+        // SharedConstants can still be uninitialized when offline tools or early
+        // client bootstrap first touch this class. Fall back to the version this
+        // artifact is built against so 26.3-only structures and tables are not
+        // silently gated off by an unrelated historical default.
+        RUNTIME_PROFILE = detected != null ? detected : VersionProfile.forVersion("26.3");
     }
 
     private static Map<String, Integer> indexOverrides_1_21() {
@@ -163,6 +163,14 @@ public final class BundledLootTableLoader {
         return SUPPORTED_VERSIONS.clone();
     }
 
+    public static boolean isSupportedVersion(String version) {
+        if (version == null || version.isBlank()) return false;
+        for (VersionProfile profile : SUPPORTED_VERSIONS) {
+            if (profile.minecraftVersion().equals(version)) return true;
+        }
+        return false;
+    }
+
     private BundledLootTableLoader() {
     }
 
@@ -195,6 +203,9 @@ public final class BundledLootTableLoader {
     }
 
     public static void loadAll(String tableDir) {
+        register(tableDir, "minecraft:barrels/abandoned_camp_barrel", "Abandoned Camp Barrel");
+        register(tableDir, "minecraft:chests/abandoned_camp_common_chest", "Abandoned Camp Common Chest");
+        register(tableDir, "minecraft:chests/abandoned_camp_secret_chest", "Abandoned Camp Secret Chest");
         register(tableDir, "minecraft:chests/abandoned_mineshaft", "Abandoned Mineshaft");
         register(tableDir, "minecraft:chests/ancient_city", "Ancient City");
         register(tableDir, "minecraft:chests/ancient_city_ice_box", "Ancient City Ice Box");
@@ -274,7 +285,9 @@ public final class BundledLootTableLoader {
     }
 
     public static LootTableDef parseFromBundled(String tableDir, String tableId, String displayName) {
-        String resourcePath = "/data/minecraft/" + tableDir + "/" + tableId.substring("minecraft:".length()) + ".json";
+        VersionProfile profile = PARSE_PROFILE.get();
+        if (profile == null) profile = RUNTIME_PROFILE;
+        String resourcePath = authoritativeResourcePath(profile, tableDir, tableId);
         try (InputStream in = BundledLootTableLoader.class.getResourceAsStream(resourcePath)) {
             if (in == null) return null;
             JsonObject root = JsonParser.parseReader(new InputStreamReader(in)).getAsJsonObject();
@@ -317,6 +330,23 @@ public final class BundledLootTableLoader {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    public static InputStream openAuthoritativeLootTable(VersionProfile profile, String tableId) {
+        if (profile == null || tableId == null || !tableId.startsWith("minecraft:")) return null;
+        return BundledLootTableLoader.class.getResourceAsStream(
+            authoritativeResourcePath(profile, profile.lootTablePathPrefix(), tableId));
+    }
+
+    public static String authoritativeResourcePath(VersionProfile profile, String tableId) {
+        return authoritativeResourcePath(profile, profile.lootTablePathPrefix(), tableId);
+    }
+
+    private static String authoritativeResourcePath(VersionProfile profile, String tableDir,
+                                                     String tableId) {
+        return "/data/seed-explorer/versioned_loot/"
+            + profile.minecraftVersion() + "/" + tableDir + "/"
+            + tableId.substring("minecraft:".length()) + ".json";
     }
 
     private static double[] parseRolls(JsonElement rollsElement) {
@@ -411,11 +441,12 @@ public final class BundledLootTableLoader {
         double minCount = 1;
         double maxCount = 1;
 
-        JsonArray functions = entryObj.getAsJsonArray("functions");
-        if (functions != null) {
+        List<JsonElement> functions = entryModifiers(entryObj);
+        if (!functions.isEmpty()) {
             for (JsonElement funcElement : functions) {
                 JsonObject funcObj = funcElement.getAsJsonObject();
                 String funcType = string(funcObj, "function");
+                if (funcType == null) funcType = string(funcObj, "type");
                 if (isSetCountFunction(funcType)) {
                     JsonElement countElement = funcObj.get("count");
                     if (countElement == null) countElement = funcObj.get("amount");
@@ -481,6 +512,20 @@ public final class BundledLootTableLoader {
             item = item.withDamageRoll();
         }
         return item;
+    }
+
+    /** 26.3 renamed an entry's {@code functions} list to singular
+     * {@code modifier}, which may itself be one object or a list. */
+    private static List<JsonElement> entryModifiers(JsonObject entryObj) {
+        JsonElement value = entryObj.get("functions");
+        if (value == null) value = entryObj.get("modifier");
+        if (value == null || value.isJsonNull()) return List.of();
+        if (value.isJsonArray()) {
+            List<JsonElement> result = new ArrayList<>();
+            value.getAsJsonArray().forEach(result::add);
+            return result;
+        }
+        return value.isJsonObject() ? List.of(value) : List.of();
     }
 
     private static boolean isSetCountFunction(String funcType) {

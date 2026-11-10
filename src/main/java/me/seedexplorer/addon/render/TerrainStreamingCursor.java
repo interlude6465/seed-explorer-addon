@@ -36,26 +36,26 @@ final class TerrainStreamingCursor {
 
         int currentRing = ring;
         int side = currentRing * 2;
-        int offset = index / 4;
-        int edge = index & 3;
+        int edge = index / side;
+        int offset = index % side;
         int dx;
         int dz;
         switch (edge) {
             case 0 -> {
-                dx = -currentRing + offset;
-                dz = -currentRing;
+                dx = currentRing;
+                dz = -currentRing + 1 + offset;
             }
             case 1 -> {
-                dx = currentRing;
-                dz = -currentRing + offset;
-            }
-            case 2 -> {
-                dx = currentRing - offset;
+                dx = currentRing - 1 - offset;
                 dz = currentRing;
             }
-            default -> {
+            case 2 -> {
                 dx = -currentRing;
-                dz = currentRing - offset;
+                dz = currentRing - 1 - offset;
+            }
+            default -> {
+                dx = -currentRing + 1 + offset;
+                dz = -currentRing;
             }
         }
 

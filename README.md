@@ -1,28 +1,121 @@
-# Meteor Seed Explorer Addon
+# Seed Explorer
 
-Offline Minecraft loot prediction for Meteor Client. Simulates vanilla worldgen
-deterministically from a world seed to predict chest contents in structures
-**without** loading any chunks or connecting to a server.
+Standalone Fabric seed maps, 3D terrain exploration, structure and loot prediction,
+ore overlays, waypoints, and enchanting tools. Predictions run locally from a
+world seed. **Meteor is not required by the standalone artifact.**
 
-**Currently validated (strict, oracle-pinned):** desert pyramids (4 oracles,
-16/16 chests), strongholds, shipwrecks, pillager outposts, jungle temples,
-buried treasure, bastion remnants, and dungeons — all with zero differences
-against Paper 26.1.2-74. Mineshaft loot is supported but non-strict (minecart
-entities can move). Other structure types stay gated until they pass a strict
-oracle comparison.
+## Install
 
----
+Use Minecraft **26.3**, Java **25**, Fabric Loader **0.19.5 or newer**, and Fabric API
+**0.162.0+26.3**. Put `seed-explorer-1.0.0.jar` in the instance's `mods` folder.
+Remove the old Meteor Seed Explorer addon jar from that instance to avoid duplicate
+frontends. A compatible standalone Baritone is optional for automatic navigation;
+mapping, loot, settings and enchanting do not require it.
 
-## Build
+Press **X** in a world to open the map. The gear button opens the native settings
+panel with the original 32 module controls. Open 3D from the map; move with WASD,
+drag to look, and use Space/C vertically. Right-click a 2D structure to inspect
+its containers; right-click empty map space to create a waypoint. Search accepts
+structure/biome names, spelling approximations, coordinates, and `loot:`/`item:`
+queries. The Items/books mode supports multiple items and quantities.
+The **Actions** menu contains recentering, visibility, waypoint management,
+copying coordinates, teleporting, navigation and completion controls.
+
+The map includes per-structure visibility, completion markers, editable waypoints,
+copy/teleport/navigation controls, loaded terrain, predicted ores, a minimap, and
+surface/underground 3D views. Terrain work uses background queues, bounded capture
+and uploads, and a spiral presentation order. There is no guaranteed chunks-per-second
+rate; throughput depends on terrain detail, worldgen, hardware and competing mods.
+
+## Build and verify
+
+From a clean checkout with Java 25 available:
 
 ```powershell
-.\gradlew compileJava
+.\gradlew -p standalone build --console=plain
 ```
 
-Java 25 toolchain. Dependencies are resolved from the parent meteor-client
-build tree and the Gradle cache — no Fabric Loom plugin required.
+The jar is written under `standalone/build/libs/`. Press `X` in a world to open
+the map. This Fabric Loom build resolves its own dependencies and needs no Meteor
+checkout or cached Meteor jar. It runs nine headless probes and checks the packaged
+class closure, mixins, service provider, texture index and absence of Meteor symbols.
+GitHub Actions runs the same build and publishes a downloadable build artifact.
 
----
+Seeds and prediction versions are scoped per world/server. Visibility and completion
+are also scoped per profile; waypoints are scoped by seed and dimension. Display
+settings are shared. Settings are stored in `config/seed-explorer.properties`.
+
+For a development client: `.\gradlew -p standalone runClient`.
+For a live client smoke test: `.\gradlew -p standalone runClientGameTest`.
+The test creates a temporary world, checks transformed hooks, opens the native
+map/settings/3D screens, waits for generated map data and terrain draw calls,
+checks return navigation and saves screenshots. It is separate from the headless
+build checks and requires a working graphics session.
+For manual testing without automatic shutdown, copy a saved world into
+`standalone/run/manualTest/saves/<folder>` and run
+`.\gradlew -p standalone runClient "-PmanualTestWorld=<folder>"`.
+The repository root build remains a legacy Meteor compatibility and validation
+harness; use **`-p standalone`** for the independent mod.
+
+To use a local texture pack only for the map, copy its block textures into
+`config/seed-explorer/texture-pack/assets/minecraft/textures/block/` in the game
+directory. The map falls back to active Minecraft resources and bundled textures.
+Pale oak leaves and leaf litter are excluded from the 3D map as requested.
+
+## Prediction scope
+
+The selector exposes 1.19.4, 1.20.4, 1.21, 1.21.4, 1.21.5, 1.21.11, 26.1.2, 26.2 and
+26.3 profiles. It selects loot data and gates
+version-specific structures/biomes; **it does not emulate the complete historical
+terrain generator**. Terrain and placement registries come from the running Minecraft
+version. New 26.3 camps use that runtime's placement sets and container tables.
+Sulfur caves are searched as an underground biome, not as a chest-bearing structure.
+Server plugins, datapacks, terrain edits, previously opened containers and moving
+minecarts can change results. Approximate loot is labelled separately from exact replay.
+
+Historical oracle comparisons against Paper 26.1.2 cover pyramids, strongholds,
+shipwrecks, outposts, jungle temples, treasure, bastions and dungeons. These are
+historical results, not certification of every structure on 26.3. Current build probes
+exercise camp loot, village key mappings, dungeon replay, ore determinism, settings,
+searches, renderer linkage and dependency isolation. Full live visual and server
+oracle coverage remains a separate validation step.
+
+## Standalone commands
+
+Standalone chat commands use `.se`, `.seedexplorer`, or `.seed-explorer` so they are handled
+locally and never sent to the server:
+
+| Command | Purpose |
+|---|---|
+| `.se open` | Open the map. |
+| `.se seed [set] <seed>` | Show or set the current profile's seed. Seed zero is valid. |
+| `.se version <version>` | Select the prediction version. |
+| `.se status` | Show seed, position, navigation, mining, and enchanting state. |
+| `.se waypoint list` | List waypoints for the active seed and dimension. |
+| `.se waypoint add [x z] [name]` | Add a waypoint at the player or supplied coordinates. |
+| `.se waypoint remove <id or number>` | Remove a waypoint from the current list. |
+| `.se goto <x> <y> <z>` | Navigate with Baritone when it is installed. |
+| `.se mine <ore> [radius] [targets]` | Predict targets in the background, navigate, and mine loaded targets. |
+| `.se mine status`, `.se mine next`, `.se mine stop` | Inspect or control predicted mining. |
+| `.se loot search [--min=N] <item or enchantment>` | Search remembered predicted containers. |
+| `.se enchanting [status or reset]` | Inspect or reset player-RNG recovery. |
+| `.se enchant find <enchantments>` | Inspect current offers and bookshelf plans. |
+| `.se enchant item <slot> <enchantments>` | Query an inventory item. |
+| `.se stop` | Stop navigation and predicted mining. |
+
+The familiar `.seed`, `.waypoint`, `.loot`, `.mine-predicted`, `.enchanting`,
+and `#mine` aliases are also accepted. Baritone is optional and is discovered
+at runtime; every map, prediction, search, and enchanting feature remains usable
+without it.
+
+Opening an enchanting table displays the native exact-offer panel. It recovers
+the hidden XP seed from vanilla costs and clues, lists compatible enchantments,
+checks conflicts, and searches current bookshelf settings. After two confirmed
+enchantments recover the player RNG, it can also search future item-drop and
+dummy-enchant sequences. Opening a remembered predicted container displays a
+predicted-versus-actual contents panel. Mining, chest, and enchanting session
+state is cleared whenever the client disconnects, changes world, or changes
+dimension so stale coordinates cannot leak into another context.
 
 ## Experimental Terrain Sampler
 
@@ -42,7 +135,7 @@ The headless comparison probe is:
 
 ## Natural Feature Search Prototype
 
-The standalone search code is not connected to the add-on UI. Its first query
+The experimental natural-feature finder is not connected to the map UI. Its first query
 looks for a roughly circular elevated ridge around a lower center in a river
 biome. Search a square around an origin with:
 
@@ -55,9 +148,11 @@ To require a deep nearby cave as well, add
 `-PlastSeed=1000`. The query and scoring are in `NaturalFeatureFinder`; cave
 checks use carved vanilla chunks and are an experimental refinement.
 
-## Verification Tasks
+## Legacy verification harness
 
-All tasks are registered under the `verification` Gradle group.
+The following root-build tasks require the legacy compatibility workspace and its
+oracle captures. They are not part of the standalone installation. The 26.1.2
+regression suite explicitly skips other runtimes rather than claiming cross-version parity.
 
 | Task | Class | What it checks |
 |---|---|---|
@@ -83,9 +178,10 @@ Run the full gate with:
 .\gradlew predictionRegressionSuite --console=plain
 ```
 
-## In-Game Structure Audit
+## Legacy in-game structure audit
 
-With the seed set and cheats/commands available, run this in a loaded world:
+These automated QA/admin commands remain in the legacy Meteor frontend, not the
+standalone router. With that frontend, a seed set and cheats available, run:
 
 ```text
 .seed-explorer test-tp audit-all 3

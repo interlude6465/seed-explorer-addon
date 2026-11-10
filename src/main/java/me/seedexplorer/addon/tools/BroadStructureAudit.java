@@ -1,6 +1,8 @@
 package me.seedexplorer.addon.tools;
 
 import me.seedexplorer.addon.loot.ItemLoot;
+import me.seedexplorer.addon.loot.ChestLootOutput;
+import me.seedexplorer.addon.loot.ChestLootPredictor;
 import me.seedexplorer.addon.loot.LootTableDef;
 import me.seedexplorer.addon.loot.LootTableSimulator;
 import me.seedexplorer.addon.loot.VanillaLootStructureSimulator;
@@ -12,6 +14,8 @@ import me.seedexplorer.addon.structures.StructureType;
 import me.seedexplorer.addon.worldgen.VanillaStructurePredictor;
 import me.seedexplorer.addon.worldgen.WorldgenEngine;
 import net.minecraft.SharedConstants;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.world.level.ChunkPos;
@@ -60,13 +64,26 @@ public final class BroadStructureAudit {
     private static final int MAX_LOOT_CANDIDATES_PER_TYPE = 5;
 
     private static final Map<StructureType, ResourceKey<Structure>> EXACT_KEYS = new EnumMap<>(StructureType.class);
-    private static final Set<StructureType> VALIDATED_LOOT_TYPES = EnumSet.of(
+    /** Every product loot family driven by a vanilla structure-start replay.
+     * Dungeons use their separate placed-feature oracle and are not included. */
+    private static final Set<StructureType> AUDITED_LOOT_TYPES = EnumSet.of(
         StructureType.DESERT_PYRAMID,
         StructureType.STRONGHOLD,
         StructureType.SHIPWRECK,
         StructureType.OUTPOST,
         StructureType.JUNGLE_TEMPLE,
-        StructureType.TREASURE
+        StructureType.TREASURE,
+        StructureType.MINESHAFT,
+        StructureType.RUINED_PORTAL,
+        StructureType.OCEAN_RUIN,
+        StructureType.IGLOO,
+        StructureType.ANCIENT_CITY,
+        StructureType.MANSION,
+        StructureType.END_CITY,
+        StructureType.FORTRESS,
+        StructureType.BASTION,
+        StructureType.NETHER_RUINED_PORTAL,
+        StructureType.ABANDONED_CAMP
     );
 
     static {
@@ -133,6 +150,7 @@ public final class BroadStructureAudit {
         int validStarts = 0;
         int checkedLootStructures = 0;
         int checkedLootContainers = 0;
+        Map<StructureType, Integer> checkedLootByType = new EnumMap<>(StructureType.class);
         int checkedPreviewChestContainment = 0;
         int checkedEndCities = 0;
 
@@ -195,7 +213,7 @@ public final class BroadStructureAudit {
                 }
 
                 if (!auditLoot && !auditPreview) continue;
-                for (StructureType type : VALIDATED_LOOT_TYPES) {
+                for (StructureType type : AUDITED_LOOT_TYPES) {
                     if (type.dimension != dimension) continue;
                     int checkedForType = 0;
                     for (GeneratedStructure structure : structures) {
@@ -217,9 +235,16 @@ public final class BroadStructureAudit {
                         if (containers.isEmpty()) continue;
 
                         checkedLootStructures++;
+                        checkedLootByType.merge(type, 1, Integer::sum);
                         checkedLootContainers += containers.size();
-                        if (auditLoot) assertLootDeterministic(failures, seed, structure, containers);
-                        if (auditPreview) {
+                        if (auditLoot) {
+                            assertLootDeterministic(failures, seed, structure, containers);
+                            assertProductLootPath(failures, seed, structure, containers);
+                        }
+                        // Minecart chests are entities, not preview blocks. Their
+                        // positions and loot are covered by the deterministic
+                        // replay and saved-world oracle instead.
+                        if (auditPreview && type != StructureType.MINESHAFT) {
                             checkedPreviewChestContainment += assertPreviewContainsChests(failures, seed, structure, containers);
                         }
                         break;
@@ -234,8 +259,12 @@ public final class BroadStructureAudit {
             }
             if (checkedEndCities < 50) failures.add("end_city_ship_audit_too_small checked=" + checkedEndCities);
         }
-        if ((auditLoot || auditPreview) && checkedLootStructures < VALIDATED_LOOT_TYPES.size() * 5) {
-            failures.add("loot_audit_too_small structures=" + checkedLootStructures);
+        if (auditLoot || auditPreview) {
+            for (StructureType type : AUDITED_LOOT_TYPES) {
+                if (checkedLootByType.getOrDefault(type, 0) == 0) {
+                    failures.add("loot_audit_missing_structure_type " + type);
+                }
+            }
         }
 
         report.append("checked_starts=").append(checkedStarts)
@@ -244,6 +273,7 @@ public final class BroadStructureAudit {
         report.append("bastion_variants=").append(bastionVariants).append('\n');
         report.append("checked_loot_structures=").append(checkedLootStructures)
             .append(" checked_loot_containers=").append(checkedLootContainers).append('\n');
+        report.append("checked_loot_by_type=").append(checkedLootByType).append('\n');
         report.append("checked_preview_chest_containment=").append(checkedPreviewChestContainment).append('\n');
         report.append("broad_structure_audit_pass=").append(failures.isEmpty())
             .append(" failures=").append(failures.size()).append('\n');
@@ -279,7 +309,18 @@ public final class BroadStructureAudit {
             };
         }
         if (structure.type == StructureType.RUINED_PORTAL) {
-            return BuiltinStructures.RUINED_PORTAL_STANDARD;
+            return switch (structure.variant) {
+                case "minecraft:ruined_portal_desert" -> BuiltinStructures.RUINED_PORTAL_DESERT;
+                case "minecraft:ruined_portal_jungle" -> BuiltinStructures.RUINED_PORTAL_JUNGLE;
+                case "minecraft:ruined_portal_swamp" -> BuiltinStructures.RUINED_PORTAL_SWAMP;
+                case "minecraft:ruined_portal_mountain" -> BuiltinStructures.RUINED_PORTAL_MOUNTAIN;
+                case "minecraft:ruined_portal_ocean" -> BuiltinStructures.RUINED_PORTAL_OCEAN;
+                default -> BuiltinStructures.RUINED_PORTAL_STANDARD;
+            };
+        }
+        if (structure.type == StructureType.MINESHAFT) {
+            return structure.variant.equals("minecraft:mineshaft_mesa")
+                ? BuiltinStructures.MINESHAFT_MESA : BuiltinStructures.MINESHAFT;
         }
         if (structure.type == StructureType.SHIPWRECK) {
             String biomeId = WorldgenEngine.getBiome(seed, structure.type.dimension, structure.x, 64, structure.z).id();
@@ -290,6 +331,11 @@ public final class BroadStructureAudit {
         if (structure.type == StructureType.OCEAN_RUIN) {
             String biomeId = WorldgenEngine.getBiome(seed, structure.type.dimension, structure.x, 64, structure.z).id();
             return biomeId.contains("warm") ? BuiltinStructures.OCEAN_RUIN_WARM : BuiltinStructures.OCEAN_RUIN_COLD;
+        }
+        if (structure.type == StructureType.ABANDONED_CAMP
+            && structure.variant.startsWith("minecraft:abandoned_camp_")) {
+            return ResourceKey.create(Registries.STRUCTURE,
+                Identifier.parse(structure.variant));
         }
         return EXACT_KEYS.get(structure.type);
     }
@@ -357,6 +403,100 @@ public final class BroadStructureAudit {
         }
     }
 
+    private static void assertProductLootPath(List<String> failures, long seed,
+                                              GeneratedStructure structure,
+                                              List<VanillaLootStructureSimulator.SimulatedContainer> containers) {
+        List<ChestLootOutput> product = ChestLootPredictor.predictForStructure(seed, structure, 64);
+        Set<String> expected = new HashSet<>();
+        for (VanillaLootStructureSimulator.SimulatedContainer container : containers) {
+            expected.add(container.x() + "," + container.y() + "," + container.z()
+                + ':' + container.lootTableId() + ':' + container.lootSeed());
+        }
+        Set<String> actual = new HashSet<>();
+        for (ChestLootOutput chest : product) {
+            actual.add(chest.blockX() + "," + chest.blockY() + "," + chest.blockZ()
+                + ':' + chest.lootTableId() + ':' + chest.seed());
+        }
+        if (actual.size() != product.size()) {
+            failures.add("product_loot_duplicate_container seed=" + seed + " type="
+                + structure.type + " chunk=" + structure.startChunkX + ',' + structure.startChunkZ);
+        }
+        if (!actual.equals(expected)) {
+            failures.add("product_loot_container_mismatch seed=" + seed + " type="
+                + structure.type + " chunk=" + structure.startChunkX + ',' + structure.startChunkZ
+                + " expected=" + expected.size() + " actual=" + actual.size());
+        }
+        for (ChestLootOutput chest : product) {
+            VanillaLootStructureSimulator.SimulatedContainer target = containers.stream()
+                .filter(container -> container.x() == chest.blockX()
+                    && container.y() == chest.blockY()
+                    && container.z() == chest.blockZ()
+                    && container.lootSeed() == chest.seed()
+                    && container.lootTableId().equals(chest.lootTableId()))
+                .findFirst().orElse(null);
+            List<ItemLoot> vanilla = target == null ? null
+                : expectedInventoryItems(seed, structure.type.dimension, target, containers);
+            if (vanilla != null && !vanilla.equals(chest.predictedItems())) {
+                failures.add("product_loot_items_not_vanilla seed=" + seed + " type="
+                    + structure.type + " chest=" + chest.blockX() + ',' + chest.blockY()
+                    + ',' + chest.blockZ());
+            }
+        }
+    }
+
+    private static List<ItemLoot> expectedInventoryItems(
+        long worldSeed, int dimension,
+        VanillaLootStructureSimulator.SimulatedContainer target,
+        List<VanillaLootStructureSimulator.SimulatedContainer> all
+    ) {
+        List<ItemLoot> merged = new ArrayList<>();
+        for (VanillaLootStructureSimulator.SimulatedContainer member
+            : sharedChestMembers(target, all)) {
+            List<ItemLoot> items = LootTableSimulator.simulateVanilla(member.lootTableId(),
+                member.lootSeed(), worldSeed, dimension,
+                member.x(), member.y(), member.z());
+            if (items == null) return null;
+            for (ItemLoot item : items) mergeItem(merged, item);
+        }
+        return List.copyOf(merged);
+    }
+
+    private static List<VanillaLootStructureSimulator.SimulatedContainer> sharedChestMembers(
+        VanillaLootStructureSimulator.SimulatedContainer target,
+        List<VanillaLootStructureSimulator.SimulatedContainer> all
+    ) {
+        List<VanillaLootStructureSimulator.SimulatedContainer> members = new ArrayList<>();
+        members.add(target);
+        if (!target.pairedChest()) return members;
+        for (VanillaLootStructureSimulator.SimulatedContainer candidate : all) {
+            if (candidate == target || !candidate.pairedChest()) continue;
+            if (!candidate.lootTableId().equals(target.lootTableId())) continue;
+            if (candidate.y() != target.y()) continue;
+            boolean adjacent = candidate.x() == target.x()
+                && Math.abs(candidate.z() - target.z()) == 1
+                || candidate.z() == target.z()
+                && Math.abs(candidate.x() - target.x()) == 1;
+            if (adjacent) members.add(candidate);
+        }
+        return members;
+    }
+
+    private static void mergeItem(List<ItemLoot> merged, ItemLoot item) {
+        for (int i = 0; i < merged.size(); i++) {
+            ItemLoot prior = merged.get(i);
+            if (!prior.itemId().equals(item.itemId())
+                || !java.util.Objects.equals(prior.enchantmentSummary(),
+                    item.enchantmentSummary())) continue;
+            int count = prior.minCount() + item.minCount();
+            merged.set(i, new ItemLoot(prior.itemId(), count, count, 0,
+                prior.displayName(), prior.randomEnchantment(), prior.enchantmentId(),
+                prior.enchantmentLevel(), null, false, 0, 0,
+                prior.enchantmentSummary(), false));
+            return;
+        }
+        merged.add(item);
+    }
+
     private static String containerSignature(List<VanillaLootStructureSimulator.SimulatedContainer> containers) {
         StringBuilder sb = new StringBuilder();
         containers.stream()
@@ -370,7 +510,8 @@ public final class BroadStructureAudit {
                 return a.lootTableId().compareTo(b.lootTableId());
             })
             .forEach(c -> sb.append(c.x()).append(',').append(c.y()).append(',').append(c.z())
-                .append(':').append(c.lootTableId()).append(':').append(c.lootSeed()).append('\n'));
+                .append(':').append(c.lootTableId()).append(':').append(c.lootSeed())
+                .append(':').append(c.pairedChest()).append('\n'));
         return sb.toString();
     }
 

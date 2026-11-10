@@ -21,13 +21,55 @@ public final class TerrainRendererPolicyProbe {
 
     public static void main(String[] args) throws Exception {
         verifySharedRendererInitialization();
+        verifyStandaloneAtlasTexture();
         verifyCameraZoom();
         verifyLod();
         verifyMaterials();
+        verifyNaturalDecorationTintPolicy();
+        verifyNaturalDecorationSchedulingPolicy();
         verifyDiskCache();
         verifyStreamPersistence();
         verifyStructurePersistence();
         System.out.println("Terrain renderer policy probe: PASS");
+    }
+
+    private static void verifyStandaloneAtlasTexture() throws Exception {
+        Class<?> textureType = BlockTextureAtlas.class.getDeclaredField("texture").getType();
+        require(textureType == GpuTextureResource.class,
+            "terrain atlas regressed to an external renderer texture type");
+    }
+
+    private static void verifyNaturalDecorationTintPolicy() {
+        require(Terrain3DRenderer.usesDryFoliageTintId("leaf_litter")
+                && Terrain3DRenderer.usesDryFoliageTintId("minecraft:leaf_litter"),
+            "leaf litter lost its vanilla dry-foliage tint channel");
+        require(!Terrain3DRenderer.usesDryFoliageTintId("short_grass"),
+            "ordinary grass was incorrectly assigned the dry-foliage tint channel");
+        require(Terrain3DRenderer.requiresFoliageTint("minecraft:pale_oak_leaves")
+                && Terrain3DRenderer.requiresFoliageTint("oak_leaves"),
+            "grayscale oak-family leaves lost their biome foliage tint");
+        require(!Terrain3DRenderer.requiresFoliageTint("minecraft:azalea_leaves")
+                && !Terrain3DRenderer.requiresFoliageTint("minecraft:cherry_leaves"),
+            "pre-colored leaves were incorrectly assigned a second biome tint");
+        require(!TerrainMaterialPolicy.renderNaturalDecoration("minecraft:pale_oak_leaves")
+                && !TerrainMaterialPolicy.renderNaturalDecoration("minecraft:leaf_litter")
+                && TerrainMaterialPolicy.renderNaturalDecoration("minecraft:oak_leaves"),
+            "excluded leaf materials can re-enter the map vegetation pass");
+        require(BlockTextureAtlas.excludedTextureFile("pale_oak_leaves.png")
+                && BlockTextureAtlas.excludedTextureFile("leaf_litter.png")
+                && !BlockTextureAtlas.excludedTextureFile("oak_leaves.png"),
+            "excluded leaf materials can re-enter the map texture atlas");
+        require(Terrain3DRenderer.naturalDecorationsUseTranslucentPass(),
+            "natural decorations can write rectangular transparent texels into the depth buffer");
+    }
+
+    private static void verifyNaturalDecorationSchedulingPolicy() {
+        require(Terrain3DRenderer.withinNaturalFeatureRadius(10, -20, 22, -8),
+            "natural decoration omitted a chunk inside the camera inspection window");
+        require(!Terrain3DRenderer.withinNaturalFeatureRadius(10, -20, 23, -20),
+            "natural decoration escaped the bounded camera inspection window");
+        require(!Terrain3DRenderer.withinNaturalFeatureRadius(10, -20, 10, -33),
+            "natural decoration escaped the bounded camera inspection window on Z");
     }
 
     private static void verifySharedRendererInitialization() {
@@ -91,6 +133,16 @@ public final class TerrainRendererPolicyProbe {
             "mid-quality boundary must include the next 10,000 chunks");
         require(TerrainLodPolicy.sampleStep(15_013) == 16,
             "outside the mid-quality boundary must be coarse");
+        require(TerrainLodPolicy.interactiveSampleStep(4) == 1,
+            "interactive camera ring lost exact terrain");
+        require(TerrainLodPolicy.interactiveSampleStep(5) == 4
+                && TerrainLodPolicy.interactiveSampleStep(16) == 4,
+            "interactive near terrain does not use step 4");
+        require(TerrainLodPolicy.interactiveSampleStep(17) == 8
+                && TerrainLodPolicy.interactiveSampleStep(32) == 8,
+            "interactive middle terrain does not use step 8");
+        require(TerrainLodPolicy.interactiveSampleStep(33) == 16,
+            "interactive far terrain is not bounded to coarse sampling");
         require(TerrainLodPolicy.coverageSampleStep(0) == 16
                 && TerrainLodPolicy.coverageSampleStep(1_875_000) == 16,
             "leading coverage no longer advances at constant coarse cost");
@@ -124,6 +176,25 @@ public final class TerrainRendererPolicyProbe {
             "surface-only bake unexpectedly generated underground geometry");
         require(!TerrainLodPolicy.shouldBakeUndergroundGeometry(true, 1, 1),
             "End terrain unexpectedly requested an underground cave shell");
+        require(TerrainLodPolicy.shouldPrebakeUndergroundGeometry(0, 8, 8, true),
+            "nearby exact Overworld terrain did not pre-bake its cave shell");
+        require(TerrainLodPolicy.shouldPrebakeUndergroundGeometry(-1, 0, 8, true),
+            "nearby exact Nether terrain did not pre-bake its cave shell");
+        require(!TerrainLodPolicy.shouldPrebakeUndergroundGeometry(0, 9, 8, true),
+            "terrain outside the cave window unexpectedly pre-baked cave geometry");
+        require(!TerrainLodPolicy.shouldPrebakeUndergroundGeometry(0, 4, 8, false),
+            "coarse surface terrain unexpectedly pre-baked cave geometry");
+        require(!TerrainLodPolicy.shouldPrebakeUndergroundGeometry(1, 0, 8, true),
+            "End terrain unexpectedly pre-baked cave geometry");
+        require(TerrainLodPolicy.protectsPrebakedUndergroundGeometry(
+                10, -10, 18, -2, 8, true),
+            "active cave-window geometry was not protected from cache compaction");
+        require(!TerrainLodPolicy.protectsPrebakedUndergroundGeometry(
+                10, -10, 19, -10, 8, true),
+            "distant cave geometry was incorrectly pinned in the cache");
+        require(!TerrainLodPolicy.protectsPrebakedUndergroundGeometry(
+                10, -10, 10, -10, 8, false),
+            "surface-only geometry was incorrectly protected as a cave bake");
         require(!TerrainLodPolicy.bakeAffectsActiveView(true, false),
             "surface-only completion can still starve an underground GPU batch");
         require(TerrainLodPolicy.bakeAffectsActiveView(true, true),
@@ -211,6 +282,23 @@ public final class TerrainRendererPolicyProbe {
             "tall cliffs were incorrectly rejected as implausible");
         require(!TerrainLodPolicy.shouldRenderHeightTransition(0),
             "equal heights emitted a buried side face");
+        require(TerrainLodPolicy.tiledSurfaceQuadCount(16, 16,
+                BlockTextureAtlas.TILED_REPEAT_SPAN) == 64
+                && TerrainLodPolicy.tiledSurfaceQuadCount(8, 8,
+                    BlockTextureAtlas.TILED_REPEAT_SPAN) == 16
+                && TerrainLodPolicy.tiledSurfaceQuadCount(4, 4,
+                    BlockTextureAtlas.TILED_REPEAT_SPAN) == 4,
+            "pre-tiled surface sprites no longer bound coarse terrain geometry");
+        double firstLodScale = TerrainLodPolicy.lodThresholdScale(17, -9);
+        double repeatedLodScale = TerrainLodPolicy.lodThresholdScale(17, -9);
+        double adjacentLodScale = TerrainLodPolicy.lodThresholdScale(18, -9);
+        require(firstLodScale == repeatedLodScale,
+            "LOD transition staggering changes between frames");
+        require(firstLodScale >= 1.0 - TerrainLodPolicy.LOD_TRANSITION_VARIATION
+                && firstLodScale <= 1.0 + TerrainLodPolicy.LOD_TRANSITION_VARIATION,
+            "LOD transition staggering escaped its bounded blend band");
+        require(firstLodScale != adjacentLodScale,
+            "adjacent chunks retained one hard LOD threshold ring");
         require(!TerrainLodPolicy.permitsCoarsePlaceholder(1),
             "exact terrain accepted a fat coarse placeholder");
         require(TerrainLodPolicy.permitsCoarsePlaceholder(8),
@@ -268,17 +356,33 @@ public final class TerrainRendererPolicyProbe {
         for (int i = 0; i < firstRing.length; i++) firstRing[i] = cursor.next(40, -20);
         require(cursor.snapshot().completedPositions() == 9L,
             "streaming frontier progress does not match the completed center square");
-        require(firstRing[0].chunkZ() == -21 && firstRing[1].chunkX() == 41
-                && firstRing[2].chunkZ() == -19 && firstRing[3].chunkX() == 39,
-            "partial square ring did not interleave top/right/bottom/left edges");
+        TerrainStreamingCursor.Coordinate[] expectedFirstRing = {
+            new TerrainStreamingCursor.Coordinate(41, -20, 1),
+            new TerrainStreamingCursor.Coordinate(41, -19, 1),
+            new TerrainStreamingCursor.Coordinate(40, -19, 1),
+            new TerrainStreamingCursor.Coordinate(39, -19, 1),
+            new TerrainStreamingCursor.Coordinate(39, -20, 1),
+            new TerrainStreamingCursor.Coordinate(39, -21, 1),
+            new TerrainStreamingCursor.Coordinate(40, -21, 1),
+            new TerrainStreamingCursor.Coordinate(41, -21, 1)
+        };
+        require(java.util.Arrays.equals(firstRing, expectedFirstRing),
+            "first terrain ring is not a contiguous clockwise spiral");
         cursor.reset();
         Set<Long> coordinates = new HashSet<>();
+        TerrainStreamingCursor.Coordinate previous = null;
         for (int i = 0; i < 225; i++) {
             TerrainStreamingCursor.Coordinate coordinate = cursor.next(40, -20);
             long packed = ((long) coordinate.chunkX() << 32)
                 ^ (coordinate.chunkZ() & 0xFFFFFFFFL);
             require(coordinates.add(packed), "streaming spiral emitted a duplicate coordinate");
             require(coordinate.ring() <= 7, "streaming spiral skipped a ring");
+            if (previous != null) {
+                int movement = Math.abs(coordinate.chunkX() - previous.chunkX())
+                    + Math.abs(coordinate.chunkZ() - previous.chunkZ());
+                require(movement == 1, "streaming spiral emitted a non-adjacent chunk");
+            }
+            previous = coordinate;
         }
         require(cursor.ring() == 8, "streaming spiral did not finish the expected square");
         TerrainStreamingCursor.State saved = cursor.snapshot();
@@ -287,9 +391,41 @@ public final class TerrainRendererPolicyProbe {
         resumed.restore(saved);
         require(resumed.next(40, -20).equals(expectedNext),
             "streaming cursor did not resume at its saved frontier");
+
+        TerrainPresentationFrontier frontier = new TerrainPresentationFrontier();
+        require(frontier.sequenceFor(10L) == 0L
+                && frontier.sequenceFor(20L) == 1L
+                && frontier.sequenceFor(30L) == 2L,
+            "presentation frontier did not preserve dispatch order");
+        frontier.markReady(30L);
+        require(frontier.revealedThrough() == -1L && !frontier.isRevealed(30L),
+            "out-of-order terrain became visible before the spiral frontier");
+        frontier.markReady(10L);
+        require(frontier.revealedThrough() == 0L && frontier.pollNewlyRevealed() == 10L,
+            "first completed terrain chunk did not advance the presentation frontier");
+        frontier.markReady(20L);
+        require(frontier.revealedThrough() == 2L && frontier.trackedChunks() == 0,
+            "presentation frontier retained an already visible contiguous prefix");
+        require(
+                frontier.pollNewlyRevealed() == 20L
+                && frontier.pollNewlyRevealed() == 30L,
+            "presentation frontier did not release the contiguous ready prefix");
+        frontier.reset();
+        require(frontier.revealedThrough() == -1L && frontier.sequenceFor(40L) == 0L,
+            "presentation frontier did not reset for a new world");
     }
 
     private static void verifyMaterials() {
+        require(BlockTextureAtlas.firstFrameHeight(16, 512) == 16,
+            "animated texture sheet was stretched across a block face");
+        require(BlockTextureAtlas.firstFrameHeight(16, 16) == 16,
+            "square block texture changed dimensions");
+        require(BlockTextureAtlas.firstFrameHeight(16, 24) == 24,
+            "non-frame texture was incorrectly cropped");
+        require(BlockTextureAtlas.textureFrameHeight("water_still.png", 16, 512, true) == 16,
+            "animated texture metadata did not select the first frame");
+        require(BlockTextureAtlas.textureFrameHeight("oak_door_bottom.png", 16, 32, false) == 32,
+            "ordinary tall texture was mistaken for an animation strip");
         require(!TerrainMaterialPolicy.renderPreviewMaterial("minecraft:oak_leaves"),
             "leaf preview must not create opaque white quads");
         require(!TerrainMaterialPolicy.validPredictedSurface(1, "minecraft:bedrock"),
@@ -320,6 +456,19 @@ public final class TerrainRendererPolicyProbe {
             "tree leaves can still become observed terrain columns");
         require(!TerrainMaterialPolicy.terrainSupportingSurface("minecraft:torch"),
             "decorative blocks can still become observed terrain columns");
+        require(!TerrainMaterialPolicy.terrainSupportingSurface("minecraft:short_grass")
+                && !TerrainMaterialPolicy.terrainSupportingSurface("minecraft:tall_grass")
+                && !TerrainMaterialPolicy.terrainSupportingSurface("minecraft:fern")
+                && !TerrainMaterialPolicy.terrainSupportingSurface("minecraft:leaf_litter")
+                && !TerrainMaterialPolicy.terrainSupportingSurface("minecraft:wildflowers")
+                && !TerrainMaterialPolicy.terrainSupportingSurface("minecraft:firefly_bush")
+                && !TerrainMaterialPolicy.terrainSupportingSurface("minecraft:flowering_azalea")
+                && !TerrainMaterialPolicy.terrainSupportingSurface("minecraft:big_dripleaf")
+                && !TerrainMaterialPolicy.terrainSupportingSurface("minecraft:brain_coral")
+                && !TerrainMaterialPolicy.terrainSupportingSurface("minecraft:warped_fungus")
+                && !TerrainMaterialPolicy.terrainSupportingSurface("minecraft:pumpkin")
+                && !TerrainMaterialPolicy.terrainSupportingSurface("minecraft:nether_wart_block"),
+            "ground vegetation can still become heightfield cubes");
         require(Terrain3DRenderer.previewBoxesForShape(Shapes.empty()).isEmpty(),
             "empty preview shape attempted to resolve bounds");
         require(Terrain3DRenderer.previewBoxesForShape(Shapes.block()).size() == 1,

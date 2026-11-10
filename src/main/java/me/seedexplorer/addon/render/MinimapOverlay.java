@@ -5,9 +5,7 @@
 
 package me.seedexplorer.addon.render;
 
-import me.seedexplorer.addon.map.BiomeGenerator;
 import me.seedexplorer.addon.modules.SeedExplorerModule;
-import me.seedexplorer.addon.seed.SeedManager;
 import meteordevelopment.meteorclient.events.render.Render2DEvent;
 import meteordevelopment.meteorclient.renderer.Renderer2D;
 import meteordevelopment.meteorclient.renderer.Texture;
@@ -28,11 +26,28 @@ import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.material.MapColor;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 /** Draws the compact top-left live minimap. */
 public class MinimapOverlay {
+    private static final int MAX_NEW_TERRAIN_SAMPLES_PER_FRAME = 96;
+    private static final int MAX_CACHED_TERRAIN_SAMPLES = 32_768;
     private static final Color FRAME = new Color(8, 11, 17, 238);
     private static final Color INNER = new Color(15, 19, 25, 238);
     private static final Color BORDER = new Color(86, 176, 194, 235);
+    private static final Color OVERWORLD_PLACEHOLDER = new Color(54, 86, 62, 230);
+    private static final Color NETHER_PLACEHOLDER = new Color(92, 36, 40, 230);
+    private static final Color END_PLACEHOLDER = new Color(188, 184, 126, 230);
+
+    private final Map<Long, Color> terrainColorCache = new LinkedHashMap<>(4096, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<Long, Color> eldest) {
+            return size() > MAX_CACHED_TERRAIN_SAMPLES;
+        }
+    };
+    private Level cachedLevel;
+    private int cachedDimension = Integer.MIN_VALUE;
 
     public void render(Render2DEvent event, SeedExplorerModule module) {
         Minecraft mc = Minecraft.getInstance();
@@ -49,8 +64,8 @@ public class MinimapOverlay {
         drawTerrain(mc, mapX, mapY, mapSize);
         drawEntities(mc, mapX, mapY, mapSize);
         drawPlayer(mc, mapX + mapSize / 2.0, mapY + mapSize / 2.0);
-        drawCompass(mapX, mapY, mapSize);
-        drawCoords(mc, x, y + size + 4);
+        drawCompass(event.graphics, mapX, mapY, mapSize);
+        drawCoords(event.graphics, mc, x, y + size + 4);
     }
 
     private void drawFrame(int x, int y, int size) {
@@ -84,14 +99,17 @@ public class MinimapOverlay {
         double scale = size / (double) (radius * 2);
         int px = mc.player.blockPosition().getX();
         int pz = mc.player.blockPosition().getZ();
+        int dimension = dimensionId(mc);
+        ensureTerrainCacheContext(mc.level, dimension);
+        sampleTerrainCenterOut(mc, px, pz, radius, step);
         Renderer2D r = Renderer2D.COLOR;
         r.begin();
 
         for (int dz = -radius; dz < radius; dz += step) {
             for (int dx = -radius; dx < radius; dx += step) {
-                int wx = px + dx + step / 2;
-                int wz = pz + dz + step / 2;
-                Color color = terrainColor(mc, wx, wz);
+                int wx = alignedSample(px + dx + step / 2, step);
+                int wz = alignedSample(pz + dz + step / 2, step);
+                Color color = terrainColorCache.getOrDefault(pack(wx, wz), placeholder(dimension));
                 double sx = x + (dx + radius) * scale;
                 double sy = y + (dz + radius) * scale;
                 double tileSize = Math.ceil(scale * step) + 1;
@@ -102,34 +120,81 @@ public class MinimapOverlay {
         r.render();
     }
 
+    private void sampleTerrainCenterOut(Minecraft mc, int px, int pz, int radius, int step) {
+        int cells = (radius * 2 + step - 1) / step;
+        int center = cells / 2;
+        int remaining = MAX_NEW_TERRAIN_SAMPLES_PER_FRAME;
+        for (int ring = 0; ring <= cells && remaining > 0; ring++) {
+            int min = Math.max(0, center - ring);
+            int max = Math.min(cells - 1, center + ring);
+            for (int row = min; row <= max && remaining > 0; row++) {
+                for (int column = min; column <= max && remaining > 0; column++) {
+                    if (Math.max(Math.abs(column - center), Math.abs(row - center)) != ring) continue;
+                    int dx = -radius + column * step;
+                    int dz = -radius + row * step;
+                    int wx = alignedSample(px + dx + step / 2, step);
+                    int wz = alignedSample(pz + dz + step / 2, step);
+                    long key = pack(wx, wz);
+                    if (terrainColorCache.containsKey(key)) continue;
+                    terrainColorCache.put(key, terrainColor(mc, wx, wz));
+                    remaining--;
+                }
+            }
+        }
+    }
+
+    private void ensureTerrainCacheContext(Level level, int dimension) {
+        if (cachedLevel == level && cachedDimension == dimension) return;
+        terrainColorCache.clear();
+        cachedLevel = level;
+        cachedDimension = dimension;
+    }
+
+    private static int alignedSample(int coordinate, int step) {
+        return Math.floorDiv(coordinate, step) * step + step / 2;
+    }
+
+    private static long pack(int x, int z) {
+        return ((long) x << 32) ^ (z & 0xFFFFFFFFL);
+    }
+
     private int terrainStep(int mapSize) {
-        if (mapSize >= 210) return 1;
-        if (mapSize >= 135) return 2;
+        // One-block sampling can submit more than 12,000 quads for a large HUD
+        // map with little visible benefit. Keep the overlay below ~3,200 cells.
+        if (mapSize >= 180) return 2;
         return 3;
     }
 
     private Color terrainColor(Minecraft mc, int x, int z) {
         Level level = mc.level;
         LevelChunk chunk = level.getChunkSource().getChunkNow(Math.floorDiv(x, 16), Math.floorDiv(z, 16));
-        if (chunk == null) return predictedBiomeColor(mc, x, z);
+        int dimension = dimensionId(mc);
+        if (chunk == null) return placeholder(dimension);
 
-        int y = sampleY(mc, level, x, z);
-        if (y < level.getMinY() || y >= level.getMaxY()) return predictedBiomeColor(mc, x, z);
+        int y = sampleY(mc, level, chunk, x, z);
+        if (y < level.getMinY() || y >= level.getMaxY()) return placeholder(dimension);
         y = firstVisibleY(level, x, z, y);
 
         BlockPos pos = new BlockPos(x, y, z);
         BlockState state = chunk.getBlockState(pos);
-        return colorForState(mc, level, pos, state, y, x, z);
+        return colorForState(level, pos, state, y, x, z, dimension);
     }
 
-    private Color colorForState(Minecraft mc, Level level, BlockPos pos, BlockState state, int y, int x, int z) {
-        if (state.isAir()) return predictedBiomeColor(mc, x, z);
+    private Color colorForState(Level level, BlockPos pos, BlockState state, int y,
+                                int x, int z, int dimension) {
+        if (state.isAir()) return placeholder(dimension);
 
         int shade = Math.max(-28, Math.min(36, y - 64));
         if (state.is(Blocks.WATER)) return shade(new Color(32, 96, 178, 245), Math.max(-18, Math.min(18, shade / 2)));
         if (state.is(Blocks.LAVA)) return new Color(236, 94, 32, 255);
-        if (state.is(Blocks.GRASS_BLOCK) || state.is(Blocks.MOSS_BLOCK)) return shade(blend(predictedBiomeColor(mc, x, z), new Color(70, 145, 72, 255), 0.45), shade / 2);
-        if (state.is(BlockTags.LEAVES)) return shade(blend(predictedBiomeColor(mc, x, z), new Color(36, 112, 42, 255), 0.35), shade / 3);
+        if (state.is(Blocks.GRASS_BLOCK) || state.is(Blocks.MOSS_BLOCK)) {
+            return shade(blend(runtimeGrassColor(level, pos, x, z, dimension),
+                new Color(70, 145, 72, 255), 0.45), shade / 2);
+        }
+        if (state.is(BlockTags.LEAVES)) {
+            return shade(blend(runtimeFoliageColor(level, pos, dimension),
+                new Color(36, 112, 42, 255), 0.35), shade / 3);
+        }
         if (state.is(BlockTags.LOGS)) return shade(new Color(98, 76, 47, 255), shade / 2);
         if (state.is(BlockTags.SAND)) return shade(new Color(218, 202, 132, 255), shade);
         if (state.is(BlockTags.SNOW) || state.is(BlockTags.ICE) || state.is(Blocks.SNOW_BLOCK) || state.is(Blocks.ICE) || state.is(Blocks.PACKED_ICE)) return new Color(220, 232, 238, 255);
@@ -145,32 +210,27 @@ public class MinimapOverlay {
             return shade(saturate(new Color((argb >> 16) & 255, (argb >> 8) & 255, argb & 255, 255), 1.10), shade / 2);
         }
 
-        return predictedBiomeColor(mc, x, z);
+        return placeholder(dimension);
     }
 
-    private Color predictedBiomeColor(Minecraft mc, int x, int z) {
-        long seed = SeedManager.get().getWorldSeed();
-        int dimension = dimensionId(mc);
-        if (seed == 0) {
-            return switch (dimension) {
-                case -1 -> new Color(92, 36, 40, 230);
-                case 1 -> new Color(188, 184, 126, 230);
-                default -> new Color(54, 86, 62, 230);
-            };
-        }
-
-        int abgr = BiomeGenerator.getBiomeColor(x, z, dimension);
-        Color color = colorFromAbgr(abgr, 235);
-        if (dimension == 1) return blend(color, new Color(205, 200, 142, 235), 0.50);
-        if (dimension == -1) return saturate(color, 1.18);
-        return saturate(color, 1.16);
+    private Color runtimeGrassColor(Level level, BlockPos pos, int x, int z, int dimension) {
+        if (dimension != 0) return placeholder(dimension);
+        int rgb = level.getBiome(pos).value().getGrassColor(x, z);
+        return saturate(new Color((rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255, 235), 1.10);
     }
 
-    private Color colorFromAbgr(int abgr, int alpha) {
-        int r = abgr & 0xFF;
-        int g = (abgr >> 8) & 0xFF;
-        int b = (abgr >> 16) & 0xFF;
-        return new Color(r, g, b, Math.max(0, Math.min(255, alpha)));
+    private Color runtimeFoliageColor(Level level, BlockPos pos, int dimension) {
+        if (dimension != 0) return placeholder(dimension);
+        int rgb = level.getBiome(pos).value().getFoliageColor();
+        return saturate(new Color((rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255, 235), 1.10);
+    }
+
+    private static Color placeholder(int dimension) {
+        return switch (dimension) {
+            case -1 -> NETHER_PLACEHOLDER;
+            case 1 -> END_PLACEHOLDER;
+            default -> OVERWORLD_PLACEHOLDER;
+        };
     }
 
     private Color shade(Color base, int shade) {
@@ -201,9 +261,10 @@ public class MinimapOverlay {
         );
     }
 
-    private int sampleY(Minecraft mc, Level level, int x, int z) {
+    private int sampleY(Minecraft mc, Level level, LevelChunk chunk, int x, int z) {
         int playerY = mc.player.blockPosition().getY();
-        int surfaceY = level.getHeight(Heightmap.Types.WORLD_SURFACE, x, z) - 1;
+        int surfaceY = chunk.getHeight(Heightmap.Types.WORLD_SURFACE,
+            Math.floorMod(x, 16), Math.floorMod(z, 16)) - 1;
         if (level.dimension() == Level.NETHER) return sampleNearPlayerY(level, x, z, playerY);
 
         boolean caveMode = playerY < 45 && surfaceY - playerY > 18;
@@ -311,9 +372,10 @@ public class MinimapOverlay {
         r.render();
     }
 
-    private void drawCompass(int x, int y, int size) {
+    private void drawCompass(net.minecraft.client.gui.GuiGraphicsExtractor graphics,
+                             int x, int y, int size) {
         TextRenderer text = TextRenderer.get();
-        text.begin(0.85, false, true);
+        text.begin(graphics, 0.85, false, true);
         text.render("N", x + size / 2.0 - 3, y + 4, Color.WHITE);
         text.render("S", x + size / 2.0 - 3, y + size - 13, new Color(210, 215, 220));
         text.render("W", x + 6, y + size / 2.0 - 5, new Color(210, 215, 220));
@@ -321,7 +383,8 @@ public class MinimapOverlay {
         text.end();
     }
 
-    private void drawCoords(Minecraft mc, int x, int y) {
+    private void drawCoords(net.minecraft.client.gui.GuiGraphicsExtractor graphics,
+                            Minecraft mc, int x, int y) {
         String coords = String.format("X %.0f  Y %.0f  Z %.0f", mc.player.getX(), mc.player.getY(), mc.player.getZ());
         Renderer2D r = Renderer2D.COLOR;
         r.begin();
@@ -330,7 +393,7 @@ public class MinimapOverlay {
         r.render();
 
         TextRenderer text = TextRenderer.get();
-        text.begin(0.85, false, true);
+        text.begin(graphics, 0.85, false, true);
         text.render(coords, x + 4, y, new Color(230, 235, 238, 230));
         text.end();
     }

@@ -1,20 +1,28 @@
 package me.seedexplorer.addon.loot;
 
 import com.google.gson.JsonElement;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.mojang.serialization.JsonOps;
-import me.seedexplorer.addon.debug.PredictionDebugLogger;
+import me.seedexplorer.addon.worldgen.PredictionContext;
 import me.seedexplorer.addon.worldgen.WorldgenEngine;
 import net.minecraft.core.HolderSet;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.Holder;
+import net.minecraft.core.Registry;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.RegistryOps;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.tags.TagKey;
 import net.minecraft.client.Minecraft;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.chunk.ChunkGeneratorStructureState;
 import net.minecraft.tags.EnchantmentTags;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.Enchantment;
@@ -24,6 +32,10 @@ import net.minecraft.world.level.storage.loot.LootTable;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.levelgen.structure.Structure;
+import net.minecraft.world.level.levelgen.structure.placement.ConcentricRingsStructurePlacement;
+import net.minecraft.world.level.levelgen.structure.placement.RandomSpreadStructurePlacement;
+import net.minecraft.world.level.levelgen.structure.placement.StructurePlacement;
 
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -39,7 +51,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /** Deterministic simulator for the supported vanilla loot-table operations. */
 public final class LootTableSimulator {
-    // Expansion order of #minecraft:on_random_loot in the bundled 26.1.2 data.
+    // Expansion order of #minecraft:on_random_loot in the bundled vanilla data.
     // Vanilla's lightweight construction registries expose values but do not bind tags,
     // so the offline differential harness must retain the data-pack order explicitly.
     private static final List<String> RANDOM_LOOT_ENCHANTMENTS = List.of(
@@ -66,6 +78,14 @@ public final class LootTableSimulator {
     private LootTableSimulator() {
     }
 
+    private static PredictionContext legacyContext(long worldSeed, int dimension) {
+        return new PredictionContext(worldSeed, "26.3", dimension);
+    }
+
+    private static PredictionContext legacyCurrentContext(int dimension) {
+        return new PredictionContext(0L, "26.3", dimension);
+    }
+
     public static List<ItemLoot> simulate(LootTableDef table, long seed, int maxRolls) {
         if (table.pools().isEmpty()) return List.of();
         LootRandom random = new LootRandom(seed);
@@ -80,27 +100,78 @@ public final class LootTableSimulator {
      * list is a valid empty loot roll.
      */
     public static List<ItemLoot> simulateVanilla(String tableId, long seed) {
+        return simulateVanilla(legacyCurrentContext(0), tableId, seed, null);
+    }
+
+    public static List<ItemLoot> simulateVanilla(PredictionContext context, String tableId, long seed) {
+        return simulateVanilla(context, tableId, seed, null);
+    }
+
+    /** Executes a table with the real predicted origin. Location predicates in
+     * 26.3 camp tables depend on this position and its biome. */
+    public static List<ItemLoot> simulateVanilla(String tableId, long seed,
+                                                  long worldSeed, int dimension,
+                                                  int blockX, int blockY, int blockZ) {
+        PredictionContext context = legacyContext(worldSeed, dimension);
+        return simulateVanilla(context, tableId, seed,
+            new LootLocation(worldSeed, dimension, blockX, blockY, blockZ));
+    }
+
+    public static List<ItemLoot> simulateVanilla(PredictionContext context, String tableId, long seed,
+                                                  int blockX, int blockY, int blockZ) {
+        return simulateVanilla(context, tableId, seed,
+            new LootLocation(context.worldSeed(), context.dimension(), blockX, blockY, blockZ));
+    }
+
+    private static List<ItemLoot> simulateVanilla(PredictionContext context, String tableId, long seed,
+                                                   LootLocation location) {
         if (tableId == null || !tableId.startsWith("minecraft:")) return null;
         try {
-            JsonElement json = readLootTableJson(tableId);
+            BundledLootTableLoader.VersionProfile profile = versionProfile(context);
+            JsonElement json = readLootTableJson(tableId, profile);
             if (json == null) return null;
+
+            // A headless verifier has no fully constructed ServerLevel chunk source,
+            // but worldgen still knows the exact biome for a predicted seed/origin.
+            // Resolve only deterministic biome location conditions here, then leave
+            // all pool selection, RNG, functions, and item construction to vanilla.
+            if (location != null) {
+                String biomeId = WorldgenEngine.getBiome(location.worldSeed(),
+                    location.dimension(), location.x(), location.y(), location.z()).id();
+                json = resolveBiomeLocationConditions(json, biomeId);
+                if (json == null) return List.of();
+                json = resolveExplorationMaps(json, location, new HashMap<>());
+            }
 
             // LootTable references normally resolve through the server's reloadable
             // loot-table registry. The headless verifier intentionally has no full
             // server reload, so inline those referenced tables before decoding. The
             // decoded NestedLootTable still executes through vanilla and therefore
             // preserves the shared RNG stream, conditions, functions, and enchantments.
-            json = expandNestedLootTables(json, tableId, new HashSet<>(Set.of(tableId)));
+            json = expandNestedLootTables(
+                json, tableId, new HashSet<>(Set.of(tableId)), profile);
 
             RegistryOps<JsonElement> ops = RegistryOps.create(JsonOps.INSTANCE,
                 WorldgenEngine.offlineRegistryAccess());
             LootTable table = LootTable.DIRECT_CODEC.parse(ops, json)
                 .getOrThrow(error -> new IllegalStateException("loot table parse failed: " + error));
 
-            Object fake = VanillaLootStructureSimulator.fakeLevelForProbe();
-            if (!(fake instanceof ServerLevel level)) return null;
+            int dimension = location == null ? 0 : location.dimension();
+            long worldSeed = location == null ? 0L : location.worldSeed();
+            int blockX = location == null ? 0 : location.x();
+            int blockY = location == null ? 64 : location.y();
+            int blockZ = location == null ? 0 : location.z();
+            ServerLevel level = liveLevel(dimension, location);
+            if (level == null) {
+                Object fake = location == null
+                    ? VanillaLootStructureSimulator.fakeLevelForProbe()
+                    : VanillaLootStructureSimulator.fakeLevelForSeed(worldSeed);
+                if (!(fake instanceof ServerLevel fallback)) return null;
+                level = fallback;
+            }
             LootParams params = new LootParams.Builder(level)
-                .withParameter(LootContextParams.ORIGIN, new Vec3(0, 64, 0))
+                .withParameter(LootContextParams.ORIGIN,
+                    new Vec3(blockX + 0.5, blockY + 0.5, blockZ + 0.5))
                 .create(LootContextParamSets.CHEST);
 
             List<ItemLoot> results = new ArrayList<>();
@@ -124,10 +195,277 @@ public final class LootTableSimulator {
         }
     }
 
-    private static JsonElement readLootTableJson(String tableId) {
-        String resourcePath = "/data/minecraft/loot_table/"
-            + tableId.substring("minecraft:".length()) + ".json";
-        try (InputStream in = openLootTableResource(tableId, resourcePath)) {
+    private static JsonElement resolveBiomeLocationConditions(JsonElement element,
+                                                               String biomeId) {
+        if (element == null || element.isJsonNull()) return element;
+        if (element.isJsonArray()) {
+            JsonArray resolved = new JsonArray();
+            for (JsonElement child : element.getAsJsonArray()) {
+                JsonElement value = resolveBiomeLocationConditions(child, biomeId);
+                if (value != null) resolved.add(value);
+            }
+            return resolved;
+        }
+        if (!element.isJsonObject()) return element;
+
+        JsonObject object = element.getAsJsonObject().deepCopy();
+        if (!resolveAttachedCondition(object, "condition", biomeId)) return null;
+        if (!resolveAttachedCondition(object, "conditions", biomeId)) return null;
+
+        List<String> keys = new ArrayList<>();
+        for (var entry : object.entrySet()) keys.add(entry.getKey());
+        for (String key : keys) {
+            JsonElement resolved = resolveBiomeLocationConditions(object.get(key), biomeId);
+            if (resolved == null) object.remove(key);
+            else object.add(key, resolved);
+        }
+        return object;
+    }
+
+    /**
+     * Exploration-map functions need a fully running ServerLevel only to locate
+     * the destination and attach saved-map data. Predict the destination with the
+     * same structure placements, then remove those non-random mutations. The
+     * exposed item id/count stream remains vanilla-exact.
+     */
+    private static JsonElement resolveExplorationMaps(JsonElement element, LootLocation location,
+                                                       Map<String, Boolean> availability) {
+        if (element == null || element.isJsonNull()) return element;
+        if (element.isJsonArray()) {
+            JsonArray resolved = new JsonArray();
+            for (JsonElement child : element.getAsJsonArray()) {
+                resolved.add(resolveExplorationMaps(child, location, availability));
+            }
+            return resolved;
+        }
+        if (!element.isJsonObject()) return element;
+
+        JsonObject object = element.getAsJsonObject().deepCopy();
+        boolean unavailable = resolveExplorationModifierList(
+            object, "modifier", location, availability);
+        unavailable |= resolveExplorationModifierList(
+            object, "functions", location, availability);
+        if (unavailable && isItemEntry(object)) {
+            JsonObject discard = new JsonObject();
+            discard.addProperty("type", "minecraft:discard");
+            JsonArray discardList = new JsonArray();
+            discardList.add(discard);
+            object.add("modifier", discardList);
+            object.remove("functions");
+        }
+
+        List<String> keys = new ArrayList<>();
+        for (var entry : object.entrySet()) keys.add(entry.getKey());
+        for (String key : keys) {
+            object.add(key, resolveExplorationMaps(object.get(key), location, availability));
+        }
+        return object;
+    }
+
+    /** Returns true when an exploration map cannot find a destination. */
+    private static boolean resolveExplorationModifierList(JsonObject owner, String key,
+                                                           LootLocation location,
+                                                           Map<String, Boolean> availability) {
+        JsonElement modifiers = owner.get(key);
+        if (modifiers == null) return false;
+        JsonArray source = modifiers.isJsonArray() ? modifiers.getAsJsonArray() : null;
+        if (source == null) return false;
+
+        JsonArray retained = new JsonArray();
+        boolean foundExploration = false;
+        boolean destinationAvailable = true;
+        for (JsonElement modifier : source) {
+            String type = objectType(modifier);
+            if ("minecraft:exploration_map".equals(type)) {
+                foundExploration = true;
+                JsonObject function = modifier.getAsJsonObject();
+                String destination = function.has("destination")
+                    ? function.get("destination").getAsString() : "";
+                int radius = function.has("search_radius")
+                    ? function.get("search_radius").getAsInt() : 50;
+                String cacheKey = destination + '|' + radius;
+                destinationAvailable &= availability.computeIfAbsent(cacheKey,
+                    ignored -> hasMapDestination(location, destination, radius));
+                continue;
+            }
+            // This filter only validates that exploration_map attached map data.
+            // Its success is already represented by destinationAvailable.
+            if (foundExploration && "minecraft:filtered".equals(type)) continue;
+            retained.add(modifier);
+        }
+        if (!foundExploration) return false;
+        if (retained.isEmpty()) owner.remove(key);
+        else owner.add(key, retained);
+        return !destinationAvailable;
+    }
+
+    private static boolean isItemEntry(JsonObject object) {
+        return "minecraft:item".equals(objectType(object));
+    }
+
+    private static String objectType(JsonElement element) {
+        if (element == null || !element.isJsonObject()) return "";
+        JsonElement type = element.getAsJsonObject().get("type");
+        return type != null && type.isJsonPrimitive() ? type.getAsString() : "";
+    }
+
+    private static boolean hasMapDestination(LootLocation location, String destination,
+                                              int searchRadius) {
+        if (destination == null || destination.isBlank()) return false;
+        Registry<Structure> structures = WorldgenEngine.offlineRegistryAccess()
+            .lookupOrThrow(Registries.STRUCTURE);
+        HolderSet<Structure> targets;
+        if (destination.startsWith("#")) {
+            TagKey<Structure> tag = TagKey.create(Registries.STRUCTURE,
+                Identifier.parse(destination.substring(1)));
+            targets = structures.get(tag).orElse(null);
+        } else {
+            ResourceKey<Structure> key = ResourceKey.create(Registries.STRUCTURE,
+                Identifier.parse(destination));
+            Holder.Reference<Structure> holder = structures.get(key).orElse(null);
+            targets = holder == null ? null : HolderSet.direct(holder);
+        }
+        if (targets == null || targets.size() == 0) return false;
+
+        var state = WorldgenEngine.structureState(location.worldSeed(), location.dimension());
+        if (state == null) return false;
+        int centerChunkX = Math.floorDiv(location.x(), 16);
+        int centerChunkZ = Math.floorDiv(location.z(), 16);
+        for (Holder<Structure> target : targets) {
+            ResourceKey<Structure> key = target.unwrapKey().orElse(null);
+            if (key == null) continue;
+            for (StructurePlacement placement : state.getPlacementsForStructure(target)) {
+                if (placement instanceof RandomSpreadStructurePlacement randomSpread
+                    && hasRandomSpreadDestination(location, key, randomSpread,
+                        state, centerChunkX, centerChunkZ, searchRadius)) {
+                    return true;
+                }
+                if (placement instanceof ConcentricRingsStructurePlacement rings) {
+                    List<ChunkPos> positions = state.getRingPositionsFor(rings);
+                    if (positions != null && positions.stream().anyMatch(chunk ->
+                        WorldgenEngine.generateStructureStart(location.worldSeed(),
+                            location.dimension(), key, chunk).isValid())) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    private static boolean hasRandomSpreadDestination(
+        LootLocation location, ResourceKey<Structure> key,
+        RandomSpreadStructurePlacement placement,
+        ChunkGeneratorStructureState state,
+        int centerChunkX, int centerChunkZ, int searchRadius) {
+        int spacing = placement.spacing();
+        for (int radius = 0; radius <= searchRadius; radius++) {
+            for (int dx = -radius; dx <= radius; dx++) {
+                boolean xEdge = dx == -radius || dx == radius;
+                for (int dz = -radius; dz <= radius; dz++) {
+                    if (!xEdge && dz != -radius && dz != radius) continue;
+                    ChunkPos candidate = placement.getPotentialStructureChunk(
+                        location.worldSeed(), centerChunkX + spacing * dx,
+                        centerChunkZ + spacing * dz);
+                    if (!placement.isStructureChunk(state, candidate.x(), candidate.z())) {
+                        continue;
+                    }
+                    if (WorldgenEngine.generateStructureStart(location.worldSeed(),
+                        location.dimension(), key, candidate).isValid()) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    /** Returns false when the owning loot node must be excluded. */
+    private static boolean resolveAttachedCondition(JsonObject owner, String key,
+                                                    String biomeId) {
+        JsonElement conditions = owner.get(key);
+        if (conditions == null) return true;
+        if (conditions.isJsonArray()) {
+            JsonArray unresolved = new JsonArray();
+            for (JsonElement condition : conditions.getAsJsonArray()) {
+                Boolean result = evaluateBiomeCondition(condition, biomeId);
+                if (Boolean.FALSE.equals(result)) return false;
+                if (result == null) unresolved.add(condition);
+            }
+            if (unresolved.size() == 0) owner.remove(key);
+            else owner.add(key, unresolved);
+            return true;
+        }
+        Boolean result = evaluateBiomeCondition(conditions, biomeId);
+        if (Boolean.FALSE.equals(result)) return false;
+        if (Boolean.TRUE.equals(result)) owner.remove(key);
+        return true;
+    }
+
+    /** Tri-state evaluation: null leaves unsupported conditions for vanilla. */
+    private static Boolean evaluateBiomeCondition(JsonElement element, String biomeId) {
+        if (element == null || !element.isJsonObject()) return null;
+        JsonObject condition = element.getAsJsonObject();
+        String type = condition.has("type") && condition.get("type").isJsonPrimitive()
+            ? condition.get("type").getAsString() : "";
+        if (type.equals("minecraft:inverted")) {
+            Boolean result = evaluateBiomeCondition(condition.get("term"), biomeId);
+            return result == null ? null : !result;
+        }
+        if (type.equals("minecraft:all_of") || type.equals("minecraft:any_of")) {
+            JsonElement termsElement = condition.get("terms");
+            if (termsElement == null || !termsElement.isJsonArray()) return null;
+            boolean anyUnknown = false;
+            for (JsonElement term : termsElement.getAsJsonArray()) {
+                Boolean result = evaluateBiomeCondition(term, biomeId);
+                if (result == null) anyUnknown = true;
+                else if (type.equals("minecraft:all_of") && !result) return false;
+                else if (type.equals("minecraft:any_of") && result) return true;
+            }
+            if (anyUnknown) return null;
+            return type.equals("minecraft:all_of");
+        }
+        if (!type.equals("minecraft:location_check")) return null;
+        JsonElement predicateElement = condition.get("predicate");
+        if (predicateElement == null || !predicateElement.isJsonObject()) return null;
+        JsonElement biomes = predicateElement.getAsJsonObject().get("biomes");
+        if (biomes == null) return null;
+        if (biomes.isJsonPrimitive()) {
+            String expected = biomes.getAsString();
+            return expected.startsWith("#") ? null : expected.equals(biomeId);
+        }
+        if (!biomes.isJsonArray()) return null;
+        for (JsonElement biome : biomes.getAsJsonArray()) {
+            if (biome.isJsonPrimitive() && biome.getAsString().equals(biomeId)) return true;
+        }
+        return false;
+    }
+
+    private record LootLocation(long worldSeed, int dimension, int x, int y, int z) {
+    }
+
+    private static ServerLevel liveLevel(int dimension, LootLocation location) {
+        try {
+            Minecraft minecraft = Minecraft.getInstance();
+            MinecraftServer server = minecraft == null ? null : minecraft.getSingleplayerServer();
+            if (server == null) return null;
+            ResourceKey<Level> key = dimension < 0 ? Level.NETHER
+                : dimension > 0 ? Level.END : Level.OVERWORLD;
+            ServerLevel level = server.getLevel(key);
+            if (level == null) return null;
+            // Offline audits and cross-seed searches may run while an unrelated
+            // integrated world is open. Never let that world's structures or
+            // exploration-map search contaminate a requested seed's loot roll.
+            return location == null || level.getSeed() == location.worldSeed()
+                ? level : null;
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static JsonElement readLootTableJson(
+        String tableId, BundledLootTableLoader.VersionProfile profile) {
+        try (InputStream in = BundledLootTableLoader.openAuthoritativeLootTable(profile, tableId)) {
             if (in == null) {
                 reportVanillaFailure(tableId, new IllegalStateException("resource unavailable"));
                 return null;
@@ -139,13 +477,15 @@ public final class LootTableSimulator {
         }
     }
 
-    private static JsonElement expandNestedLootTables(JsonElement element, String ownerTable,
-                                                       Set<String> activeTables) {
+    private static JsonElement expandNestedLootTables(
+        JsonElement element, String ownerTable, Set<String> activeTables,
+        BundledLootTableLoader.VersionProfile profile) {
         if (element == null || element.isJsonNull()) return element;
         if (element.isJsonArray()) {
             var array = element.getAsJsonArray();
             for (int i = 0; i < array.size(); i++) {
-                array.set(i, expandNestedLootTables(array.get(i), ownerTable, activeTables));
+                array.set(i, expandNestedLootTables(
+                    array.get(i), ownerTable, activeTables, profile));
             }
             return array;
         }
@@ -160,11 +500,12 @@ public final class LootTableSimulator {
             String reference = object.get("value").getAsString();
             if (!reference.contains(":")) reference = "minecraft:" + reference;
             if (!activeTables.contains(reference)) {
-                JsonElement nested = readLootTableJson(reference);
+                JsonElement nested = readLootTableJson(reference, profile);
                 if (nested != null) {
                     Set<String> nestedActive = new HashSet<>(activeTables);
                     nestedActive.add(reference);
-                    object.add("value", expandNestedLootTables(nested, reference, nestedActive));
+                    object.add("value", expandNestedLootTables(
+                        nested, reference, nestedActive, profile));
                 }
             }
             return object;
@@ -176,38 +517,28 @@ public final class LootTableSimulator {
         List<String> keys = new ArrayList<>();
         for (var entry : object.entrySet()) keys.add(entry.getKey());
         for (String key : keys) {
-            object.add(key, expandNestedLootTables(object.get(key), ownerTable, activeTables));
+            object.add(key, expandNestedLootTables(
+                object.get(key), ownerTable, activeTables, profile));
         }
         return object;
     }
 
-    /**
-     * In a production Fabric client the Minecraft data pack is owned by the
-     * runtime resource manager, not the addon class loader. Keep the classpath
-     * path for offline probes, then ask the active client resource manager when
-     * the addon resource lookup is empty.
-     */
-    private static InputStream openLootTableResource(String tableId, String classpathPath) {
-        InputStream bundled = LootTableSimulator.class.getResourceAsStream(classpathPath);
-        if (bundled != null) return bundled;
-        try {
-            Minecraft minecraft = Minecraft.getInstance();
-            if (minecraft == null || minecraft.getResourceManager() == null) return null;
-            Identifier id = Identifier.fromNamespaceAndPath(
-                "minecraft", "loot_table/" + tableId.substring("minecraft:".length()) + ".json");
-            return minecraft.getResourceManager().open(id);
-        } catch (Throwable failure) {
-            reportVanillaFailure(tableId, failure);
-            return null;
+    private static BundledLootTableLoader.VersionProfile versionProfile(PredictionContext context) {
+        String version = context == null ? "" : context.minecraftVersion();
+        if (version == null || version.isBlank()) {
+            return BundledLootTableLoader.runtimeProfile();
         }
+        return BundledLootTableLoader.VersionProfile.forVersion(version);
     }
 
     private static void reportVanillaFailure(String tableId, Throwable failure) {
         String key = tableId + ":" + failure.getClass().getName() + ":" + String.valueOf(failure.getMessage());
         if (!REPORTED_VANILLA_FAILURES.add(key)) return;
-        PredictionDebugLogger.append("event=vanilla_loot_table_unavailable"
+        String message = "Seed Explorer vanilla loot unavailable"
             + " table=\"" + tableId.replace("\"", "\\\"") + "\""
-            + " error=\"" + String.valueOf(failure.getMessage()).replace("\"", "\\\"") + "\"\n");
+            + " error=\"" + String.valueOf(failure.getMessage()).replace("\"", "\\\"") + "\"";
+        System.err.println(message);
+        if (Boolean.getBoolean("seedexplorer.lootDebug")) failure.printStackTrace(System.err);
     }
 
     private static List<ItemLoot> mergeExactStacks(List<ItemLoot> stacks) {

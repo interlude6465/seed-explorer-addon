@@ -10,7 +10,8 @@ import me.seedexplorer.addon.debug.PredictionDebugLogger;
 import me.seedexplorer.addon.loot.ChestLootOutput;
 import me.seedexplorer.addon.loot.ChestLootPredictor;
 import me.seedexplorer.addon.render.Terrain3DRenderer;
-import me.seedexplorer.addon.seed.SeedManager;
+import me.seedexplorer.addon.seed.ActivePredictionContext;
+import me.seedexplorer.addon.worldgen.PredictionContext;
 import me.seedexplorer.addon.worldgen.VanillaStructurePredictor;
 import me.seedexplorer.addon.workers.WorkerManager;
 import meteordevelopment.meteorclient.MeteorClient;
@@ -46,6 +47,7 @@ public class StructureCache {
     private static final Set<String> LOGGED_LOOT_FAILURES = ConcurrentHashMap.newKeySet();
     private static final AtomicInteger PERSISTENCE_THREAD_IDS = new AtomicInteger();
     private static final int PERSISTENCE_QUEUE_CAPACITY = 256;
+    private static final int MAX_REGION_SUBMISSIONS_PER_REQUEST = 4;
 
     /** Loot simulation is much slower than locating structures. Keeping it off the
      * shared map workers prevents four chest-heavy regions from freezing all later
@@ -62,6 +64,7 @@ public class StructureCache {
 
     private volatile long lastSeed = Long.MIN_VALUE;
     private volatile int lastDimension = Integer.MIN_VALUE;
+    private volatile String lastVersion = "";
     private volatile int generation = 0;
 
     private StructureCache() {
@@ -80,6 +83,7 @@ public class StructureCache {
             // generation guard still rejects jobs that were queued for the old seed.
             lastSeed = event.seed;
             lastDimension = Integer.MIN_VALUE;
+            lastVersion = event.version == null ? "" : event.version;
         }
     }
 
@@ -97,11 +101,19 @@ public class StructureCache {
     }
 
     public void requestRegion(long regionKey, int dimension, boolean includeBuriedTreasure, boolean includeMineshafts) {
-        long requestedSeed = SeedManager.get().getWorldSeed();
-        ensureContext(requestedSeed, dimension);
+        requestRegion(ActivePredictionContext.current(dimension), regionKey,
+            includeBuriedTreasure, includeMineshafts);
+    }
+
+    public void requestRegion(PredictionContext context, long regionKey,
+                              boolean includeBuriedTreasure, boolean includeMineshafts) {
+        long requestedSeed = context.worldSeed();
+        int dimension = context.dimension();
+        ensureContext(context);
         Map<Long, List<GeneratedStructure>> targetCache = cacheFor(includeBuriedTreasure, includeMineshafts);
         Set<Long> targetPending = pendingFor(includeBuriedTreasure, includeMineshafts);
-        String worldIdentity = Terrain3DRenderer.worldCacheIdentity(requestedSeed);
+        String worldIdentity = Terrain3DRenderer.worldCacheIdentity(requestedSeed)
+            + "|prediction-version=" + context.minecraftVersion();
         if (targetCache.containsKey(regionKey) || !targetPending.add(regionKey)) return;
         int requestedGeneration = generation;
 
@@ -124,14 +136,14 @@ public class StructureCache {
                 List<GeneratedStructure> structures = persisted.isPresent()
                     ? persisted.get().structures().stream()
                         .map(StructurePredictionStore.StructurePrediction::structure).toList()
-                    : computeStructures(requestedSeed, chunkStartX, chunkStartZ, chunkEndX, chunkEndZ,
-                        dimension, includeBuriedTreasure, includeMineshafts);
+                    : computeStructures(context, chunkStartX, chunkStartZ, chunkEndX, chunkEndZ,
+                        includeBuriedTreasure, includeMineshafts);
                 if (generation == requestedGeneration && lastSeed == requestedSeed && lastDimension == dimension) {
                     // Publish locations before optional chest simulation. The 2D map
                     // should fill as fast as structure starts can be predicted.
                     targetCache.put(regionKey, structures);
                     if (persisted.isEmpty()) {
-                        queuePredictionPersistence(worldIdentity, requestedSeed, dimension,
+                        queuePredictionPersistence(context, worldIdentity,
                             regionKey, includeBuriedTreasure, includeMineshafts,
                             requestedGeneration, structures);
                     }
@@ -144,10 +156,12 @@ public class StructureCache {
         }
     }
 
-    private void queuePredictionPersistence(String worldIdentity, long seed, int dimension,
+    private void queuePredictionPersistence(PredictionContext context, String worldIdentity,
                                             long regionKey, boolean includeBuriedTreasure,
                                             boolean includeMineshafts, int requestedGeneration,
                                             List<GeneratedStructure> structures) {
+        long seed = context.worldSeed();
+        int dimension = context.dimension();
         PersistenceKey key = new PersistenceKey(seed, dimension, regionKey,
             includeBuriedTreasure, includeMineshafts, requestedGeneration);
         if (!pendingPersistence.add(key)) return;
@@ -160,7 +174,7 @@ public class StructureCache {
                     for (GeneratedStructure structure : structures) {
                         if (!isCurrent(seed, dimension, requestedGeneration)) return;
                         List<ChestLootOutput> chests = predictLootWithoutAbortingRegion(
-                            seed, dimension, structure);
+                            context, structure);
                         predictions.add(new StructurePredictionStore.StructurePrediction(
                             structure, chests));
                     }
@@ -181,10 +195,12 @@ public class StructureCache {
     }
 
     private static List<ChestLootOutput> predictLootWithoutAbortingRegion(
-        long seed, int dimension, GeneratedStructure structure) {
-        if (!ChestLootPredictor.canPredict(structure.type)) return List.of();
+        PredictionContext context, GeneratedStructure structure) {
+        long seed = context.worldSeed();
+        int dimension = context.dimension();
+        if (!ChestLootPredictor.canPredict(context, structure.type)) return List.of();
         try {
-            return ChestLootPredictor.predictForStructure(seed, structure, 64);
+            return ChestLootPredictor.predictForStructure(context, structure, 64);
         } catch (RuntimeException failure) {
             String signature = structure.type + ":" + failure.getClass().getName()
                 + ":" + String.valueOf(failure.getMessage());
@@ -202,10 +218,13 @@ public class StructureCache {
     /**
      * Computes all structure positions overlapping the given chunk range.
      */
-    private List<GeneratedStructure> computeStructures(long seed, int csx, int csz, int cex, int cez, int dimension, boolean includeBuriedTreasure, boolean includeMineshafts) {
-        if (seed == 0) return List.of();
+    private List<GeneratedStructure> computeStructures(PredictionContext context,
+        int csx, int csz, int cex, int cez,
+        boolean includeBuriedTreasure, boolean includeMineshafts) {
+        if (context.worldSeed() == 0L) return List.of();
 
-        return VanillaStructurePredictor.predictDimension(seed, dimension, csx, csz, cex, cez, includeBuriedTreasure, includeMineshafts);
+        return VanillaStructurePredictor.predictDimension(context, csx, csz, cex, cez,
+            includeBuriedTreasure, includeMineshafts);
     }
 
     /**
@@ -230,8 +249,16 @@ public class StructureCache {
                                                    int dimension,
                                                    boolean includeBuriedTreasure,
                                                    boolean includeMineshafts) {
-        long seed = SeedManager.get().getWorldSeed();
-        ensureContext(seed, dimension);
+        return getStructures(ActivePredictionContext.current(dimension), chunkMinX, chunkMinZ,
+            chunkMaxX, chunkMaxZ, includeBuriedTreasure, includeMineshafts);
+    }
+
+    public List<GeneratedStructure> getStructures(PredictionContext context,
+                                                   int chunkMinX, int chunkMinZ,
+                                                   int chunkMaxX, int chunkMaxZ,
+                                                   boolean includeBuriedTreasure,
+                                                   boolean includeMineshafts) {
+        ensureContext(context);
 
         Map<Long, List<GeneratedStructure>> targetCache = cacheFor(includeBuriedTreasure, includeMineshafts);
 
@@ -241,7 +268,7 @@ public class StructureCache {
         int rMaxX = Math.floorDiv(chunkMaxX, 64);
         int rMaxZ = Math.floorDiv(chunkMaxZ, 64);
 
-        requestRegionsCenterOut(rMinX, rMinZ, rMaxX, rMaxZ, dimension,
+        requestRegionsCenterOut(context, rMinX, rMinZ, rMaxX, rMaxZ,
             includeBuriedTreasure, includeMineshafts);
 
         // Collect all structures within the requested bounds
@@ -265,33 +292,45 @@ public class StructureCache {
         return results;
     }
 
-    private void requestRegionsCenterOut(int rMinX, int rMinZ, int rMaxX, int rMaxZ,
-                                         int dimension, boolean includeBuriedTreasure,
+    private void requestRegionsCenterOut(PredictionContext context,
+                                         int rMinX, int rMinZ, int rMaxX, int rMaxZ,
+                                         boolean includeBuriedTreasure,
                                          boolean includeMineshafts) {
+        Map<Long, List<GeneratedStructure>> targetCache =
+            cacheFor(includeBuriedTreasure, includeMineshafts);
+        Set<Long> targetPending = pendingFor(includeBuriedTreasure, includeMineshafts);
+        int remainingSubmissions = MAX_REGION_SUBMISSIONS_PER_REQUEST;
         int centerX = rMinX + (rMaxX - rMinX) / 2;
         int centerZ = rMinZ + (rMaxZ - rMinZ) / 2;
         int maxRing = Math.max(Math.max(centerX - rMinX, rMaxX - centerX),
             Math.max(centerZ - rMinZ, rMaxZ - centerZ));
-        for (int ring = 0; ring <= maxRing; ring++) {
+        for (int ring = 0; ring <= maxRing && remainingSubmissions > 0; ring++) {
             int minZ = Math.max(rMinZ, centerZ - ring);
             int maxZ = Math.min(rMaxZ, centerZ + ring);
             int minX = Math.max(rMinX, centerX - ring);
             int maxX = Math.min(rMaxX, centerX + ring);
-            for (int rz = minZ; rz <= maxZ; rz++) {
-                for (int rx = minX; rx <= maxX; rx++) {
+            for (int rz = minZ; rz <= maxZ && remainingSubmissions > 0; rz++) {
+                for (int rx = minX; rx <= maxX && remainingSubmissions > 0; rx++) {
                     if (Math.max(Math.abs(rx - centerX), Math.abs(rz - centerZ)) != ring) continue;
-                    requestRegion(((long) rx << 32) | (rz & 0xFFFFFFFFL), dimension,
+                    long key = ((long) rx << 32) | (rz & 0xFFFFFFFFL);
+                    if (targetCache.containsKey(key) || targetPending.contains(key)) continue;
+                    requestRegion(context, key,
                         includeBuriedTreasure, includeMineshafts);
+                    remainingSubmissions--;
                 }
             }
         }
     }
 
-    private synchronized void ensureContext(long seed, int dimension) {
-        if (lastSeed == seed && lastDimension == dimension) return;
+    private synchronized void ensureContext(PredictionContext context) {
+        long seed = context.worldSeed();
+        int dimension = context.dimension();
+        String version = context.minecraftVersion();
+        if (lastSeed == seed && lastDimension == dimension && lastVersion.equals(version)) return;
         clear();
         lastSeed = seed;
         lastDimension = dimension;
+        lastVersion = version;
     }
 
     private Map<Long, List<GeneratedStructure>> cacheFor(boolean includeBuriedTreasure, boolean includeMineshafts) {

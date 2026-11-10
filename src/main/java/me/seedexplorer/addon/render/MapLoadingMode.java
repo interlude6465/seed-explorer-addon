@@ -11,7 +11,7 @@ public final class MapLoadingMode {
 
     public static boolean isActive() {
         Object currentOwner = owner;
-        return currentOwner != null && Minecraft.getInstance().screen == currentOwner;
+        return currentOwner != null && Minecraft.getInstance().gui.screen() == currentOwner;
     }
 
     public static void activate(Object owner) {

@@ -248,6 +248,7 @@ public class WaypointCommand extends Command {
             case DESERT_PYRAMID, JUNGLE_TEMPLE, WITCH_HUT, IGLOO -> "triangle";
             case OUTPOST -> "skull";
             case MONUMENT, MANSION -> "diamond";
+            case ABANDONED_CAMP -> "circle";
             case ANCIENT_CITY -> "star";
             case FORTRESS, BASTION -> "skull";
             case END_CITY -> "star";

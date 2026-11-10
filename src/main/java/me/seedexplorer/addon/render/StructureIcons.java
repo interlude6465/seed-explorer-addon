@@ -5,10 +5,9 @@
 
 package me.seedexplorer.addon.render;
 
-import com.mojang.blaze3d.textures.FilterMode;
+import com.mojang.renderpearl.api.textures.FilterMode;
 import me.seedexplorer.addon.structures.GeneratedStructure;
 import me.seedexplorer.addon.structures.StructureType;
-import meteordevelopment.meteorclient.renderer.Texture;
 
 import java.util.EnumMap;
 import java.util.Map;
@@ -16,25 +15,25 @@ import java.util.Map;
 /** Loads optional map marker icons packaged with the addon. */
 public final class StructureIcons {
     private static final String ROOT = "/assets/meteor-seed-explorer/textures/structures/";
-    private static final Map<StructureType, Texture> ICONS = new EnumMap<>(StructureType.class);
+    private static final Map<StructureType, GpuTextureResource> ICONS = new EnumMap<>(StructureType.class);
     private static boolean loaded;
 
     private StructureIcons() {
     }
 
-    public static Texture get(StructureType type) {
+    public static GpuTextureResource get(StructureType type) {
         if (!loaded) load();
         return ICONS.get(type);
     }
 
-    public static Texture get(GeneratedStructure structure) {
+    public static GpuTextureResource get(GeneratedStructure structure) {
         if (!loaded) load();
         if (structure.type == StructureType.BASTION) {
-            Texture variant = bastionVariantIcon(structure.variant);
+            GpuTextureResource variant = bastionVariantIcon(structure.variant);
             if (variant != null) return variant;
         }
         if (structure.type == StructureType.END_CITY) {
-            Texture ship = structure.hasShip ? EXTRA.get("end_city_ship") : EXTRA.get("end_city_no_ship");
+            GpuTextureResource ship = structure.hasShip ? EXTRA.get("end_city_ship") : EXTRA.get("end_city_no_ship");
             if (ship != null) return ship;
         }
         return ICONS.get(structure.type);
@@ -54,6 +53,7 @@ public final class StructureIcons {
         add(StructureType.SHIPWRECK, "shipwreck.png");
         add(StructureType.STRONGHOLD, "stronghold.png");
         add(StructureType.TRAIL_RUINS, "trail_ruins.png");
+        add(StructureType.ABANDONED_CAMP, "abandoned_camp.png");
         add(StructureType.TREASURE, "treasure_chest.png");
         add(StructureType.TRIAL_CHAMBER, "trial_chamber.png");
         add(StructureType.VILLAGE, "village.png");
@@ -75,9 +75,9 @@ public final class StructureIcons {
         addExtra("bastion_treasure_room", "bastion_treasure_room.png");
     }
 
-    private static final Map<String, Texture> EXTRA = new java.util.HashMap<>();
+    private static final Map<String, GpuTextureResource> EXTRA = new java.util.HashMap<>();
 
-    private static Texture bastionVariantIcon(String variant) {
+    private static GpuTextureResource bastionVariantIcon(String variant) {
         if (variant == null || variant.isBlank()) return null;
         return switch (variant) {
             case "Bridge" -> EXTRA.get("bastion_bridge");
@@ -89,12 +89,14 @@ public final class StructureIcons {
     }
 
     private static void add(StructureType type, String fileName) {
-        Texture texture = Texture.readResource(ROOT + fileName, false, FilterMode.NEAREST);
+        GpuTextureResource texture = GpuTextureResource.readResource(
+            ROOT + fileName, false, FilterMode.NEAREST);
         if (texture != null) ICONS.put(type, texture);
     }
 
     private static void addExtra(String key, String fileName) {
-        Texture texture = Texture.readResource(ROOT + fileName, false, FilterMode.NEAREST);
+        GpuTextureResource texture = GpuTextureResource.readResource(
+            ROOT + fileName, false, FilterMode.NEAREST);
         if (texture != null) EXTRA.put(key, texture);
     }
 }

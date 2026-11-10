@@ -18,8 +18,6 @@ import java.util.function.Function;
 
 public final class StructureFocusController {
     public enum State { IDLE, ZOOMING_IN, FOCUSED, ZOOMING_OUT }
-    public record FocusTarget(double x, double y, double z, double distance) {
-    }
 
     private static final double ORBIT_PITCH_DEGREES = 72.0;
     private static final double ORBIT_DEGREES_PER_TICK = 0.35;
@@ -42,7 +40,7 @@ public final class StructureFocusController {
 
     private Consumer<GeneratedStructure> onFocusStart;
     private Runnable onFocusEnd;
-    private Function<GeneratedStructure, FocusTarget> focusResolver;
+    private Function<GeneratedStructure, TerrainFocusTarget> focusResolver;
 
     private static final Color CHEST_BG = new Color(16, 14, 8, 200);
     private static final Color CHEST_BORDER = new Color(80, 70, 30, 180);
@@ -54,7 +52,7 @@ public final class StructureFocusController {
         this.camera = camera;
     }
 
-    public void bindFocusResolver(Function<GeneratedStructure, FocusTarget> resolver) {
+    public void bindFocusResolver(Function<GeneratedStructure, TerrainFocusTarget> resolver) {
         this.focusResolver = resolver;
     }
 
@@ -68,11 +66,11 @@ public final class StructureFocusController {
         this.returnDistance = camera.distance();
         this.returnPitchDeg = Math.toDegrees(camera.pitch());
         this.returnYawDeg = Math.toDegrees(camera.yaw());
-        FocusTarget focus = resolveFocus(structure);
-        this.orbitX = focus.x;
-        this.orbitY = focus.y;
-        this.orbitZ = focus.z;
-        this.orbitDistance = focus.distance;
+        TerrainFocusTarget focus = resolveFocus(structure);
+        this.orbitX = focus.x();
+        this.orbitY = focus.y();
+        this.orbitZ = focus.z();
+        this.orbitDistance = focus.distance();
         this.orbitYawDeg = Math.toDegrees(camera.yaw());
         this.autoRotate = true;
         camera.animateViewOf(orbitX, orbitY, orbitZ, orbitDistance,
@@ -123,11 +121,11 @@ public final class StructureFocusController {
         if (state == State.FOCUSED) {
             focusTicks++;
             if (autoRotate) {
-                FocusTarget resolved = resolveFocus(target);
-                orbitX = lerp(orbitX, resolved.x, 0.18);
-                orbitY = lerp(orbitY, resolved.y, 0.18);
-                orbitZ = lerp(orbitZ, resolved.z, 0.18);
-                orbitDistance = lerp(orbitDistance, resolved.distance, 0.18);
+                TerrainFocusTarget resolved = resolveFocus(target);
+                orbitX = lerp(orbitX, resolved.x(), 0.18);
+                orbitY = lerp(orbitY, resolved.y(), 0.18);
+                orbitZ = lerp(orbitZ, resolved.z(), 0.18);
+                orbitDistance = lerp(orbitDistance, resolved.distance(), 0.18);
                 orbitYawDeg += ORBIT_DEGREES_PER_TICK;
                 camera.viewOf(orbitX, orbitY, orbitZ, orbitDistance,
                     ORBIT_PITCH_DEGREES, orbitYawDeg);
@@ -214,13 +212,13 @@ public final class StructureFocusController {
         if (onFocusEnd != null) onFocusEnd.run();
     }
 
-    private FocusTarget resolveFocus(GeneratedStructure structure) {
+    private TerrainFocusTarget resolveFocus(GeneratedStructure structure) {
         if (focusResolver != null) {
-            FocusTarget resolved = focusResolver.apply(structure);
+            TerrainFocusTarget resolved = focusResolver.apply(structure);
             if (resolved != null) return resolved;
         }
         double y = structure.y == GeneratedStructure.UNKNOWN_Y ? 64.0 : structure.y + 2.0;
-        return new FocusTarget(structure.x + 0.5, y, structure.z + 0.5, 25.0);
+        return new TerrainFocusTarget(structure.x + 0.5, y, structure.z + 0.5, 25.0);
     }
 
     private static double lerp(double from, double to, double amount) {

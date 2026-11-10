@@ -18,17 +18,38 @@ public final class TerrainGenerationStrategyProbe {
     }
 
     public static void main(String[] args) {
+        try {
+            run();
+        } catch (Throwable throwable) {
+            printFailure(throwable, 0);
+            System.exit(1);
+        }
+    }
+
+    private static void run() {
         SharedConstants.tryDetectVersion();
         Bootstrap.bootStrap();
 
         // Warm shared registries and generator caches before measuring either strategy.
-        new GeneratedTerrainHeightmap(SEED, 0, List.of(), false)
-            .getChunk(new ChunkPos(-1, -1));
+        GeneratedTerrainHeightmap warmup =
+            new GeneratedTerrainHeightmap(SEED, 0, List.of(), false);
+        warmup.getChunk(new ChunkPos(-1, -1));
 
         for (int dimension : new int[]{0, -1, 1}) {
             compareDimension(dimension);
         }
-        System.out.println("Terrain generation strategy probe: PASS");
+        Bootstrap.realStdoutPrintln("Terrain generation strategy probe: PASS");
+    }
+
+    private static void printFailure(Throwable throwable, int depth) {
+        if (throwable == null || depth > 8) return;
+        Bootstrap.realStdoutPrintln("failure[" + depth + "]=" + throwable.getClass().getName()
+            + " message=" + throwable.getMessage());
+        for (StackTraceElement frame : throwable.getStackTrace()) {
+            Bootstrap.realStdoutPrintln("  at " + frame.getClassName() + "." + frame.getMethodName()
+                + "(" + frame.getFileName() + ":" + frame.getLineNumber() + ")");
+        }
+        printFailure(throwable.getCause(), depth + 1);
     }
 
     private static void compareDimension(int dimension) {
@@ -49,9 +70,10 @@ public final class TerrainGenerationStrategyProbe {
         for (int i = 0; i < positions.length; i++) {
             compareChunks(dimension, positions[i], expected[i], actual[i]);
         }
-        System.out.printf("dimension=%d diagnosticMs=%.3f rendererMs=%.3f speedup=%.2fx%n",
+        Bootstrap.realStdoutPrintln(String.format(
+            "dimension=%d diagnosticMs=%.3f rendererMs=%.3f speedup=%.2fx",
             dimension, diagnosticNanos / 1_000_000.0, fastNanos / 1_000_000.0,
-            diagnosticNanos / (double) Math.max(1L, fastNanos));
+            diagnosticNanos / (double) Math.max(1L, fastNanos)));
     }
 
     private static ProtoChunk[] generate(GeneratedTerrainHeightmap generator,

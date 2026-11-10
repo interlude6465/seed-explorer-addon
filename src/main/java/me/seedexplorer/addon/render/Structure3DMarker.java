@@ -4,6 +4,7 @@ import me.seedexplorer.addon.structures.StructureType;
 import meteordevelopment.meteorclient.renderer.Renderer2D;
 import meteordevelopment.meteorclient.renderer.text.TextRenderer;
 import meteordevelopment.meteorclient.utils.render.color.Color;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 
 /**
  * A 3D-looking structure marker rendered on the terrain view.
@@ -38,8 +39,9 @@ public class Structure3DMarker {
         };
     }
 
-    public void render(Renderer2D renderer, MapViewport viewport, boolean hovered, float delta) {
-        Color color = StructureColors.get(type);
+    public void render(GuiGraphicsExtractor graphics, Renderer2D renderer,
+                       MapViewport viewport, boolean hovered, float delta) {
+        Color color = MeteorColorAdapter.toMeteor(StructureColors.get(type));
         double zoom = viewport.zoom();
         double sx = viewport.screenX(blockX);
         double sy = viewport.screenY(blockZ) - yOffset * zoom;
@@ -57,7 +59,7 @@ public class Structure3DMarker {
         drawIcon(renderer, sx, sy, size, color, hovered);
 
         if (hovered) {
-            drawLabel(renderer, sx, sy - half, color);
+            drawLabel(graphics, renderer, sx, sy - half, color);
         }
     }
 
@@ -182,7 +184,8 @@ public class Structure3DMarker {
         renderer.render();
     }
 
-    private void drawLabel(Renderer2D renderer, double sx, double sy, Color color) {
+    private void drawLabel(GuiGraphicsExtractor graphics, Renderer2D renderer,
+                           double sx, double sy, Color color) {
         String label = type.displayName;
         TextRenderer text = TextRenderer.get();
         double textWidth = text.getWidth(label);
@@ -193,7 +196,7 @@ public class Structure3DMarker {
         renderer.quad(textX - 2.0, textY - 1.0, textWidth + 4.0, 10.0, new Color(0, 0, 0, 160));
         renderer.render();
 
-        text.begin(1.0, false, true);
+        text.begin(graphics, 1.0, false, true);
         text.render(label, textX, textY, color);
         text.end();
     }

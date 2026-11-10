@@ -5,10 +5,6 @@
 
 package me.seedexplorer.addon.waypoints;
 
-import meteordevelopment.meteorclient.systems.waypoints.Waypoint;
-import meteordevelopment.meteorclient.utils.misc.ISerializable;
-import meteordevelopment.meteorclient.utils.world.Dimension;
-import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 
@@ -16,7 +12,7 @@ import net.minecraft.nbt.Tag;
  * Extended waypoint data for seed-explorer waypoints.
  * Tracks additional metadata for waypoints created from predicted structures.
  */
-public class SeedWaypoint implements ISerializable<SeedWaypoint> {
+public class SeedWaypoint {
     public String name;
     public int x, z;
     public int dimension; // 0=Overworld, -1=Nether, 1=End
@@ -40,46 +36,6 @@ public class SeedWaypoint implements ISerializable<SeedWaypoint> {
         fromTag((CompoundTag) tag);
     }
 
-    /**
-     * Converts this seed waypoint to a Meteor Client Waypoint.
-     */
-    public Waypoint toWaypoint() {
-        Dimension dim = switch (dimension) {
-            case 0 -> Dimension.Overworld;
-            case -1 -> Dimension.Nether;
-            case 1 -> Dimension.End;
-            default -> Dimension.Overworld;
-        };
-
-        return new Waypoint.Builder()
-            .name(name)
-            .pos(new BlockPos(x, 64, z))
-            .dimension(dim)
-            .icon(icon)
-            .build();
-    }
-
-    /**
-     * Creates a SeedWaypoint from a Meteor Client Waypoint.
-     */
-    public static SeedWaypoint fromWaypoint(Waypoint waypoint) {
-        int dim = switch (waypoint.dimension.get()) {
-            case Overworld -> 0;
-            case Nether -> -1;
-            case End -> 1;
-        };
-
-        return new SeedWaypoint(
-            waypoint.name.get(),
-            waypoint.pos.get().getX(),
-            waypoint.pos.get().getZ(),
-            dim,
-            waypoint.icon.get(),
-            ""
-        );
-    }
-
-    @Override
     public CompoundTag toTag() {
         CompoundTag tag = new CompoundTag();
         tag.putString("name", name);
@@ -91,7 +47,6 @@ public class SeedWaypoint implements ISerializable<SeedWaypoint> {
         return tag;
     }
 
-    @Override
     public SeedWaypoint fromTag(CompoundTag tag) {
         name = tag.getStringOr("name", "");
         x = tag.getIntOr("x", 0);

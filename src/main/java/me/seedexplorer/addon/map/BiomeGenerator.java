@@ -122,6 +122,11 @@ public class BiomeGenerator {
      */
     public static int getBiomeColor(int x, int z, int dimension) {
         long seed = SeedManager.get().getWorldSeed();
+        return getBiomeColor(x, z, seed, dimension);
+    }
+
+    /** Seed-explicit variant for background jobs that must reject stale results. */
+    public static int getBiomeColor(int x, int z, long seed, int dimension) {
         if (seed == 0) return 0xFF2A2A2A; // dark gray for no seed
 
         PredictedBiome biome = getPredictedBiome(x, z, seed, dimension);
@@ -145,7 +150,12 @@ public class BiomeGenerator {
     }
 
     public static PredictedBiome getPredictedBiome(int x, int z, long seed, int dimension) {
-        PredictedBiome biome = WorldgenEngine.getBiome(seed, dimension, x, 64, z);
+        return getPredictedBiome(x, 64, z, seed, dimension);
+    }
+
+    /** Height-aware lookup used by searches for underground biomes. */
+    public static PredictedBiome getPredictedBiome(int x, int y, int z, long seed, int dimension) {
+        PredictedBiome biome = WorldgenEngine.getBiome(seed, dimension, x, y, z);
         if (biome.legacyId() >= 0 || !"unknown".equals(biome.id())) return biome;
         return PredictedBiome.UNKNOWN;
     }

@@ -12,6 +12,19 @@ public final class HorizonTerrainSamplerProbe {
     }
 
     public static void main(String[] args) {
+        try {
+            run(args);
+        } catch (Throwable throwable) {
+            Bootstrap.realStdoutPrintln("Horizon probe failure: "
+                + throwable.getClass().getName() + ": " + throwable.getMessage());
+            for (StackTraceElement frame : throwable.getStackTrace()) {
+                Bootstrap.realStdoutPrintln("  at " + frame);
+            }
+            System.exit(1);
+        }
+    }
+
+    private static void run(String[] args) {
         SharedConstants.tryDetectVersion();
         Bootstrap.bootStrap();
 
@@ -33,6 +46,8 @@ public final class HorizonTerrainSamplerProbe {
 
         int samples = chunksPerSide * chunksPerSide * (16 / step) * (16 / step);
         int[] referenceHeights = new int[samples];
+        int[] sampleXs = new int[samples];
+        int[] sampleZs = new int[samples];
         int cursor = 0;
         var reference = WorldgenEngine.terrainAccessor(seed, 0);
         long referenceStart = System.nanoTime();
@@ -46,6 +61,8 @@ public final class HorizonTerrainSamplerProbe {
                         int z = baseZ + dz;
                         int top = reference.oceanFloorHeight(x, z);
                         reference.block(x, top - 1, z);
+                        sampleXs[cursor] = x;
+                        sampleZs[cursor] = z;
                         referenceHeights[cursor++] = top;
                     }
                 }
@@ -63,7 +80,8 @@ public final class HorizonTerrainSamplerProbe {
                 for (int dx = 0; dx < 16; dx += step) {
                     for (int dz = 0; dz < 16; dz += step) {
                         int index = dz * 16 + dx;
-                        horizonHeights[cursor++] = chunk.heights()[index];
+                        horizonHeights[cursor++] = chunk.fluidHeights()[index] != 0
+                            ? chunk.fluidHeights()[index] : chunk.heights()[index];
                     }
                 }
             }
@@ -72,18 +90,31 @@ public final class HorizonTerrainSamplerProbe {
 
         long totalError = 0L;
         int maximumError = 0;
+        int maximumErrorIndex = 0;
+        int largeErrors = 0;
         for (int i = 0; i < samples; i++) {
             int error = Math.abs(referenceHeights[i] - horizonHeights[i]);
             totalError += error;
-            maximumError = Math.max(maximumError, error);
+            if (error > maximumError) {
+                maximumError = error;
+                maximumErrorIndex = i;
+            }
+            if (error > 8) largeErrors++;
         }
         double referenceMs = referenceNanos / 1_000_000.0;
         double horizonMs = horizonNanos / 1_000_000.0;
-        System.out.printf("seed=%d chunks=%d step=%d samples=%d%n", seed,
-            chunksPerSide * chunksPerSide, step, samples);
-        System.out.printf("baseColumnMs=%.2f horizonStyleMs=%.2f speedup=%.2fx%n",
-            referenceMs, horizonMs, referenceMs / Math.max(0.001, horizonMs));
-        System.out.printf("meanHeightError=%.2f maxHeightError=%d%n",
-            totalError / (double) samples, maximumError);
+        Bootstrap.realStdoutPrintln(String.format("seed=%d chunks=%d step=%d samples=%d",
+            seed, chunksPerSide * chunksPerSide, step, samples));
+        Bootstrap.realStdoutPrintln(String.format(
+            "baseColumnMs=%.2f horizonStyleMs=%.2f speedup=%.2fx",
+            referenceMs, horizonMs, referenceMs / Math.max(0.001, horizonMs)));
+        Bootstrap.realStdoutPrintln(String.format("meanHeightError=%.2f maxHeightError=%d",
+            totalError / (double) samples, maximumError));
+        Bootstrap.realStdoutPrintln(String.format(
+            "largeErrors=%d worst=%d,%d reference=%d horizon=%d biome=%s",
+            largeErrors, sampleXs[maximumErrorIndex], sampleZs[maximumErrorIndex],
+            referenceHeights[maximumErrorIndex], horizonHeights[maximumErrorIndex],
+            WorldgenEngine.getBiome(seed, 0, sampleXs[maximumErrorIndex], 64,
+                sampleZs[maximumErrorIndex]).id()));
     }
 }

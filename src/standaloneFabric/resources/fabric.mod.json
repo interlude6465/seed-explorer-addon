@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "name": "Seed Explorer",
+  "id": "seed-explorer",
+  "version": "${version}",
+  "description": "Standalone seed mapping and exploration client for Minecraft.",
+  "authors": [
+    "SeedExplorer Team"
+  ],
+  "license": "GPL-3.0",
+  "environment": "client",
+  "mixins": ["seed-explorer-standalone.mixins.json"],
+  "entrypoints": {
+    "client": [
+      "me.seedexplorer.standalone.SeedExplorerFabricClient"
+    ]
+  },
+  "depends": {
+    "java": ">=${jdk_version}",
+    "minecraft": "${minecraft_version}",
+    "fabricloader": ">=${loader_version}",
+    "fabric-api-base": "*",
+    "fabric-key-mapping-api-v1": "*",
+    "fabric-lifecycle-events-v1": "*",
+    "fabric-rendering-v1": "*"
+  }
+}

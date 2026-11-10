@@ -1,0 +1,19 @@
+{
+  "required": true,
+  "package": "me.seedexplorer.standalone.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": [
+    "StandaloneOreEspLevelRendererMixin",
+    "StandaloneChatScreenMixin",
+    "StandaloneClientPacketListenerMixin",
+    "StandaloneItemDropMixin",
+    "StandaloneContainerInteractionMixin",
+    "StandaloneEnchantmentMenuMixin",
+    "StandaloneContainerOverlayMixin",
+    "StandaloneEnchantmentRequestMixin",
+    "StandaloneEnchantmentLayoutMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

@@ -8,6 +8,7 @@ import me.seedexplorer.addon.preview.StructurePreviewModel;
 import me.seedexplorer.addon.preview.StructurePreviewSimulator;
 import me.seedexplorer.addon.render.StructureColors;
 import me.seedexplorer.addon.render.StructureIcons;
+import me.seedexplorer.addon.render.MeteorColorAdapter;
 import me.seedexplorer.addon.structures.GeneratedStructure;
 import me.seedexplorer.addon.structures.StructureType;
 import meteordevelopment.meteorclient.renderer.Renderer2D;
@@ -85,7 +86,7 @@ public class Structure3DViewerScreen extends Screen {
         WorkerManager.get().submit(() -> {
             StructurePreviewModel model = StructurePreviewSimulator.preview(structure, seed);
             Minecraft.getInstance().execute(() -> {
-                if (Minecraft.getInstance().screen == this) {
+                if (Minecraft.getInstance().gui.screen() == this) {
                     previewModel = model;
                     previewLoading = false;
                 }
@@ -204,7 +205,7 @@ public class Structure3DViewerScreen extends Screen {
         int rightLimit = vw - 46;
 
         chipX = drawChip(g, r, structureType.displayName, chipX, chipY, rightLimit,
-            new Color(19, 32, 42, 255), StructureColors.get(structureType), 0xFFE7EDF3);
+            new Color(19, 32, 42, 255), MeteorColorAdapter.toMeteor(StructureColors.get(structureType)), 0xFFE7EDF3);
         if (!structureVariant.isBlank()) {
             chipX = drawChip(g, r, structureVariant, chipX, chipY, rightLimit,
                 new Color(23, 27, 36, 255), new Color(51, 65, 85, 255), 0xFFB7C3CF);

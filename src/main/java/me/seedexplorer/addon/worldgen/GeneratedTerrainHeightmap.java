@@ -17,6 +17,7 @@ import net.minecraft.world.flag.FeatureFlags;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.BiomeGenerationSettings;
 import net.minecraft.world.level.biome.BiomeManager;
+import net.minecraft.world.level.biome.BiomeResolver;
 import net.minecraft.world.level.biome.FeatureSorter;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -24,22 +25,18 @@ import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.PalettedContainerFactory;
 import net.minecraft.world.level.chunk.ProtoChunk;
 import net.minecraft.world.level.chunk.UpgradeData;
-import net.minecraft.world.level.levelgen.Aquifer;
 import net.minecraft.world.level.levelgen.Heightmap;
-import net.minecraft.world.level.levelgen.LegacyRandomSource;
 import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
-import net.minecraft.world.level.levelgen.NoiseChunk;
 import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import net.minecraft.world.level.levelgen.WorldOptions;
 import net.minecraft.world.level.levelgen.WorldGenerationContext;
 import net.minecraft.world.level.levelgen.WorldgenRandom;
 import net.minecraft.world.level.levelgen.XoroshiroRandomSource;
 import net.minecraft.world.level.levelgen.blending.Blender;
-import net.minecraft.world.level.levelgen.carver.CarvingContext;
-import net.minecraft.world.level.levelgen.carver.ConfiguredWorldCarver;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
 import net.minecraft.world.level.levelgen.placement.PlacedFeature;
+import net.minecraft.world.level.levelgen.placement.FeaturePlacer;
 import net.minecraft.world.level.material.Fluids;
 
 import java.lang.reflect.InvocationHandler;
@@ -68,12 +65,14 @@ public final class GeneratedTerrainHeightmap {
     private final WorldgenEngine.GeneratorView view;
     private final NoiseBasedChunkGenerator generator;
     private final NoiseGeneratorSettings generatorSettings;
+    private final BiomeResolver biomeResolver;
     private final StructureManager structureManager;
     private final PalettedContainerFactory containerFactory;
     private final boolean captureStageHeights;
     // Cave rendering can move through a large world. Keep a bounded working set
     // so exact carver replay does not grow memory without limit.
-    private static final int MAX_CACHED_CHUNKS = 48;
+    private static final int DEFAULT_MAX_CACHED_CHUNKS = 48;
+    private final int maximumCachedChunks;
     private final Map<Long, ProtoChunk> chunks = new LinkedHashMap<>(128, 0.75f, true);
     private final Map<Long, StageHeights> stageHeights = new LinkedHashMap<>(128, 0.75f, true);
     private final Set<Long> decoratedChunks = new HashSet<>();
@@ -97,9 +96,19 @@ public final class GeneratedTerrainHeightmap {
     public GeneratedTerrainHeightmap(long seed, int dimension,
                                      List<StructureStart> terrainStarts,
                                      boolean captureStageHeights) {
+        this(seed, dimension, terrainStarts, captureStageHeights,
+            DEFAULT_MAX_CACHED_CHUNKS);
+    }
+
+    /** Allows streaming callers to retain only the working set they can reuse. */
+    public GeneratedTerrainHeightmap(long seed, int dimension,
+                                     List<StructureStart> terrainStarts,
+                                     boolean captureStageHeights,
+                                     int maximumCachedChunks) {
         this.seed = seed;
         this.dimension = dimension;
         this.captureStageHeights = captureStageHeights;
+        this.maximumCachedChunks = Math.max(1, maximumCachedChunks);
         this.view = WorldgenEngine.generatorView(seed, dimension);
         this.generator = (NoiseBasedChunkGenerator) view.chunkGenerator();
         this.generatorSettings = view.lookup().lookupOrThrow(Registries.NOISE_SETTINGS)
@@ -108,6 +117,7 @@ public final class GeneratedTerrainHeightmap {
                 case 1 -> NoiseGeneratorSettings.END;
                 default -> NoiseGeneratorSettings.OVERWORLD;
             }).value();
+        this.biomeResolver = view.biomeSource().createUncachedResolver(view.randomState());
         this.structureManager = new TerrainStructureManager(seed, terrainStarts);
         this.containerFactory = PalettedContainerFactory.create(
             OfflineWorldgenResources.registryAccess());
@@ -222,8 +232,8 @@ public final class GeneratedTerrainHeightmap {
                 int writesBefore = handler.writeCount;
                 int positionsBefore = handler.writtenPositions.size();
                 random.setFeatureSeed(decorationSeed, index, step);
-                boolean placed = feature.placeWithBiomeCheck(
-                    level, generator, random, origin);
+                boolean placed = new FeaturePlacer(level, generator)
+                    .placeWithBiomeCheck(feature, random, origin);
                 decorationTrace.add(new DecorationFeatureTrace(
                     center.x(), center.z(), step, index,
                     featureId,
@@ -333,7 +343,8 @@ public final class GeneratedTerrainHeightmap {
                     .lookupOrThrow(Registries.PLACED_FEATURE).getKey(feature));
                 if (!isNaturalPlacedFeature(featureId)) continue;
                 random.setFeatureSeed(decorationSeed, index, step);
-                feature.placeWithBiomeCheck(level, generator, random, origin);
+                new FeaturePlacer(level, generator)
+                    .placeWithBiomeCheck(feature, random, origin);
             }
         }
     }
@@ -479,7 +490,7 @@ public final class GeneratedTerrainHeightmap {
 
         ProtoChunk generated = generate(pos);
         chunks.put(key, generated);
-        while (chunks.size() > MAX_CACHED_CHUNKS) {
+        while (chunks.size() > maximumCachedChunks) {
             long eldest = chunks.keySet().iterator().next();
             chunks.remove(eldest);
             stageHeights.remove(eldest);
@@ -504,7 +515,9 @@ public final class GeneratedTerrainHeightmap {
             String name = method.getName();
             if (name.equals("getSeed")) return seed;
             if (name.equals("getRandom")) return random;
-            if (name.equals("getLevel")) return VanillaLootStructureSimulator.fakeLevelForSeed(seed);
+            if (name.equals("getLevel")) {
+                return VanillaLootStructureSimulator.fakeLevelForSeed(seed, generator);
+            }
             if (name.equals("registryAccess")) return OfflineWorldgenResources.registryAccess();
             if (name.equals("enabledFeatures")) return FeatureFlags.DEFAULT_FLAGS;
             if (name.equals("isClientSide")) return false;
@@ -591,9 +604,8 @@ public final class GeneratedTerrainHeightmap {
                     seed, dimension, pos.getX(), pos.getY(), pos.getZ());
             }
             if (name.equals("getUncachedNoiseBiome")) {
-                return view.biomeSource().getNoiseBiome(
-                    (Integer) args[0], (Integer) args[1], (Integer) args[2],
-                    view.randomState().sampler());
+                return biomeResolver.getNoiseBiome(
+                    (Integer) args[0], (Integer) args[1], (Integer) args[2]);
             }
             if (name.equals("ensureCanWrite") || name.equals("hasChunk")
                 || name.equals("hasChunkAt") || name.equals("isInWorldBounds")) return true;
@@ -645,7 +657,9 @@ public final class GeneratedTerrainHeightmap {
             String name = method.getName();
             if (name.equals("getSeed")) return seed;
             if (name.equals("getRandom")) return random;
-            if (name.equals("getLevel")) return VanillaLootStructureSimulator.fakeLevelForSeed(seed);
+            if (name.equals("getLevel")) {
+                return VanillaLootStructureSimulator.fakeLevelForSeed(seed, generator);
+            }
             if (name.equals("registryAccess")) return OfflineWorldgenResources.registryAccess();
             if (name.equals("enabledFeatures")) return FeatureFlags.DEFAULT_FLAGS;
             if (name.equals("isClientSide")) return false;
@@ -722,8 +736,8 @@ public final class GeneratedTerrainHeightmap {
                     pos.getX(), pos.getY(), pos.getZ());
             }
             if (name.equals("getUncachedNoiseBiome")) {
-                return view.biomeSource().getNoiseBiome((Integer) args[0],
-                    (Integer) args[1], (Integer) args[2], view.randomState().sampler());
+                return biomeResolver.getNoiseBiome((Integer) args[0],
+                    (Integer) args[1], (Integer) args[2]);
             }
             if (name.equals("ensureCanWrite") || name.equals("hasChunk")
                 || name.equals("hasChunkAt") || name.equals("isInWorldBounds")) return true;
@@ -758,30 +772,14 @@ public final class GeneratedTerrainHeightmap {
         Blender blender = Blender.empty();
 
         generator.createBiomes(view.randomState(), blender, structureManager, chunk).join();
-        generator.fillFromNoise(blender, view.randomState(), structureManager, chunk).join();
-        int[] afterNoise = captureStageHeights
-            ? scanHeights(chunk, Heightmap.Types.MOTION_BLOCKING_NO_LEAVES) : null;
-
         BiomeManager biomeManager = biomeManager();
-        Registry<Biome> biomeRegistry = OfflineWorldgenResources.registryAccess()
-            .lookupOrThrow(Registries.BIOME);
-        generator.buildSurface(
-            chunk,
-            new WorldGenerationContext(generator, heights),
-            view.randomState(),
-            structureManager,
-            biomeManager,
-            biomeRegistry,
-            blender);
-        int[] afterSurface = captureStageHeights
-            ? scanHeights(chunk, Heightmap.Types.MOTION_BLOCKING_NO_LEAVES) : null;
-
-        applyCarvers(chunk);
+        generator.buildTerrain(chunk, blender, view.randomState(), structureManager,
+            biomeManager, null, view.biomeSource().possibleBiomes()).join();
         if (captureStageHeights) {
-            int[] afterCarvers = scanHeights(chunk,
+            int[] finalHeights = scanHeights(chunk,
                 Heightmap.Types.MOTION_BLOCKING_NO_LEAVES);
             stageHeights.put(pos.pack(), new StageHeights(
-                afterNoise, afterSurface, afterCarvers));
+                finalHeights.clone(), finalHeights.clone(), finalHeights));
         }
 
         // ChunkStatusTasks.generateFeatures primes the live heightmaps only
@@ -819,61 +817,8 @@ public final class GeneratedTerrainHeightmap {
     private record StageHeights(int[] noise, int[] surface, int[] carvers) {
     }
 
-    private void applyCarvers(ProtoChunk target) {
-        NoiseChunk noiseChunk = target.getOrCreateNoiseChunk(chunk -> {
-            throw new IllegalStateException("Noise chunk was not created by fillFromNoise");
-        });
-        Aquifer aquifer = noiseChunk.aquifer();
-        CarvingContext context = new CarvingContext(
-            generator,
-            OfflineWorldgenResources.registryAccess(),
-            target.getHeightAccessorForGeneration(),
-            noiseChunk,
-            view.randomState(),
-            generatorSettings.surfaceRule());
-        var mask = target.getOrCreateCarvingMask();
-        BiomeManager biomeManager = biomeManager();
-
-        WorldgenRandom random = new WorldgenRandom(new LegacyRandomSource(0L));
-        ChunkPos targetPos = target.getPos();
-
-        for (int offsetX = -8; offsetX <= 8; offsetX++) {
-            for (int offsetZ = -8; offsetZ <= 8; offsetZ++) {
-                ChunkPos sourcePos = new ChunkPos(
-                    targetPos.x() + offsetX, targetPos.z() + offsetZ);
-                Holder<Biome> sourceBiome = view.biomeSource().getNoiseBiome(
-                    QuartPos.fromBlock(sourcePos.getMinBlockX()),
-                    0,
-                    QuartPos.fromBlock(sourcePos.getMinBlockZ()),
-                    view.randomState().sampler());
-                BiomeGenerationSettings settings =
-                    generator.getBiomeGenerationSettings(sourceBiome);
-                int carverIndex = 0;
-                for (Holder<ConfiguredWorldCarver<?>> holder : settings.getCarvers()) {
-                    random.setLargeFeatureSeed(
-                        seed + carverIndex, sourcePos.x(), sourcePos.z());
-                    ConfiguredWorldCarver<?> carver = holder.value();
-                    if (carver.isStartChunk(random)) {
-                        carver.carve(
-                            context,
-                            target,
-                            biomeManager::getBiome,
-                            random,
-                            aquifer,
-                            sourcePos,
-                            mask);
-                    }
-                    carverIndex++;
-                }
-            }
-        }
-    }
-
     private BiomeManager biomeManager() {
-        return new BiomeManager(
-            (quartX, quartY, quartZ) -> view.biomeSource().getNoiseBiome(
-                quartX, quartY, quartZ, view.randomState().sampler()),
-            BiomeManager.obfuscateSeed(seed));
+        return new BiomeManager(biomeResolver, BiomeManager.obfuscateSeed(seed));
     }
 
     private static final class TerrainStructureManager extends StructureManager {
@@ -886,7 +831,7 @@ public final class GeneratedTerrainHeightmap {
 
         @Override
         public List<StructureStart> startsForStructure(
-            ChunkPos chunkPos, Predicate<Structure> predicate) {
+            int sectionX, int sectionZ, Predicate<Structure> predicate) {
             List<StructureStart> result = new ArrayList<>();
             for (StructureStart start : starts) {
                 if (start.isValid() && predicate.test(start.getStructure())) result.add(start);

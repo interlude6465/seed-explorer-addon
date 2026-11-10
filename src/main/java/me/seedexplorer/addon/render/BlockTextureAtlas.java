@@ -1,10 +1,8 @@
 package me.seedexplorer.addon.render;
 
 import com.mojang.blaze3d.platform.TextureUtil;
-import com.mojang.blaze3d.textures.FilterMode;
-import com.mojang.blaze3d.textures.TextureFormat;
-import meteordevelopment.meteorclient.gui.renderer.packer.TextureRegion;
-import meteordevelopment.meteorclient.renderer.Texture;
+import com.mojang.renderpearl.api.GpuFormat;
+import com.mojang.renderpearl.api.textures.FilterMode;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.block.dispatch.BlockStateModel;
 import net.minecraft.client.renderer.block.dispatch.BlockStateModelPart;
@@ -37,23 +35,25 @@ import java.util.Set;
 
 /**
  * Stitches the Minecraft block textures the 3D terrain map needs into a single
- * atlas {@link Texture}, exposing a per-block {@link TextureRegion} of UVs.
+ * atlas {@link GpuTextureResource}, exposing a per-block {@link TextureRegion} of UVs.
  *
- * <p>Textures are read from the addon's packaged resources
- * ({@code /assets/meteor-seed-explorer/textures/blocks/*.png}), copied verbatim
- * from a local 26.1.2 install so the map shows real block textures without
- * depending on the live block-texture atlas. The generated texture index is
- * stitched in full; blocks whose models do not map to a standalone texture
- * still resolve to a neutral stone fallback.</p>
+ * <p>Textures are read from a local map-only resource-pack override when present,
+ * then the installed game assets and finally the addon's packaged resources.
+ * The generated texture index is stitched in full; blocks whose models do not map
+ * to a standalone texture still resolve to a neutral stone fallback.</p>
  */
 public final class BlockTextureAtlas {
     private static final String ROOT = "/assets/meteor-seed-explorer/textures/blocks/";
     private static final int MAX_ATLAS_WIDTH = 2048;
+    /** Two baked repetitions preserve block-scale texels with at most 2x2
+     * quads for a full coarse chunk while keeping atlas startup memory bounded. */
+    public static final int TILED_REPEAT_SPAN = 2;
 
     private static BlockTextureAtlas instance;
 
-    private final Texture texture;
+    private final GpuTextureResource texture;
     private final Map<String, TextureRegion> regions = new HashMap<>();
+    private final Map<String, TextureRegion> tiledRegions = new HashMap<>();
     private final TextureRegion fallback;
     private final int loadedCount;
     private final int requestedCount;
@@ -72,6 +72,10 @@ public final class BlockTextureAtlas {
             if (region != null) {
                 regions.put(fileName, region);
                 if (fileName.equals("stone.png")) stoneRegion = region;
+                LoadedImage source = images.get(images.size() - 1);
+                LoadedImage tiled = repeat(source, TILED_REPEAT_SPAN);
+                images.add(tiled);
+                tiledRegions.put(fileName, tiled.region);
             }
         }
         if (images.isEmpty()) {
@@ -101,7 +105,7 @@ public final class BlockTextureAtlas {
     }
 
     /** The stitched atlas, or null if no textures loaded. */
-    public Texture texture() {
+    public GpuTextureResource texture() {
         return texture;
     }
 
@@ -132,6 +136,14 @@ public final class BlockTextureAtlas {
         TextureRegion baked = modelRegion(state, Direction.UP);
         if (baked != null) return baked;
         return fallback;
+    }
+
+    /** A pre-repeated top sprite used by coarse terrain without stretching texels. */
+    public TextureRegion tiledRegion(BlockState state) {
+        String fileName = topFaceFileName(state);
+        TextureRegion region = tiledRegions.get(fileName);
+        if (region != null) return region;
+        return tiledRegions.get(blockIdFileName(state));
     }
 
     /** True when the top face resolves through the neutral fallback texture. */
@@ -166,11 +178,11 @@ public final class BlockTextureAtlas {
      * atlas. Model geometry can therefore use the official sprite selected by
      * Minecraft instead of guessing a top/side filename. */
     public TextureRegion region(Identifier spriteId) {
-        if (spriteId == null) return fallback;
+        if (spriteId == null) return null;
         String path = spriteId.getPath();
         if (path.startsWith("block/")) path = path.substring("block/".length());
         TextureRegion region = regions.get(path.endsWith(".png") ? path : path + ".png");
-        return region != null ? region : fallback;
+        return region;
     }
 
     /** True when a side face has no direct side/top texture and falls through to fallback. */
@@ -331,12 +343,19 @@ public final class BlockTextureAtlas {
     private static List<String> textureFiles() {
         List<String> indexed = indexedTextureFiles();
         // The bundled index is intentionally conservative. Merge every sprite
-        // from the installed 26.1.2 block directory so new or uncommon blocks
-        // never silently become the stone fallback.
+        // from the map-only override, running resource manager, and installed
+        // game directory so uncommon blocks never silently become the stone
+        // fallback. The runtime inventory is what picks up blocks added after
+        // the bundled snapshot, such as 26.3 poplar and sulfur families.
+        List<String> preferred = texturePackFileNames();
+        List<String> runtime = runtimeTextureFileNames();
         List<String> official = officialTextureFileNames();
-        if (!official.isEmpty()) {
+        if (!preferred.isEmpty() || !runtime.isEmpty() || !official.isEmpty()) {
             java.util.LinkedHashSet<String> merged = new java.util.LinkedHashSet<>(indexed);
+            merged.addAll(preferred);
+            merged.addAll(runtime);
             merged.addAll(official);
+            merged.removeIf(BlockTextureAtlas::excludedTextureFile);
             if (!merged.contains("stone.png")) merged.add("stone.png");
             return List.copyOf(merged);
         }
@@ -367,6 +386,24 @@ public final class BlockTextureAtlas {
         return files;
     }
 
+    private static List<String> runtimeTextureFileNames() {
+        try {
+            Minecraft minecraft = Minecraft.getInstance();
+            if (minecraft == null || minecraft.getResourceManager() == null) return List.of();
+            return minecraft.getResourceManager()
+                .listResources("textures/block", id -> id.getNamespace().equals("minecraft")
+                    && id.getPath().endsWith(".png"))
+                .keySet().stream()
+                .map(Identifier::getPath)
+                .map(path -> path.substring("textures/block/".length()))
+                .filter(name -> !excludedTextureFile(name))
+                .sorted()
+                .toList();
+        } catch (Throwable ignored) {
+            return List.of();
+        }
+    }
+
     private static List<String> officialTextureFileNames() {
         try {
             String userHome = System.getProperty("user.home", "");
@@ -377,9 +414,25 @@ public final class BlockTextureAtlas {
                 return stream.filter(Files::isRegularFile)
                     .map(path -> path.getFileName().toString())
                     .filter(name -> name.endsWith(".png"))
+                    .filter(name -> !excludedTextureFile(name))
                     .sorted()
                     .toList();
             }
+        } catch (IOException | RuntimeException ignored) {
+            return List.of();
+        }
+    }
+
+    private static List<String> texturePackFileNames() {
+        Path dir = texturePackBlockDirectory();
+        if (!Files.isDirectory(dir)) return List.of();
+        try (var stream = Files.list(dir)) {
+            return stream.filter(Files::isRegularFile)
+                .map(path -> path.getFileName().toString())
+                .filter(name -> name.endsWith(".png"))
+                .filter(name -> !excludedTextureFile(name))
+                .sorted()
+                .toList();
         } catch (IOException | RuntimeException ignored) {
             return List.of();
         }
@@ -395,6 +448,7 @@ public final class BlockTextureAtlas {
                 .map(String::trim)
                 .filter(line -> !line.isEmpty() && line.endsWith(".png"))
                 .filter(line -> !line.equals("stone.png"))
+                .filter(line -> !excludedTextureFile(line))
                 .forEach(files::add);
             return files;
         } catch (IOException ignored) {
@@ -403,7 +457,8 @@ public final class BlockTextureAtlas {
     }
 
     private static TextureRegion load(List<LoadedImage> into, String fileName) {
-        try (InputStream in = officialTextureStream(fileName)) {
+        if (excludedTextureFile(fileName)) return null;
+        try (InputStream in = textureStream(fileName)) {
             if (in == null) return null;
             ByteBuffer raw = TextureUtil.readResource(in);
             ((Buffer) raw).rewind();
@@ -415,14 +470,55 @@ public final class BlockTextureAtlas {
                 MemoryUtil.memFree(raw);
                 if (image == null) return null;
                 int width = w.get(0);
-                int height = h.get(0);
-                TextureRegion region = new TextureRegion(width, height);
-                into.add(new LoadedImage(image, region, width, height));
+                int sourceHeight = h.get(0);
+                // Animated block sprites are vertical frame strips. Preserve
+                // ordinary tall sprites, and crop only files with animation metadata.
+                int frameHeight = textureFrameHeight(fileName, width, sourceHeight,
+                    hasAnimationMetadata(fileName));
+                TextureRegion region = new TextureRegion(width, frameHeight);
+                into.add(new LoadedImage(image, region, width, frameHeight, true));
                 return region;
             }
         } catch (IOException e) {
             return null;
         }
+    }
+
+    static int firstFrameHeight(int width, int sourceHeight) {
+        return sourceHeight > width && sourceHeight % width == 0
+            ? width : sourceHeight;
+    }
+
+    static int textureFrameHeight(String fileName, int width, int sourceHeight,
+                                  boolean animated) {
+        return animated ? firstFrameHeight(width, sourceHeight) : sourceHeight;
+    }
+
+    private static boolean hasAnimationMetadata(String fileName) {
+        try (InputStream ignored = textureStream(fileName + ".mcmeta")) {
+            return ignored != null;
+        } catch (IOException ignored) {
+            return false;
+        }
+    }
+
+    private static LoadedImage repeat(LoadedImage source, int repetitions) {
+        int repeat = Math.max(1, repetitions);
+        int width = source.width * repeat;
+        int height = source.height * repeat;
+        ByteBuffer image = MemoryUtil.memAlloc(width * height * 4);
+        for (int y = 0; y < height; y++) {
+            int sourceY = y % source.height;
+            for (int x = 0; x < width; x++) {
+                int sourceX = x % source.width;
+                int sourceIndex = (sourceY * source.width + sourceX) * 4;
+                int targetIndex = (y * width + x) * 4;
+                for (int component = 0; component < 4; component++) {
+                    image.put(targetIndex + component, source.buffer.get(sourceIndex + component));
+                }
+            }
+        }
+        return new LoadedImage(image, new TextureRegion(width, height), width, height, false);
     }
 
     /**
@@ -431,10 +527,25 @@ public final class BlockTextureAtlas {
      * This keeps the map on the same PNGs as the live renderer, including future
      * block additions that are not in the addon's bundled snapshot.
      */
-    private static InputStream officialTextureStream(String fileName) throws IOException {
+    private static InputStream textureStream(String fileName) throws IOException {
+        if (excludedTextureFile(fileName)) return null;
+        Path preferred = texturePackBlockDirectory().resolve(fileName);
+        if (Files.isRegularFile(preferred)) return Files.newInputStream(preferred);
+
         String gameDir = System.getProperty("user.dir", "");
         Path external = Path.of(gameDir, "assets", "minecraft", "textures", "block", fileName);
         if (Files.isRegularFile(external)) return Files.newInputStream(external);
+
+        try {
+            Minecraft minecraft = Minecraft.getInstance();
+            if (minecraft != null && minecraft.getResourceManager() != null) {
+                Identifier id = Identifier.fromNamespaceAndPath(
+                    "minecraft", "textures/block/" + fileName);
+                var resource = minecraft.getResourceManager().getResource(id);
+                if (resource.isPresent()) return resource.get().open();
+            }
+        } catch (Throwable ignored) {
+        }
 
         String userHome = System.getProperty("user.home", "");
         Path versioned = Path.of(userHome, "AppData", "Roaming", ".minecraft", "versions",
@@ -442,6 +553,25 @@ public final class BlockTextureAtlas {
         if (Files.isRegularFile(versioned)) return Files.newInputStream(versioned);
 
         return BlockTextureAtlas.class.getResourceAsStream(ROOT + fileName);
+    }
+
+    static boolean excludedTextureFile(String fileName) {
+        return "pale_oak_leaves.png".equals(fileName)
+            || "leaf_litter.png".equals(fileName);
+    }
+
+    static Path texturePackBlockDirectory() {
+        Path gameDirectory;
+        try {
+            Minecraft minecraft = Minecraft.getInstance();
+            gameDirectory = minecraft != null && minecraft.gameDirectory != null
+                ? minecraft.gameDirectory.toPath() : Path.of(System.getProperty("user.dir", "."));
+        } catch (Throwable ignored) {
+            gameDirectory = Path.of(System.getProperty("user.dir", "."));
+        }
+        return gameDirectory.resolve("config").resolve("seed-explorer")
+            .resolve("texture-pack").resolve("assets").resolve("minecraft")
+            .resolve("textures").resolve("block");
     }
 
     /**
@@ -478,7 +608,7 @@ public final class BlockTextureAtlas {
     }
 
     /** Row-packs loaded images with 1px padding and uploads one RGBA8 atlas. */
-    private static Texture pack(List<LoadedImage> images) {
+    private static GpuTextureResource pack(List<LoadedImage> images) {
         int width = 0;
         int height = 0;
         int rowWidth = 0;
@@ -514,11 +644,13 @@ public final class BlockTextureAtlas {
             image.region.y1 = (double) image.y / height;
             image.region.x2 = (double) (image.x + image.width) / width;
             image.region.y2 = (double) (image.y + image.height) / height;
-            STBImage.stbi_image_free(image.buffer);
+            if (image.stbiOwned) STBImage.stbi_image_free(image.buffer);
+            else MemoryUtil.memFree(image.buffer);
         }
         ((Buffer) buffer).rewind();
 
-        Texture texture = new Texture(width, height, TextureFormat.RGBA8, FilterMode.NEAREST, FilterMode.NEAREST);
+        GpuTextureResource texture = new GpuTextureResource(
+            width, height, GpuFormat.RGBA8_UNORM, FilterMode.NEAREST, FilterMode.NEAREST);
         texture.upload(buffer);
         return texture;
     }
@@ -547,11 +679,12 @@ public final class BlockTextureAtlas {
         }
     }
 
-    private static Texture fallbackTexture() {
+    private static GpuTextureResource fallbackTexture() {
         ByteBuffer buffer = BufferUtils.createByteBuffer(4);
         buffer.put((byte) 255).put((byte) 255).put((byte) 255).put((byte) 255);
         ((Buffer) buffer).rewind();
-        Texture texture = new Texture(1, 1, TextureFormat.RGBA8, FilterMode.NEAREST, FilterMode.NEAREST);
+        GpuTextureResource texture = new GpuTextureResource(
+            1, 1, GpuFormat.RGBA8_UNORM, FilterMode.NEAREST, FilterMode.NEAREST);
         texture.upload(buffer);
         return texture;
     }
@@ -560,13 +693,16 @@ public final class BlockTextureAtlas {
         final ByteBuffer buffer;
         final TextureRegion region;
         final int width, height;
+        final boolean stbiOwned;
         int x, y;
 
-        LoadedImage(ByteBuffer buffer, TextureRegion region, int width, int height) {
+        LoadedImage(ByteBuffer buffer, TextureRegion region, int width, int height,
+                    boolean stbiOwned) {
             this.buffer = buffer;
             this.region = region;
             this.width = width;
             this.height = height;
+            this.stbiOwned = stbiOwned;
         }
     }
 }

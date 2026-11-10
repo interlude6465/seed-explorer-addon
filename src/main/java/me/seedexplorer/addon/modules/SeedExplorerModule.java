@@ -82,7 +82,6 @@ public class SeedExplorerModule extends Module {
     private OreType lastOreEspType = null;
     private int lastOreEspDimension = Integer.MIN_VALUE;
     private static final long ORE_ESP_REFRESH_MS = 1200L;
-    private int terrainPrepareTicks;
 
     public final Setting<Double> zoomStep = sgMap.add(new DoubleSetting.Builder()
         .name("zoom-step")
@@ -386,7 +385,7 @@ public class SeedExplorerModule extends Module {
             // outside the client view, retain the prediction until the chunk is
             // available and can be reconciled.
             if (!matchesLoadedOreBlock(patch, dimension)) continue;
-            Color lineColor = type.color;
+            Color lineColor = new Color(type.color.r, type.color.g, type.color.b, type.color.a);
             Color sideColor = new Color(lineColor.r, lineColor.g, lineColor.b, oreOpacity.get());
             event.renderer.box(patch.x, patch.y, patch.z, patch.x + 1, patch.y + 1, patch.z + 1, sideColor, lineColor, oreEspShapeMode.get(), 0);
         }
@@ -394,7 +393,7 @@ public class SeedExplorerModule extends Module {
 
     @EventHandler
     private void onRender2D(Render2DEvent event) {
-        if (!minimap.get() || mc.player == null || mc.level == null || mc.screen != null) return;
+        if (!minimap.get() || mc.player == null || mc.level == null || mc.gui.screen() != null) return;
         minimapOverlay.render(event, this);
     }
 
@@ -404,7 +403,7 @@ public class SeedExplorerModule extends Module {
             mapKeyWasDown = false;
             return;
         }
-        if (mc.player == null || mc.level == null || mc.screen != null) {
+        if (mc.player == null || mc.level == null || mc.gui.screen() != null) {
             mapKeyWasDown = false;
             if (mc.player == null || mc.level == null) return;
         }
@@ -412,20 +411,9 @@ public class SeedExplorerModule extends Module {
         updateOreEsp();
         updateTouchedOreZone();
 
-        // Keep the shared surface/cave stream saturated for the whole in-world
-        // session, including while every Seed Explorer screen is closed.
-        terrainPrepareTicks = 0;
-        long seed = SeedManager.get().getWorldSeed();
-        // The 3D screen prepares around its orbit target. Do not let the module's
-        // player-centered tick overwrite that target while the screen is open.
-        if (seed != 0L && !(mc.screen instanceof SeedExplorerScreen)) {
-            Terrain3DRenderer.shared().prepare(seed, currentDimensionId(),
-                mc.player.getX(), mc.player.getZ());
-        }
-
-        boolean down = mc.screen == null && openMapKey.get().isPressed();
+        boolean down = mc.gui.screen() == null && openMapKey.get().isPressed();
         if (down && !mapKeyWasDown) {
-            mc.setScreen(new SeedExplorerScreen(meteordevelopment.meteorclient.gui.GuiThemes.get()));
+            mc.gui.setScreen(new SeedExplorerScreen(meteordevelopment.meteorclient.gui.GuiThemes.get()));
         }
         mapKeyWasDown = down;
     }
@@ -438,14 +426,13 @@ public class SeedExplorerModule extends Module {
 
     @EventHandler
     private void onGameLeft(GameLeftEvent event) {
-        terrainPrepareTicks = 0;
         Terrain3DRenderer.shared().reset();
     }
 
     @Override
     public WWidget getWidget(GuiTheme theme) {
         WButton openScreen = theme.button("Open Seed Explorer");
-        openScreen.action = () -> mc.setScreen(new SeedExplorerScreen(theme));
+        openScreen.action = () -> mc.gui.setScreen(new SeedExplorerScreen(theme));
         return openScreen;
     }
 

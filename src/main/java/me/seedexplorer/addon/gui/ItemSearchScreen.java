@@ -97,7 +97,7 @@ public final class ItemSearchScreen extends WindowScreen {
         WButton search = actions.add(theme.button("Search chests")).expandX().widget();
         search.action = () -> {
             if (requests.isEmpty()) return;
-            Minecraft.getInstance().setScreen(parent);
+            Minecraft.getInstance().gui.setScreen(parent);
             searchAction.accept(List.copyOf(requests));
         };
         WButton clear = actions.add(theme.button("Clear")).widget();

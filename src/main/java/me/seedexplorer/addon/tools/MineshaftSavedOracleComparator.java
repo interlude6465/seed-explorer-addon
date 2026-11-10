@@ -95,7 +95,8 @@ public final class MineshaftSavedOracleComparator {
             if (owners.isEmpty()) noOwningStart++;
             if (coordinateMatch) coordinateMatches++;
             if (seedMatch) seedMatches++;
-            Map<String, Integer> predictedItems = best == null ? Map.of() : predictedItems(best.container());
+            Map<String, Integer> predictedItems = best == null ? Map.of()
+                : predictedItems(seed, best.container());
             Boolean contentsMatch = null;
             if (actual.lootSeed() == null && !actual.items().isEmpty()) {
                 resolvedContentsCompared++;
@@ -199,10 +200,11 @@ public final class MineshaftSavedOracleComparator {
             ? BuiltinStructures.MINESHAFT_MESA : BuiltinStructures.MINESHAFT;
     }
 
-    private static Map<String, Integer> predictedItems(
+    private static Map<String, Integer> predictedItems(long worldSeed,
         VanillaLootStructureSimulator.SimulatedContainer container) {
         List<ItemLoot> items = LootTableSimulator.simulateVanilla(
-            container.lootTableId(), container.lootSeed());
+            container.lootTableId(), container.lootSeed(), worldSeed, 0,
+            container.x(), container.y(), container.z());
         if (items == null) {
             LootTableDef table = VanillaLootTables.get(container.lootTableId());
             items = table == null ? List.of() : LootTableSimulator.simulate(table, container.lootSeed(), 64);
