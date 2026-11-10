@@ -48,8 +48,39 @@ public final class StandaloneEngineProbe {
             try {
                 PredictionContext context = new PredictionContext(42L, "26.3", 0);
                 var expected = signatures(VanillaStructurePredictor.predictDimension(context, -4, -4, 4, 4, false, false));
-                var actual = signatures(StandalonePredictionCache.predictDimension(context, -4, -4, 4, 4, false, false));
+                java.util.List<StandalonePredictionCache.Progress> updates = new java.util.ArrayList<>();
+                var actual = signatures(StandalonePredictionCache.predictDimensionProgressive(
+                    context, -4, -4, 4, 4, false, false, () -> false, updates::add));
                 if (!actual.equals(expected)) throw new AssertionError("region cache changed range results");
+                if (updates.size() != 4) throw new AssertionError("region cache did not publish every region");
+                var expectedCenter = signatures(VanillaStructurePredictor.predictDimension(
+                    context, 0, 0, 4, 4, false, false));
+                if (!signatures(updates.getFirst().structures()).equals(expectedCenter)) {
+                    throw new AssertionError("region cache did not publish the center region first");
+                }
+                for (int index = 0; index < updates.size(); index++) {
+                    var update = updates.get(index);
+                    if (update.completedRegions() != index + 1 || update.totalRegions() != 4) {
+                        throw new AssertionError("region cache published invalid progress");
+                    }
+                }
+                var completed = updates.getLast();
+                if (!completed.complete() || !signatures(completed.structures()).equals(expected)) {
+                    throw new AssertionError("region cache final progress changed range results");
+                }
+                java.util.concurrent.atomic.AtomicBoolean cancel =
+                    new java.util.concurrent.atomic.AtomicBoolean();
+                java.util.List<StandalonePredictionCache.Progress> cancelledUpdates =
+                    new java.util.ArrayList<>();
+                var cancelled = StandalonePredictionCache.predictDimensionProgressive(
+                    context, -4, -4, 4, 4, false, false, cancel::get, update -> {
+                        cancelledUpdates.add(update);
+                        cancel.set(true);
+                    });
+                if (!cancelled.isEmpty() || cancelledUpdates.size() != 1
+                    || cancelledUpdates.getFirst().complete()) {
+                    throw new AssertionError("region cache cancellation did not stop after publication");
+                }
                 StandalonePredictionCache.clearMemory();
                 var restored = signatures(StandalonePredictionCache.predictDimension(context, -4, -4, 4, 4, false, false));
                 if (!restored.equals(expected)) throw new AssertionError("region cache round trip changed results");

@@ -6,6 +6,8 @@ import me.seedexplorer.addon.worldgen.PredictionContext;
 import me.seedexplorer.addon.worldgen.VanillaStructurePredictor;
 import java.nio.file.*;
 import java.util.*;
+import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 
 /** Worker-only, version-scoped region cache shared by search, 2D and 3D. */
 public final class StandalonePredictionCache {
@@ -23,17 +25,75 @@ public final class StandalonePredictionCache {
     }
     public static List<GeneratedStructure> predictDimension(PredictionContext context, int minX, int minZ,
                                                             int maxX, int maxZ, boolean treasure, boolean mineshafts,
-                                                            java.util.function.BooleanSupplier cancelled) {
+                                                            BooleanSupplier cancelled) {
         List<GeneratedStructure> result = new ArrayList<>();
         for (int rz = Math.floorDiv(minZ, REGION); rz <= Math.floorDiv(maxZ, REGION); rz++) {
             for (int rx = Math.floorDiv(minX, REGION); rx <= Math.floorDiv(maxX, REGION); rx++) {
                 if (Thread.currentThread().isInterrupted() || cancelled.getAsBoolean()) return List.of();
                 Key key = new Key(context, rx, rz, treasure, mineshafts);
-                for (GeneratedStructure s : region(key)) {
-                    if (s.startChunkX >= minX && s.startChunkX <= maxX && s.startChunkZ >= minZ && s.startChunkZ <= maxZ)
-                        result.add(s);
+                for (GeneratedStructure structure : region(key)) {
+                    if (structure.startChunkX >= minX && structure.startChunkX <= maxX
+                        && structure.startChunkZ >= minZ && structure.startChunkZ <= maxZ) {
+                        result.add(structure);
+                    }
                 }
             }
+        }
+        return List.copyOf(result);
+    }
+
+    /**
+     * Predicts cache regions from the center outward and publishes an immutable accumulated
+     * snapshot after every region. Large map views can therefore display nearby markers while
+     * the outer prediction rings continue in the background.
+     */
+    public static List<GeneratedStructure> predictDimensionProgressive(
+            PredictionContext context, int minX, int minZ, int maxX, int maxZ,
+            boolean treasure, boolean mineshafts, BooleanSupplier cancelled,
+            Consumer<Progress> progress) {
+        Objects.requireNonNull(context, "context");
+        Objects.requireNonNull(cancelled, "cancelled");
+        Objects.requireNonNull(progress, "progress");
+
+        int chunkMinX = Math.min(minX, maxX);
+        int chunkMinZ = Math.min(minZ, maxZ);
+        int chunkMaxX = Math.max(minX, maxX);
+        int chunkMaxZ = Math.max(minZ, maxZ);
+        int regionMinX = Math.floorDiv(chunkMinX, REGION);
+        int regionMinZ = Math.floorDiv(chunkMinZ, REGION);
+        int regionMaxX = Math.floorDiv(chunkMaxX, REGION);
+        int regionMaxZ = Math.floorDiv(chunkMaxZ, REGION);
+        int centerX = (int) Math.floorDiv(
+            Math.floorDiv((long) chunkMinX + chunkMaxX, 2L), REGION);
+        int centerZ = (int) Math.floorDiv(
+            Math.floorDiv((long) chunkMinZ + chunkMaxZ, 2L), REGION);
+        List<RegionCoordinate> regions = new ArrayList<>(
+            (regionMaxX - regionMinX + 1) * (regionMaxZ - regionMinZ + 1));
+        for (int rz = regionMinZ; rz <= regionMaxZ; rz++) {
+            for (int rx = regionMinX; rx <= regionMaxX; rx++) {
+                regions.add(new RegionCoordinate(rx, rz));
+            }
+        }
+        regions.sort(Comparator
+            .comparingInt((RegionCoordinate region) -> region.ringDistance(centerX, centerZ))
+            .thenComparingLong(region -> region.distanceSquared(centerX, centerZ))
+            .thenComparingInt(RegionCoordinate::z)
+            .thenComparingInt(RegionCoordinate::x));
+
+        List<GeneratedStructure> result = new ArrayList<>();
+        int completed = 0;
+        for (RegionCoordinate region : regions) {
+            if (Thread.currentThread().isInterrupted() || cancelled.getAsBoolean()) return List.of();
+            Key key = new Key(context, region.x, region.z, treasure, mineshafts);
+            for (GeneratedStructure structure : region(key)) {
+                if (structure.startChunkX >= chunkMinX && structure.startChunkX <= chunkMaxX
+                    && structure.startChunkZ >= chunkMinZ && structure.startChunkZ <= chunkMaxZ) {
+                    result.add(structure);
+                }
+            }
+            completed++;
+            if (Thread.currentThread().isInterrupted() || cancelled.getAsBoolean()) return List.of();
+            progress.accept(new Progress(List.copyOf(result), completed, regions.size()));
         }
         return List.copyOf(result);
     }
@@ -74,4 +134,29 @@ public final class StandalonePredictionCache {
     }
     private record Key(PredictionContext context, int x, int z, boolean treasure, boolean mineshafts) { }
     private record Data(int format, Key key, List<GeneratedStructure> structures) { }
+    private record RegionCoordinate(int x, int z) {
+        int ringDistance(int centerX, int centerZ) {
+            return Math.max(Math.abs(x - centerX), Math.abs(z - centerZ));
+        }
+
+        long distanceSquared(int centerX, int centerZ) {
+            long dx = (long) x - centerX;
+            long dz = (long) z - centerZ;
+            return dx * dx + dz * dz;
+        }
+    }
+
+    public record Progress(List<GeneratedStructure> structures,
+                           int completedRegions, int totalRegions) {
+        public Progress {
+            structures = List.copyOf(structures);
+            if (completedRegions < 0 || completedRegions > totalRegions || totalRegions < 0) {
+                throw new IllegalArgumentException("Invalid structure prediction progress");
+            }
+        }
+
+        public boolean complete() {
+            return completedRegions == totalRegions;
+        }
+    }
 }

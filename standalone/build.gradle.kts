@@ -49,7 +49,7 @@ loom.runs.named("clientGameTest") {
 // Optional interactive smoke session: normal client lifecycle, no test-driven shutdown.
 providers.gradleProperty("manualTestWorld").orNull?.let { world ->
     loom.runs.named("client") {
-        runDir = "run/manualTest"
+        runDir = providers.gradleProperty("manualTestRunDir").getOrElse("run/manualTest")
         vmArgs("-Doshi.util.wmi.timeout=1000")
         programArgs("--quickPlaySingleplayer", world)
     }

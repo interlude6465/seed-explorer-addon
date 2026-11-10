@@ -14,8 +14,9 @@ mapping, loot, settings and enchanting do not require it.
 
 Press **X** in a world to open the map. The gear button opens the native settings
 panel with the original 32 module controls. Open 3D from the map; move with WASD,
-drag to look, and use Space/C vertically. Right-click a 2D structure to inspect
-its containers; right-click empty map space to create a waypoint. Search accepts
+hold right-click and drag to look, and use Space/C vertically. Hold left-click
+to pan the 2D map. Right-click opens a context menu: add a waypoint or view that
+location in 3D; existing waypoints offer edit/delete, and structures offer loot inspection. Search accepts
 structure/biome names, spelling approximations, coordinates, and `loot:`/`item:`
 queries. The Items/books mode supports multiple items and quantities.
 The **Actions** menu contains recentering, visibility, waypoint management,
@@ -26,6 +27,8 @@ copy/teleport/navigation controls, loaded terrain, predicted ores, a minimap, an
 surface/underground 3D views. Terrain work uses background queues, bounded capture
 and uploads, and a spiral presentation order. There is no guaranteed chunks-per-second
 rate; throughput depends on terrain detail, worldgen, hardware and competing mods.
+Structure markers appear progressively from the center outward while the remaining
+regions are predicted; the progress counter shows completed and total regions.
 
 ## Build and verify
 

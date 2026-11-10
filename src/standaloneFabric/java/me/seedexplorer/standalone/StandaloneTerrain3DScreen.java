@@ -1,6 +1,5 @@
 package me.seedexplorer.standalone;
 
-import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -30,7 +29,9 @@ import org.joml.Vector4f;
 
 import java.util.EnumSet;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -84,7 +85,8 @@ public final class StandaloneTerrain3DScreen extends Screen {
     private EditBox searchField;
     private boolean cameraInitialized;
     private boolean underground;
-    private boolean dragging;
+    private final Set<Integer> heldMovementKeys = new HashSet<>();
+    private int dragButton = -1;
     private long lastFrameNanos;
     private volatile long activeStructureRequest;
     private int structureAnchorChunkX = Integer.MIN_VALUE;
@@ -212,6 +214,14 @@ public final class StandaloneTerrain3DScreen extends Screen {
             pendingSearchResult = null;
             acceptSearchResult(pending);
         }
+    }
+
+    @Override
+    protected void setInitialFocus() {
+        // This is a flight-control screen. Keyboard focus should only move to
+        // the search field after the player explicitly clicks or tabs to it.
+        setFocused(null);
+        if (searchField != null) searchField.setFocused(false);
     }
 
     private Component undergroundLabel() {
@@ -928,19 +938,24 @@ public final class StandaloneTerrain3DScreen extends Screen {
         double seconds = lastFrameNanos == 0L ? 0.0
             : Math.min(0.05, Math.max(0.0, (now - lastFrameNanos) / 1_000_000_000.0));
         lastFrameNanos = now;
+        if (minecraft == null || !minecraft.isWindowActive()
+            || searchField != null && searchField.isFocused()) {
+            heldMovementKeys.clear();
+            camera.stopFlight();
+            return;
+        }
         double forward = held(KEY_W) - held(KEY_S);
         double strafe = held(KEY_D) - held(KEY_A);
         double up = Math.max(held(KEY_SPACE), Math.max(held(KEY_LEFT_SHIFT), held(KEY_RIGHT_SHIFT)));
         double down = Math.max(held(KEY_C), Math.max(held(KEY_LEFT_CONTROL), held(KEY_RIGHT_CONTROL)));
-        if (searchField != null && searchField.isFocused()) return;
         if (focusActive && (forward != 0.0 || strafe != 0.0 || up != 0.0 || down != 0.0)) {
             releaseFocusForManualControl();
         }
         camera.updateFlight(forward, strafe, up - down, seconds);
     }
 
-    private static double held(int key) {
-        return InputConstants.isKeyDown(key) ? 1.0 : 0.0;
+    private double held(int key) {
+        return heldMovementKeys.contains(key) ? 1.0 : 0.0;
     }
 
     private double toRenderX(double guiX) {
@@ -957,6 +972,12 @@ public final class StandaloneTerrain3DScreen extends Screen {
     public boolean mouseClicked(MouseButtonEvent click, boolean doubled) {
         if (super.mouseClicked(click, doubled)) return true;
         if ((click.button() == 0 || click.button() == 1) && click.y() > contentTop()) {
+            setFocused(null);
+            if (click.button() == 1) {
+                dragButton = 1;
+                releaseFocusForManualControl();
+                return true;
+            }
             if ((selection.structure() != null || selectedWaypoint != null)
                 && click.x() >= width - 350
                 && click.x() <= width - 12 && click.y() >= contentTop() + 10
@@ -1001,13 +1022,7 @@ public final class StandaloneTerrain3DScreen extends Screen {
                 selectStructure(structure, click.button() == 0);
                 return true;
             }
-            if (click.button() == 1) {
-                selection.select(null);
-                selectedWaypoint = null;
-                updateActionButtons();
-                return true;
-            }
-            dragging = true;
+            dragButton = 0;
             selection.select(null);
             selectedWaypoint = null;
             releaseFocusForManualControl();
@@ -1019,13 +1034,16 @@ public final class StandaloneTerrain3DScreen extends Screen {
 
     @Override
     public boolean mouseReleased(MouseButtonEvent click) {
-        if (click.button() == 0) dragging = false;
+        if (click.button() == dragButton) {
+            dragButton = -1;
+            return true;
+        }
         return super.mouseReleased(click);
     }
 
     @Override
     public boolean mouseDragged(MouseButtonEvent click, double deltaX, double deltaY) {
-        if (dragging && click.button() == 0) {
+        if (click.button() == dragButton && (dragButton == 0 || dragButton == 1)) {
             releaseFocusForManualControl();
             double scaleX = minecraft.getWindow().getWidth()
                 / Math.max(1.0, minecraft.getWindow().getGuiScaledWidth());
@@ -1068,14 +1086,19 @@ public final class StandaloneTerrain3DScreen extends Screen {
             else onClose();
             return true;
         }
-        if (isMovementKey(key.key())) return true;
+        if (isMovementKey(key.key())) {
+            heldMovementKeys.add(key.key());
+            return true;
+        }
         return super.keyPressed(key);
     }
 
     @Override
     public boolean keyReleased(KeyEvent key) {
+        boolean movementKey = isMovementKey(key.key());
+        if (movementKey) heldMovementKeys.remove(key.key());
         if (searchField != null && searchField.isFocused()) return super.keyReleased(key);
-        if (isMovementKey(key.key())) return true;
+        if (movementKey) return true;
         return super.keyReleased(key);
     }
 
@@ -1114,6 +1137,8 @@ public final class StandaloneTerrain3DScreen extends Screen {
 
     @Override
     public void onClose() {
+        heldMovementKeys.clear();
+        dragButton = -1;
         camera.stopFlight();
         if (bulkLoading) renderer.stopBulkLoading();
         bulkLoading = false;
@@ -1129,6 +1154,8 @@ public final class StandaloneTerrain3DScreen extends Screen {
 
     @Override
     public void removed() {
+        heldMovementKeys.clear();
+        dragButton = -1;
         if (terrainTarget != null) {
             terrainTarget.destroyBuffers();
             terrainTarget = null;

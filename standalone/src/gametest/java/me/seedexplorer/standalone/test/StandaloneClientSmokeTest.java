@@ -5,6 +5,8 @@ import me.seedexplorer.standalone.StandaloneSeedExplorerConfig;
 import me.seedexplorer.standalone.StandaloneSeedExplorerScreen;
 import me.seedexplorer.standalone.StandaloneSeedExplorerSettingsScreen;
 import me.seedexplorer.standalone.StandaloneTerrain3DScreen;
+import me.seedexplorer.standalone.StandaloneWaypoint;
+import me.seedexplorer.addon.render.FreeCamera3D;
 import me.seedexplorer.addon.render.Terrain3DRenderer;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -12,6 +14,7 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContex
 import net.minecraft.client.gui.screens.Screen;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 
 @SuppressWarnings("UnstableApiUsage")
@@ -55,27 +58,8 @@ public final class StandaloneClientSmokeTest implements FabricClientGameTest {
                 (StandaloneSeedExplorerScreen) mapScreen.get()), 120_000);
             context.takeScreenshot("seed-explorer-standalone-map-2d");
 
-            context.runOnClient(client -> {
-                Screen map = mapScreen.get();
-                Screen settings = new StandaloneSeedExplorerSettingsScreen(map, config);
-                client.gui.setScreen(settings);
-                require(client.gui.screen() == settings, "settings screen did not open");
-            });
-            context.waitTicks(3);
-            context.takeScreenshot("seed-explorer-standalone-settings");
-
-            context.runOnClient(client -> {
-                Screen settings = client.gui.screen();
-                settings.onClose();
-                Screen map = mapScreen.get();
-                require(client.gui.screen() == map, "settings back navigation did not restore the map");
-
-                Screen terrain3d = new StandaloneTerrain3DScreen(map, config, seed, 0,
-                    java.util.List.of()).openAt(client.player.getX(), client.player.getZ(),
-                        null, java.util.List.of(), 0);
-                client.gui.setScreen(terrain3d);
-                require(client.gui.screen() == terrain3d, "3D screen did not open");
-            });
+            InteractionState interaction = exercise2DInteractions(
+                context, config, seed, (StandaloneSeedExplorerScreen) mapScreen.get());
             context.waitFor(client -> Terrain3DRenderer.shared().hasDrawableTerrain()
                 || !renderError((StandaloneTerrain3DScreen) client.gui.screen()).isBlank(), 120_000);
             context.waitTicks(100);
@@ -89,16 +73,315 @@ public final class StandaloneClientSmokeTest implements FabricClientGameTest {
                     "3D renderer did not draw a persistent terrain batch");
             });
             context.takeScreenshot("seed-explorer-standalone-map-3d");
+            exercise3DInteractions(context);
             context.runOnClient(client -> {
                 client.gui.screen().onClose();
                 require(client.gui.screen() == mapScreen.get(),
                     "3D back navigation did not restore the same 2D map");
+            });
+            context.waitTicks(2);
+            deleteTestWaypoint(context, config, seed,
+                (StandaloneSeedExplorerScreen) mapScreen.get(), interaction);
+
+            context.runOnClient(client -> {
+                Screen map = mapScreen.get();
+                Screen settings = new StandaloneSeedExplorerSettingsScreen(map, config);
+                client.gui.setScreen(settings);
+                require(client.gui.screen() == settings, "settings screen did not open");
+            });
+            context.waitTicks(3);
+            context.takeScreenshot("seed-explorer-standalone-settings");
+            context.runOnClient(client -> {
+                client.gui.screen().onClose();
+                require(client.gui.screen() == mapScreen.get(),
+                    "settings back navigation did not restore the map");
             });
         } catch (Throwable failure) {
             throw new AssertionError("Standalone client smoke failed", failure);
         }
         context.runOnClient(client -> require(client.level == null,
             "temporary world did not close cleanly"));
+    }
+
+    private static InteractionState exercise2DInteractions(ClientGameTestContext context,
+                                                            StandaloneSeedExplorerConfig config,
+                                                            long seed,
+                                                            StandaloneSeedExplorerScreen map) {
+        boolean structureLayer = config.booleanValue("structure-layer", true);
+        boolean waypointLayer = config.booleanValue("waypoint-layer", true);
+        boolean autoCenter = config.booleanValue("auto-center-player", false);
+        int baselineWaypoints = config.waypoints(seed, 0).size();
+        config.setBoolean("structure-layer", false);
+        config.setBoolean("waypoint-layer", false);
+        config.setBoolean("auto-center-player", false);
+
+        double beforeX = doubleField(map, "centerX");
+        double beforeZ = doubleField(map, "centerZ");
+        GuiPoint dragStart = context.computeOnClient(client -> new GuiPoint(
+            map.width / 2, mapTop(map) + (map.height - mapTop(map) - 10) / 2));
+        drag(context, dragStart, 54, 36, 0);
+        context.runOnClient(client -> {
+            double afterX = doubleField(map, "centerX");
+            double afterZ = doubleField(map, "centerZ");
+            require(Math.abs(afterX - beforeX) > 0.01 || Math.abs(afterZ - beforeZ) > 0.01,
+                "2D left drag did not change the map center");
+            require(config.waypoints(seed, 0).size() == baselineWaypoints,
+                "2D drag created a waypoint");
+        });
+
+        config.setBoolean("waypoint-layer", true);
+        GuiPoint emptyPoint = context.computeOnClient(client -> emptyMapPoint(map, config, seed));
+        click(context, emptyPoint, 1);
+        context.runOnClient(client -> {
+            List<String> labels = contextLabels(map);
+            require(labels.contains("Add waypoint"), "empty-map menu did not offer Add waypoint");
+            require(labels.contains("View in 3D"), "empty-map menu did not offer View in 3D");
+        });
+        clickMenuAction(context, map, "Add waypoint");
+
+        StandaloneWaypoint waypoint = context.computeOnClient(client -> {
+            require(config.waypoints(seed, 0).size() == baselineWaypoints + 1,
+                "Add waypoint did not persist exactly one waypoint");
+            StandaloneWaypoint selected = (StandaloneWaypoint) field(map, "selectedWaypoint");
+            require(selected != null, "Add waypoint did not select the new waypoint");
+            return selected;
+        });
+        GuiPoint waypointPoint = context.computeOnClient(client -> waypointPoint(map, waypoint));
+        click(context, waypointPoint, 1);
+        context.runOnClient(client -> require(contextLabels(map).contains("View in 3D"),
+            "waypoint menu did not offer View in 3D"));
+        clickMenuAction(context, map, "View in 3D");
+        context.runOnClient(client -> require(client.gui.screen() instanceof StandaloneTerrain3DScreen,
+            "waypoint View in 3D did not open the 3D screen"));
+        return new InteractionState(baselineWaypoints, waypoint, structureLayer, waypointLayer, autoCenter);
+    }
+
+    private static void exercise3DInteractions(ClientGameTestContext context) {
+        CameraState beforeMove = context.computeOnClient(client -> {
+            StandaloneTerrain3DScreen screen = require3DScreen(client.gui.screen());
+            setBooleanField(screen, "focusActive", true);
+            FreeCamera3D camera = camera(screen);
+            return CameraState.of(camera);
+        });
+        context.getInput().holdKeyFor(87, 6);
+        context.waitTicks(3);
+        context.runOnClient(client -> {
+            StandaloneTerrain3DScreen screen = require3DScreen(client.gui.screen());
+            require(!booleanField(screen, "focusActive"), "3D WASD did not clear focus");
+            require(beforeMove.moved(camera(screen)), "3D WASD did not move the camera");
+        });
+
+        CameraState beforeLook = context.computeOnClient(client -> {
+            StandaloneTerrain3DScreen screen = require3DScreen(client.gui.screen());
+            setBooleanField(screen, "focusActive", true);
+            return CameraState.of(camera(screen));
+        });
+        GuiPoint lookStart = context.computeOnClient(client -> {
+            Screen screen = client.gui.screen();
+            return new GuiPoint(screen.width / 2, Math.max(110, screen.height / 2));
+        });
+        drag(context, lookStart, 72, 38, 1);
+        context.runOnClient(client -> {
+            StandaloneTerrain3DScreen screen = require3DScreen(client.gui.screen());
+            FreeCamera3D camera = camera(screen);
+            require(!booleanField(screen, "focusActive"), "3D right drag did not clear focus");
+            require(beforeLook.rotated(camera), "3D right drag did not rotate the camera");
+            require(intField(screen, "dragButton") == -1,
+                "3D right drag did not release the drag state");
+        });
+    }
+
+    private static void deleteTestWaypoint(ClientGameTestContext context,
+                                           StandaloneSeedExplorerConfig config,
+                                           long seed,
+                                           StandaloneSeedExplorerScreen map,
+                                           InteractionState interaction) {
+        GuiPoint point = context.computeOnClient(client -> waypointPoint(map, interaction.waypoint));
+        click(context, point, 1);
+        context.runOnClient(client -> require(contextLabels(map).contains("Delete waypoint"),
+            "waypoint menu did not offer Delete waypoint"));
+        clickMenuAction(context, map, "Delete waypoint");
+        context.runOnClient(client -> require(
+            config.waypoints(seed, 0).size() == interaction.baselineWaypoints,
+            "Delete waypoint did not restore the original waypoint count"));
+        config.setBoolean("structure-layer", interaction.structureLayer);
+        config.setBoolean("waypoint-layer", interaction.waypointLayer);
+        config.setBoolean("auto-center-player", interaction.autoCenter);
+    }
+
+    private static void clickMenuAction(ClientGameTestContext context,
+                                        StandaloneSeedExplorerScreen screen,
+                                        String label) {
+        GuiPoint point = context.computeOnClient(client -> {
+            List<String> labels = contextLabels(screen);
+            int row = labels.indexOf(label);
+            require(row >= 0, "context menu action was missing: " + label);
+            return new GuiPoint(intField(screen, "contextX") + 6,
+                intField(screen, "contextY") + row * 22 + 11);
+        });
+        click(context, point, 0);
+    }
+
+    private static void click(ClientGameTestContext context, GuiPoint point, int button) {
+        RawPoint raw = context.computeOnClient(client -> rawPoint(client, point));
+        context.getInput().setCursorPos(raw.x, raw.y);
+        context.waitTick();
+        context.getInput().pressMouse(button);
+        context.waitTick();
+    }
+
+    private static void drag(ClientGameTestContext context, GuiPoint start,
+                             int deltaX, int deltaY, int button) {
+        RawPoint raw = context.computeOnClient(client -> rawPoint(client, start));
+        RawPoint delta = context.computeOnClient(client -> rawDelta(client, deltaX, deltaY));
+        context.getInput().setCursorPos(raw.x, raw.y);
+        context.waitTick();
+        context.getInput().holdMouse(button);
+        context.waitTick();
+        context.getInput().moveCursor(delta.x, delta.y);
+        context.waitTicks(2);
+        context.getInput().releaseMouse(button);
+        context.waitTicks(2);
+    }
+
+    private static GuiPoint emptyMapPoint(StandaloneSeedExplorerScreen screen,
+                                          StandaloneSeedExplorerConfig config,
+                                          long seed) {
+        int top = mapTop(screen);
+        double centerX = doubleField(screen, "centerX");
+        double centerZ = doubleField(screen, "centerZ");
+        double scale = doubleField(screen, "blocksPerPixel");
+        int centerScreenX = screen.width / 2;
+        int centerScreenY = top + (screen.height - top - 10) / 2;
+        for (int dy : new int[]{0, 44, -44, 88, -88}) {
+            for (int dx : new int[]{96, -96, 144, -144, 0}) {
+                int x = centerScreenX + dx;
+                int y = centerScreenY + dy;
+                if (x < 20 || x >= screen.width - 20 || y < top + 12 || y >= screen.height - 20) continue;
+                boolean clear = true;
+                for (StandaloneWaypoint waypoint : config.waypoints(seed, 0)) {
+                    double waypointX = centerScreenX + (waypoint.x() - centerX) / scale;
+                    double waypointY = centerScreenY + (waypoint.z() - centerZ) / scale;
+                    if (Math.hypot(x - waypointX, y - waypointY) < 20.0) {
+                        clear = false;
+                        break;
+                    }
+                }
+                if (clear) return new GuiPoint(x, y);
+            }
+        }
+        throw new AssertionError("Could not find empty map space for waypoint interaction");
+    }
+
+    private static GuiPoint waypointPoint(StandaloneSeedExplorerScreen screen,
+                                          StandaloneWaypoint waypoint) {
+        int top = mapTop(screen);
+        double centerX = doubleField(screen, "centerX");
+        double centerZ = doubleField(screen, "centerZ");
+        double scale = doubleField(screen, "blocksPerPixel");
+        return new GuiPoint((int) Math.round(screen.width / 2.0 + (waypoint.x() - centerX) / scale),
+            (int) Math.round(top + (screen.height - top - 10) / 2.0
+                + (waypoint.z() - centerZ) / scale));
+    }
+
+    private static List<String> contextLabels(StandaloneSeedExplorerScreen screen) {
+        @SuppressWarnings("unchecked")
+        List<Object> actions = (List<Object>) field(screen, "contextActions");
+        return actions.stream().map(action -> {
+            try {
+                var label = action.getClass().getDeclaredMethod("label");
+                label.setAccessible(true);
+                return (String) label.invoke(action);
+            } catch (ReflectiveOperationException exception) {
+                throw new AssertionError("Could not inspect a context menu action", exception);
+            }
+        }).toList();
+    }
+
+    private static StandaloneTerrain3DScreen require3DScreen(Screen screen) {
+        require(screen instanceof StandaloneTerrain3DScreen, "3D screen closed during input test");
+        return (StandaloneTerrain3DScreen) screen;
+    }
+
+    private static FreeCamera3D camera(StandaloneTerrain3DScreen screen) {
+        return (FreeCamera3D) field(screen, "camera");
+    }
+
+    private static int mapTop(StandaloneSeedExplorerScreen screen) {
+        try {
+            var method = StandaloneSeedExplorerScreen.class.getDeclaredMethod("mapTop");
+            method.setAccessible(true);
+            return (int) method.invoke(screen);
+        } catch (ReflectiveOperationException exception) {
+            throw new AssertionError("Could not inspect the map viewport", exception);
+        }
+    }
+
+    private static Object field(Object target, String name) {
+        try {
+            var field = target.getClass().getDeclaredField(name);
+            field.setAccessible(true);
+            return field.get(target);
+        } catch (ReflectiveOperationException exception) {
+            throw new AssertionError("Could not inspect field " + name, exception);
+        }
+    }
+
+    private static double doubleField(Object target, String name) {
+        return ((Number) field(target, name)).doubleValue();
+    }
+
+    private static int intField(Object target, String name) {
+        return ((Number) field(target, name)).intValue();
+    }
+
+    private static boolean booleanField(Object target, String name) {
+        return (Boolean) field(target, name);
+    }
+
+    private static void setBooleanField(Object target, String name, boolean value) {
+        try {
+            var field = target.getClass().getDeclaredField(name);
+            field.setAccessible(true);
+            field.setBoolean(target, value);
+        } catch (ReflectiveOperationException exception) {
+            throw new AssertionError("Could not set field " + name, exception);
+        }
+    }
+
+    private static RawPoint rawPoint(net.minecraft.client.Minecraft client, GuiPoint point) {
+        return new RawPoint(point.x * client.getWindow().getWidth()
+            / (double) client.getWindow().getGuiScaledWidth(),
+            point.y * client.getWindow().getHeight()
+                / (double) client.getWindow().getGuiScaledHeight());
+    }
+
+    private static RawPoint rawDelta(net.minecraft.client.Minecraft client, double x, double y) {
+        return new RawPoint(x * client.getWindow().getWidth()
+            / (double) client.getWindow().getGuiScaledWidth(),
+            y * client.getWindow().getHeight()
+                / (double) client.getWindow().getGuiScaledHeight());
+    }
+
+    private record GuiPoint(double x, double y) { }
+    private record RawPoint(double x, double y) { }
+    private record InteractionState(int baselineWaypoints, StandaloneWaypoint waypoint,
+                                    boolean structureLayer, boolean waypointLayer,
+                                    boolean autoCenter) { }
+    private record CameraState(double x, double y, double z, double yaw, double pitch) {
+        static CameraState of(FreeCamera3D camera) {
+            return new CameraState(camera.targetX(), camera.targetY(), camera.targetZ(),
+                camera.yaw(), camera.pitch());
+        }
+
+        boolean moved(FreeCamera3D camera) {
+            return Math.abs(camera.targetX() - x) + Math.abs(camera.targetY() - y)
+                + Math.abs(camera.targetZ() - z) > 0.001;
+        }
+
+        boolean rotated(FreeCamera3D camera) {
+            return Math.abs(camera.yaw() - yaw) + Math.abs(camera.pitch() - pitch) > 0.0001;
+        }
     }
 
     private static void verifyMixins() {

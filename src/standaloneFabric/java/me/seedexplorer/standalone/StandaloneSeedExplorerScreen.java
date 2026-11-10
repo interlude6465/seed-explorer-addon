@@ -19,6 +19,7 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.input.KeyEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
@@ -102,12 +103,17 @@ public final class StandaloneSeedExplorerScreen extends Screen {
     private boolean dragging;
     private double lastMouseX;
     private double lastMouseY;
+    private double pressMouseX, pressMouseY;
+    private boolean dragMoved;
+    private List<MenuAction> contextActions = List.of();
+    private int contextX, contextY, contextWidth;
     private volatile MapResult result;
     private volatile OreResult oreResult;
     private volatile long activeRequest;
     private volatile String error = "";
     private int toolbarX, toolbarY, mapTop = 94;
     private int refreshTicks;
+    private int structureRegionsDone, structureRegionsTotal;
     private volatile String oreStatus = "";
 
     public StandaloneSeedExplorerScreen(Screen parent, StandaloneSeedExplorerConfig config) {
@@ -119,6 +125,9 @@ public final class StandaloneSeedExplorerScreen extends Screen {
 
     @Override
     protected void init() {
+        dragging = false;
+        setDragging(false);
+        contextActions = List.of();
         if (!initialPositionSet) {
             if (minecraft.level != null) dimension = playerDimension();
             centerOnPlayer();
@@ -425,6 +434,7 @@ public final class StandaloneSeedExplorerScreen extends Screen {
         if (width <= 0 || height <= mapTop()) return;
         long request = REQUESTS.incrementAndGet();
         activeRequest = request;
+        structureRegionsDone = structureRegionsTotal = 0;
         error = "";
 
         double requestCenterX = centerX;
@@ -468,7 +478,7 @@ public final class StandaloneSeedExplorerScreen extends Screen {
                         if (REQUESTS.get() != request) return;
                         MapResult current = result;
                         if (current != null && current.request == request
-                            && current.structuresReady) return;
+                            && (current.structuresReady || !current.structures.isEmpty())) return;
                         LoadedTerrainOverlay currentOverlay = current != null
                             && current.request == request ? current.loadedTerrain : loadedTerrain;
                         result = new MapResult(request, columns, rows, colors, List.of(),
@@ -477,20 +487,23 @@ public final class StandaloneSeedExplorerScreen extends Screen {
                 }
                 STRUCTURE_GENERATOR.execute(() -> {
                     try {
-                        List<GeneratedStructure> structures = StandalonePredictionCache.predictDimension(
+                        StandalonePredictionCache.predictDimensionProgressive(
                             context, minChunkX, minChunkZ, maxChunkX, maxChunkZ,
                             requestFilter == StructureType.TREASURE,
                             requestFilter == StructureType.MINESHAFT,
-                            () -> REQUESTS.get() != request);
-                        if (REQUESTS.get() != request) return;
-                        minecraft.execute(() -> {
-                            if (REQUESTS.get() != request) return;
-                            MapResult current = result;
-                            LoadedTerrainOverlay currentOverlay = current != null
-                                && current.request == request ? current.loadedTerrain : loadedTerrain;
-                            result = new MapResult(request, columns, rows, colors, structures,
-                                requestCenterX, requestCenterZ, step, seed, currentOverlay, true);
-                        });
+                            () -> REQUESTS.get() != request, progress -> {
+                                if (REQUESTS.get() != request) return;
+                                minecraft.execute(() -> {
+                                    if (REQUESTS.get() != request) return;
+                                    MapResult current = result;
+                                    LoadedTerrainOverlay currentOverlay = current != null
+                                        && current.request == request ? current.loadedTerrain : loadedTerrain;
+                                    structureRegionsDone = progress.completedRegions();
+                                    structureRegionsTotal = progress.totalRegions();
+                                    result = new MapResult(request, columns, rows, colors, progress.structures(),
+                                        requestCenterX, requestCenterZ, step, seed, currentOverlay, progress.complete());
+                                });
+                            });
                     } catch (Throwable failure) {
                         if (REQUESTS.get() == request) {
                             error = "Structure prediction failed: "
@@ -546,6 +559,10 @@ public final class StandaloneSeedExplorerScreen extends Screen {
         } else {
             int left = 10;
             int top = mapTop();
+            int offsetX = panOffsetX(snapshot), offsetY = panOffsetY(snapshot);
+            graphics.enableScissor(left, top, width - 10, height - 10);
+            graphics.pose().pushMatrix();
+            graphics.pose().translate(offsetX, offsetY);
             if (config.booleanValue("biome-layer", true)) {
                 int opacity = config.intValue("biome-opacity", 255, 40, 255);
                 for (int row = 0; row < snapshot.rows; row++) {
@@ -564,18 +581,21 @@ public final class StandaloneSeedExplorerScreen extends Screen {
             drawOreOverlay(graphics, snapshot);
             drawChunkBorders(graphics, snapshot);
             if (config.booleanValue("structure-layer", true)) {
-                drawStructures(graphics, snapshot, mouseX, mouseY);
+                drawStructures(graphics, snapshot, mouseX - offsetX, mouseY - offsetY);
             }
             if (config.booleanValue("waypoint-layer", true)) {
-                drawWaypoints(graphics, snapshot, mouseX, mouseY);
+                drawWaypoints(graphics, snapshot, mouseX - offsetX, mouseY - offsetY);
             }
             drawPlayerMarker(graphics, snapshot);
+            graphics.pose().popMatrix();
+            graphics.disableScissor();
             drawCoordinates(graphics, snapshot, mouseX, mouseY);
             drawSelectedStructure(graphics);
             drawSelectedWaypoint(graphics);
             if (snapshot.request != activeRequest || !snapshot.structuresReady) {
                 String progress = snapshot.request != activeRequest
-                    ? "Updating..." : "Predicting structures...";
+                    ? "Updating..." : "Predicting structures..."
+                        + (structureRegionsTotal > 0 ? " " + structureRegionsDone + "/" + structureRegionsTotal : "");
                 int progressWidth = font.width(progress) + 16;
                 graphics.fill(width / 2 - progressWidth / 2, mapTop() + 8,
                     width / 2 + progressWidth / 2, mapTop() + 26, 0xD0101714);
@@ -599,7 +619,64 @@ public final class StandaloneSeedExplorerScreen extends Screen {
             graphics.text(font, Component.literal(footer), 12, height - 18, 0xFFE4EAE5);
         }
         super.extractRenderState(graphics, mouseX, mouseY, delta);
+        drawContextMenu(graphics, mouseX, mouseY);
     }
+
+    private int panOffsetX(MapResult map) {
+        return (int) Math.round((map.centerX - centerX) / (map.step / CELL_SIZE));
+    }
+
+    private int panOffsetY(MapResult map) {
+        return (int) Math.round((map.centerZ - centerZ) / (map.step / CELL_SIZE));
+    }
+
+    private void drawContextMenu(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
+        if (contextActions.isEmpty()) return;
+        graphics.nextStratum();
+        graphics.fill(contextX - 1, contextY - 1, contextX + contextWidth + 1,
+            contextY + contextActions.size() * 22 + 1, 0xFF658878);
+        for (int i = 0; i < contextActions.size(); i++) {
+            int y = contextY + i * 22;
+            boolean hovered = mouseX >= contextX && mouseX < contextX + contextWidth
+                && mouseY >= y && mouseY < y + 22;
+            graphics.fill(contextX, y, contextX + contextWidth, y + 22,
+                hovered ? 0xFF324F43 : 0xFF15251E);
+            graphics.text(font, contextActions.get(i).label(), contextX + 8, y + 7, 0xFFFFFFFF);
+        }
+    }
+
+    private void openContextMenu(MapResult snapshot, double mouseX, double mouseY) {
+        double hitX = mouseX - panOffsetX(snapshot), hitY = mouseY - panOffsetY(snapshot);
+        StandaloneWaypoint waypoint = config.booleanValue("waypoint-layer", true)
+            ? waypointAt(snapshot, hitX, hitY) : null;
+        GeneratedStructure structure = waypoint == null && config.booleanValue("structure-layer", true)
+            ? structureAt(snapshot, hitX, hitY) : null;
+        int x = waypoint != null ? waypoint.x() : structure != null ? structure.x : worldX(snapshot, mouseX);
+        int z = waypoint != null ? waypoint.z() : structure != null ? structure.z : worldZ(snapshot, mouseY);
+        selectedStructure = structure;
+        selectWaypoint(waypoint);
+        clearSelectedLoot();
+        List<MenuAction> actions = new ArrayList<>();
+        if (waypoint != null) {
+            actions.add(new MenuAction("Edit waypoint", this::editSelectedWaypoint));
+            actions.add(new MenuAction("Delete waypoint", this::deleteSelectedWaypoint));
+        } else {
+            actions.add(new MenuAction("Add waypoint", () -> addWaypoint(snapshot, x, z,
+                structure == null ? null : structure.displayName(), structure == null ? null : structure.type.name())));
+        }
+        actions.add(new MenuAction("View in 3D", () -> minecraft.gui.setScreen(
+            new StandaloneTerrain3DScreen(this, config, snapshot.seed, dimension, snapshot.structures)
+                .openAt(x, z, structure, null, 0).selectInitialWaypoint(waypoint))));
+        if (structure != null) actions.add(new MenuAction("Inspect loot", () -> minecraft.gui.setScreen(
+            new StandaloneStructureDetailScreen(this, config,
+                new PredictionContext(snapshot.seed, config.predictionVersion(), dimension), structure))));
+        contextActions = List.copyOf(actions);
+        contextWidth = actions.stream().mapToInt(action -> font.width(action.label()) + 16).max().orElse(130);
+        contextX = Math.max(2, Math.min((int) mouseX, width - contextWidth - 2));
+        contextY = Math.max(mapTop(), Math.min((int) mouseY, height - actions.size() * 22 - 2));
+    }
+
+    private record MenuAction(String label, Runnable action) { }
 
     private LoadedTerrainOverlay captureLoadedTerrain(int columns, int rows,
                                                        double requestCenterX, double requestCenterZ,
@@ -1070,8 +1147,8 @@ public final class StandaloneSeedExplorerScreen extends Screen {
         graphics.fill(centerScreenX - 5, centerScreenY, centerScreenX + 6, centerScreenY + 1, 0xCCFFFFFF);
         graphics.fill(centerScreenX, centerScreenY - 5, centerScreenX + 1, centerScreenY + 6, 0xCCFFFFFF);
         if (mouseX < left || mouseX >= width - 10 || mouseY < top || mouseY >= height - 10) return;
-        int worldX = (int) Math.floor(map.centerX + (mouseX - centerScreenX) * blocksPerPixel);
-        int worldZ = (int) Math.floor(map.centerZ + (mouseY - centerScreenY) * blocksPerPixel);
+        int worldX = (int) Math.floor(centerX + (mouseX - centerScreenX) * blocksPerPixel);
+        int worldZ = (int) Math.floor(centerZ + (mouseY - centerScreenY) * blocksPerPixel);
         String text = worldX + ", " + worldZ;
         int textWidth = font.width(text);
         graphics.fill(left + 4, top + 4, left + textWidth + 12, top + 20, 0xB0101714);
@@ -1080,45 +1157,56 @@ public final class StandaloneSeedExplorerScreen extends Screen {
 
     @Override
     public boolean mouseClicked(MouseButtonEvent click, boolean doubled) {
-        if ((click.button() == 0 || click.button() == 1)
-            && click.x() >= 10 && click.x() < width - 10
-            && click.y() >= mapTop() && click.y() < height - 10) {
+        if (!contextActions.isEmpty()) {
+            int row = (int) ((click.y() - contextY) / 22);
+            if (click.button() == 0 && click.x() >= contextX && click.x() < contextX + contextWidth
+                && click.y() >= contextY && row >= 0 && row < contextActions.size()) {
+                Runnable action = contextActions.get(row).action();
+                contextActions = List.of();
+                action.run();
+                return true;
+            }
+            contextActions = List.of();
+        }
+        if ((click.button() == 0 || click.button() == 1) && insideMap((int) click.x(), (int) click.y())) {
+            setFocused(null);
             MapResult snapshot = result;
-            StandaloneWaypoint waypoint = snapshot == null
-                || !config.booleanValue("waypoint-layer", true) ? null
-                : waypointAt(snapshot, click.x(), click.y());
-            if (waypoint != null) {
-                selectedStructure = null;
-                clearSelectedLoot();
-                selectWaypoint(waypoint);
-                if (click.button() == 1 || doubled) editSelectedWaypoint();
+            if (click.button() == 1) {
+                dragging = false;
+                setDragging(false);
+                if (snapshot != null) openContextMenu(snapshot, click.x(), click.y());
                 return true;
             }
-            GeneratedStructure hit = snapshot == null
-                || !config.booleanValue("structure-layer", true) ? null
-                : structureAt(snapshot, click.x(), click.y());
-            if (hit != null) {
-                selectWaypoint(null);
-                selectedStructure = hit;
-                requestSelectedLoot(hit, snapshot.seed);
-                if (click.button() == 1 || doubled) minecraft.gui.setScreen(new StandaloneStructureDetailScreen(
-                    this, config, new PredictionContext(snapshot.seed, config.predictionVersion(), dimension), hit));
-                return true;
-            }
-            if (click.button() == 1 && snapshot != null) {
-                addWaypoint(snapshot, worldX(snapshot, click.x()), worldZ(snapshot, click.y()),
-                    null, null);
-                return true;
-            }
-            selectedStructure = null;
-            selectWaypoint(null);
-            clearSelectedLoot();
             dragging = true;
-            lastMouseX = click.x();
-            lastMouseY = click.y();
+            setDragging(true);
+            dragMoved = false;
+            pressMouseX = lastMouseX = click.x();
+            pressMouseY = lastMouseY = click.y();
+            double hitX = snapshot == null ? click.x() : click.x() - panOffsetX(snapshot);
+            double hitY = snapshot == null ? click.y() : click.y() - panOffsetY(snapshot);
+            StandaloneWaypoint waypoint = snapshot == null || !config.booleanValue("waypoint-layer", true)
+                ? null : waypointAt(snapshot, hitX, hitY);
+            GeneratedStructure hit = waypoint != null || snapshot == null || !config.booleanValue("structure-layer", true)
+                ? null : structureAt(snapshot, hitX, hitY);
+            selectedStructure = hit;
+            selectWaypoint(waypoint);
+            clearSelectedLoot();
+            if (hit != null) requestSelectedLoot(hit, snapshot.seed);
+            if (doubled && waypoint != null) editSelectedWaypoint();
+            else if (doubled && hit != null) minecraft.gui.setScreen(new StandaloneStructureDetailScreen(
+                this, config, new PredictionContext(snapshot.seed, config.predictionVersion(), dimension), hit));
             return true;
         }
         return super.mouseClicked(click, doubled);
+    }
+
+    @Override
+    public boolean keyPressed(KeyEvent event) {
+        if (event.key() == 256 && !contextActions.isEmpty()) {
+            contextActions = List.of();
+            return true;
+        }
+        return super.keyPressed(event);
     }
 
     private void addWaypointAtSelectionOrCenter() {
@@ -1171,13 +1259,13 @@ public final class StandaloneSeedExplorerScreen extends Screen {
 
     private int worldX(MapResult map, double screenX) {
         double blocksPerPixel = map.step / CELL_SIZE;
-        return (int) Math.floor(map.centerX + (screenX - width / 2.0) * blocksPerPixel);
+        return (int) Math.floor(centerX + (screenX - width / 2.0) * blocksPerPixel);
     }
 
     private int worldZ(MapResult map, double screenY) {
         double blocksPerPixel = map.step / CELL_SIZE;
         double centerScreenY = mapTop() + (height - mapTop() - 10) / 2.0;
-        return (int) Math.floor(map.centerZ + (screenY - centerScreenY) * blocksPerPixel);
+        return (int) Math.floor(centerZ + (screenY - centerScreenY) * blocksPerPixel);
     }
 
     private boolean insideMap(int x, int y) {
@@ -1196,7 +1284,8 @@ public final class StandaloneSeedExplorerScreen extends Screen {
     public boolean mouseReleased(MouseButtonEvent click) {
         if (click.button() == 0 && dragging) {
             dragging = false;
-            requestMap();
+            setDragging(false);
+            if (dragMoved) requestMap();
             return true;
         }
         return super.mouseReleased(click);
@@ -1205,8 +1294,13 @@ public final class StandaloneSeedExplorerScreen extends Screen {
     @Override
     public boolean mouseDragged(MouseButtonEvent click, double deltaX, double deltaY) {
         if (!dragging || click.button() != 0) return super.mouseDragged(click, deltaX, deltaY);
-        centerX -= deltaX * blocksPerPixel;
-        centerZ -= deltaY * blocksPerPixel;
+        if (!dragMoved && Math.hypot(click.x() - pressMouseX, click.y() - pressMouseY) < 3.0) return true;
+        double scale = result == null ? blocksPerPixel : result.step / CELL_SIZE;
+        double moveX = dragMoved ? deltaX : click.x() - pressMouseX;
+        double moveY = dragMoved ? deltaY : click.y() - pressMouseY;
+        dragMoved = true;
+        centerX -= moveX * scale;
+        centerZ -= moveY * scale;
         lastMouseX = click.x();
         lastMouseY = click.y();
         return true;
@@ -1215,6 +1309,7 @@ public final class StandaloneSeedExplorerScreen extends Screen {
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
         if (mouseY < mapTop()) return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+        contextActions = List.of();
         double oldScale = blocksPerPixel;
         double zoomStep = config.doubleValue("zoom-step", 1.2, 1.01, 2.0);
         blocksPerPixel = clampScale(blocksPerPixel
@@ -1241,7 +1336,7 @@ public final class StandaloneSeedExplorerScreen extends Screen {
                 snapshot.structures, snapshot.centerX, snapshot.centerZ, snapshot.step, snapshot.seed,
                 overlay, snapshot.structuresReady);
         }
-        if (!config.booleanValue("auto-center-player", false) || minecraft == null
+        if (dragging || !contextActions.isEmpty() || !config.booleanValue("auto-center-player", false) || minecraft == null
             || minecraft.player == null || playerDimension() != dimension) return;
         double playerX = minecraft.player.getX();
         double playerZ = minecraft.player.getZ();
