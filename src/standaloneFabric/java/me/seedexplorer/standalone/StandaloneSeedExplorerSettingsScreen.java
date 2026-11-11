@@ -22,6 +22,14 @@ public final class StandaloneSeedExplorerSettingsScreen extends Screen {
         new Category("General", List.of(
             bool("map-ore-overlay", "Map ore overlay", false,
                 "Shows predicted ore locations on the map. Heavy and off by default.", true))),
+        new Category("Seed cracking", List.of(
+            action("seed-cracking-workspace", "Background cracking status", "Automatically collects loaded evidence and searches when sufficiently constrained."),
+            bool("seed-cracking-auto", "Automatic background cracking", true,
+                "Collects loaded vanilla evidence and attempts bounded recovery as you explore. Never reads the configured or server seed.", true),
+            integer("seed-cracking-seconds", "Search budget (seconds)", 60, 10, 300,
+                "Maximum time for each search stage; partial results stay labeled incomplete.", true),
+            integer("seed-cracking-threads", "Search threads", 2, 1, 4,
+                "Limits CPU workers used by the seed cracker.", true))),
         new Category("Map", List.of(
             decimal("zoom-step", "Zoom step", 1.2, 1.01, 2.0, 2,
                 "How quickly the map zooms with the mouse wheel.", true),
@@ -199,6 +207,9 @@ public final class StandaloneSeedExplorerSettingsScreen extends Screen {
                     config.save();
                 }).bounds(x, y, width, 20).build();
             }
+            case ACTION -> Button.builder(Component.literal("Open workspace"), button ->
+                minecraft.gui.setScreen(new StandaloneSeedCrackingScreen(this, config)))
+                .bounds(x, y, width, 20).build();
             case KEYBIND -> Button.builder(Component.literal("Minecraft Controls"), button ->
                 minecraft.gui.setScreen(new KeyBindsScreen(this, minecraft.options)))
                 .bounds(x, y, width, 20).build();
@@ -323,13 +334,18 @@ public final class StandaloneSeedExplorerSettingsScreen extends Screen {
             0, 0, 0, fallback, List.copyOf(choices), connected);
     }
 
+    private static SettingDef action(String key, String label, String description) {
+        return new SettingDef(key, label, description, ValueKind.ACTION, false,
+            0, 0, 0, "", List.of(), true);
+    }
+
     private static SettingDef keybind(String key, String label, String description) {
         return new SettingDef(key, label, description, ValueKind.KEYBIND, false,
             0, 0, 0, "", List.of(), true);
     }
 
     private enum ValueKind {
-        BOOLEAN, INTEGER, DECIMAL, CHOICE, KEYBIND
+        BOOLEAN, INTEGER, DECIMAL, CHOICE, KEYBIND, ACTION
     }
 
     private record Category(String name, List<SettingDef> settings) {

@@ -3,6 +3,7 @@ package me.seedexplorer.standalone;
 import me.seedexplorer.addon.loot.StandaloneStructureLootPredictor;
 import me.seedexplorer.addon.loot.ItemLoot;
 import me.seedexplorer.addon.loot.VanillaLootStructureSimulator;
+import me.seedexplorer.addon.worldgen.PredictionContext;
 
 import java.util.List;
 
@@ -17,6 +18,18 @@ public final class StandaloneDoubleChestProbe {
         var paired = StandaloneStructureLootPredictor.sharedChestInventories(List.of(left, right));
         require(paired.size() == 1 && paired.getFirst().size() == 2,
             "a captured double chest was not grouped as one inventory");
+        var modeledLeft = container(10, 64, 20,
+            "minecraft:chests/abandoned_camp_common_chest", 1L, true);
+        var modeledRight = container(11, 64, 20,
+            "minecraft:chests/abandoned_camp_common_chest", 2L, true);
+        var selectedOutputs = StandaloneStructureLootPredictor.predictContainers(
+            new PredictionContext(42L, "26.3", 0), List.of(modeledLeft, modeledRight), 64);
+        require(selectedOutputs.size() == 1,
+            "observed double chest did not produce one modeled inventory");
+        require(!selectedOutputs.getFirst().predictedItems().isEmpty(),
+            "observed double chest discarded modeled loot");
+        require(selectedOutputs.stream().noneMatch(output -> output.exact()),
+            "observed-history container loot was promoted to exact");
 
         var firstSingle = container(10, 64, 20, "minecraft:chests/village_house", 3L, false);
         var adjacentSingle = container(11, 64, 20, "minecraft:chests/village_house", 4L, false);

@@ -49,9 +49,12 @@ public final class StructureLootProbe {
                     String[] parts = a.substring("chunk=".length()).split(",");
                     int cx = Integer.parseInt(parts[0].trim());
                     int cz = Integer.parseInt(parts[1].trim());
+                    if (key == null && parts.length >= 3) {
+                        key = keyForVariant(parts[2].trim());
+                    }
                     if (key == null) {
                         throw new IllegalArgumentException(
-                            "direct chunk mode requires a fixed-key structure; camps need a predicted biome variant");
+                            "direct camp mode requires chunk=X,Z,minecraft:abandoned_camp_<variant>");
                     }
                     OUT.println("type=" + type + " key=" + key + " seed=" + seed
                         + " dim=" + dim + " decorationIndex="
@@ -193,6 +196,8 @@ public final class StructureLootProbe {
 
     private static ResourceKey<Structure> keyFor(StructureType type) {
         return switch (type) {
+            case VILLAGE -> BuiltinStructures.VILLAGE_PLAINS;
+            case WITCH_HUT -> BuiltinStructures.SWAMP_HUT;
             case TRIAL_CHAMBER -> BuiltinStructures.TRIAL_CHAMBERS;
             case IGLOO -> BuiltinStructures.IGLOO;
             case MINESHAFT -> BuiltinStructures.MINESHAFT;

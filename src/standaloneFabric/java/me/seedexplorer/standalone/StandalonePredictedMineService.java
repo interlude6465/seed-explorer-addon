@@ -82,7 +82,7 @@ public final class StandalonePredictedMineService {
             || client.gameMode == null) return;
         BlockPos target = new BlockPos(current.x, current.y, current.z);
 
-        if (!client.level.hasChunkAt(target)) {
+        if (!StandaloneClientChunks.loaded(client.level, target)) {
             refreshPath();
             return;
         }
@@ -154,7 +154,9 @@ public final class StandalonePredictedMineService {
         }
         generation.incrementAndGet();
         Future<?> activePrediction = prediction;
-        if (activePrediction != null) activePrediction.cancel(true);
+        // Generation may be reading shared vanilla resources. The generation
+        // token rejects stale results without interrupting those file reads.
+        if (activePrediction != null) activePrediction.cancel(false);
         prediction = null;
         targets = List.of();
         targetIndex = 0;

@@ -24,13 +24,25 @@ public final class StandaloneMinimapProbe {
         var nearby = StandaloneMinimapOverlay.predictionKey(0L, "26.3", 0, 10, 10);
         require(first.equals(nearby), "nearby movement should reuse the same area prediction");
         require(StandaloneMinimapOverlay.predictionKeyChanges(0L, "26.3", 0,
-            1, 1, 65, 1), "crossing an area boundary must invalidate the visible result");
+            1, 1, 65, 1), "crossing an area boundary must request a new area");
         require(!first.equals(StandaloneMinimapOverlay.predictionKey(1L, "26.3", 0, 1, 1)),
             "seed must participate in the prediction cache key, including seed zero");
         require(!first.equals(StandaloneMinimapOverlay.predictionKey(0L, "26.2", 0, 1, 1)),
             "prediction version must participate in the cache key");
         require(!first.equals(StandaloneMinimapOverlay.predictionKey(0L, "26.3", -1, 1, 1)),
             "dimension must participate in the cache key");
+        require(StandaloneMinimapOverlay.samePredictionContext(first,
+            StandaloneMinimapOverlay.predictionKey(0L, "26.3", 0, 65, 1)),
+            "known markers must remain visible while a neighboring area loads");
+        require(!StandaloneMinimapOverlay.samePredictionContext(first,
+            StandaloneMinimapOverlay.predictionKey(1L, "26.3", 0, 65, 1)),
+            "retained markers must never cross seeds");
+        require(!StandaloneMinimapOverlay.samePredictionContext(first,
+            StandaloneMinimapOverlay.predictionKey(0L, "26.2", 0, 65, 1)),
+            "retained markers must never cross versions");
+        require(!StandaloneMinimapOverlay.samePredictionContext(first,
+            StandaloneMinimapOverlay.predictionKey(0L, "26.3", -1, 65, 1)),
+            "retained markers must never cross dimensions");
         System.out.println("Standalone minimap probe: PASS");
     }
 

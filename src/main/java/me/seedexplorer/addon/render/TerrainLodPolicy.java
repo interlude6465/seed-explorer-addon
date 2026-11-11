@@ -92,14 +92,14 @@ public final class TerrainLodPolicy {
     /** Underground requests must run their shell pass at every surface display LOD. */
     public static boolean shouldBakeUndergroundGeometry(boolean requested, int dimension,
                                                         int surfaceStep) {
-        return requested && dimension != 1;
+        return requested;
     }
 
     /** Pre-bake the compact cave window with nearby exact surface chunks. */
     public static boolean shouldPrebakeUndergroundGeometry(
         int dimension, int chunkDistance, int caveRadius, boolean exactSurface
     ) {
-        return exactSurface && dimension != 1
+        return exactSurface
             && chunkDistance >= 0 && chunkDistance <= Math.max(0, caveRadius);
     }
 

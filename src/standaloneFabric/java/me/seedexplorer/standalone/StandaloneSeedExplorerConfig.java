@@ -115,11 +115,31 @@ public final class StandaloneSeedExplorerConfig {
         values.setProperty(prefix + "version", predictionVersion);
     }
 
+    /** Cracking evidence belongs to a world/server and prediction version, never to a guessed seed. */
+    String crackingScope() { return profile + ":" + predictionVersion; }
+    String crackingData() { return values.getProperty("cracking." + crackingScope(), ""); }
+    void setCrackingData(String data) { values.setProperty("cracking." + crackingScope(), data); }
+    void setCrackingData(String scope, String data) { values.setProperty("cracking." + scope, data); }
+
     public boolean structureVisible(String type) {
         return Boolean.parseBoolean(values.getProperty("profile." + profile + ".structure." + type, "true"));
     }
     public void setStructureVisible(String type, boolean visible) {
         values.setProperty("profile." + profile + ".structure." + type, Boolean.toString(visible));
+    }
+    public int mapDimension(int fallback) {
+        return (int) Math.max(-1, Math.min(1, parseLong(values.getProperty("profile." + profile + ".mapDimension"), fallback)));
+    }
+    public void setMapDimension(int dimension) {
+        values.setProperty("profile." + profile + ".mapDimension", Integer.toString(dimension));
+    }
+    public java.util.Set<String> mapStructureFilters(int dimension) {
+        String saved = values.getProperty("profile." + profile + ".mapFilters." + dimension, "");
+        if (saved.isBlank()) return java.util.Set.of();
+        return new java.util.LinkedHashSet<>(java.util.List.of(saved.split(",")));
+    }
+    public void setMapStructureFilters(int dimension, java.util.Set<String> filters) {
+        values.setProperty("profile." + profile + ".mapFilters." + dimension, String.join(",", filters));
     }
     public boolean completed(int dimension, String type, int x, int z) {
         return Boolean.parseBoolean(values.getProperty(completedKey(dimension, type, x, z), "false"));

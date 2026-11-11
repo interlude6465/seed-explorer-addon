@@ -55,9 +55,11 @@ public final class StructureLootIndexSearch {
             int placementChunkZ = Math.floorDiv(chestZ, 16);
             int matches = 0;
             for (int index = 0; index <= maxIndex; index++) {
-                var containers = dim == 0 && start != null && start.isValid()
-                    ? VanillaLootStructureSimulator.simulateStartChunk(seed, start, placementChunkX, placementChunkZ, index)
-                    : VanillaLootStructureSimulator.simulate(seed, dim, key, startChunkX, startChunkZ, index);
+                // Every candidate needs a fresh StructureStart. Surface-relative
+                // pieces mutate their placement state during replay, so sharing
+                // one start across an index sweep contaminates later candidates.
+                var containers = VanillaLootStructureSimulator.simulate(
+                    seed, dim, key, startChunkX, startChunkZ, index);
                 report.append("index=").append(index).append(" containers=").append(containers.size()).append('\n');
                 for (var container : containers) {
                     if (container.x() != chestX || container.y() != chestY || container.z() != chestZ) continue;

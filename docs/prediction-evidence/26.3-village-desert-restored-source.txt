@@ -1,0 +1,79 @@
+Seed Explorer 26.3 prediction oracle
+created=2026-11-11T01:34:42.675550900Z
+requestedSeeds=1 requestedDimensions=0 includeTypes=village_desert omitTypes=<none> explicitStarts=1:442:-935 firstChunk=<default>
+locateRadiusChunks=384 windowRadiusChunks=96 queryAttempts=1 predictedSamples=1 dungeonRadiusChunks=4 caseTimeoutTicks=1200 skipLoot=false
+
+SEED 1
+RUNTIME requestedSeed=1 actualSeed=1 serverVersion=26.3 requestedPreset=minecraft:normal requestedStructures=true
+DIMENSION 0
+STRUCTURE_REGISTRY count=52
+  INVENTORY minecraft:abandoned_camp_bamboo_jungle type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_birch_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_cherry_grove type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_dappled_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_flower_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_meadow type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_birch_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_pine_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_spruce_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_pale_garden type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_savanna type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_snowy_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_sparse_jungle type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_swamp type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_windswept_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_wooded_badlands type=ABANDONED_CAMP
+  INVENTORY minecraft:ancient_city type=ANCIENT_CITY
+  INVENTORY minecraft:bastion_remnant type=BASTION
+  INVENTORY minecraft:buried_treasure type=TREASURE
+  INVENTORY minecraft:desert_pyramid type=DESERT_PYRAMID
+  INVENTORY minecraft:end_city type=END_CITY
+  INVENTORY minecraft:fortress type=FORTRESS
+  INVENTORY minecraft:igloo type=IGLOO
+  INVENTORY minecraft:jungle_pyramid type=JUNGLE_TEMPLE
+  INVENTORY minecraft:mansion type=MANSION
+  INVENTORY minecraft:mineshaft type=MINESHAFT
+  INVENTORY minecraft:mineshaft_mesa type=MINESHAFT
+  INVENTORY minecraft:monument type=MONUMENT
+  INVENTORY minecraft:nether_fossil type=NETHER_FOSSIL
+  INVENTORY minecraft:ocean_ruin_cold type=OCEAN_RUIN
+  INVENTORY minecraft:ocean_ruin_warm type=OCEAN_RUIN
+  INVENTORY minecraft:pillager_outpost type=OUTPOST
+  INVENTORY minecraft:ruined_portal type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_desert type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_jungle type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_mountain type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_nether type=NETHER_RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_ocean type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_swamp type=RUINED_PORTAL
+  INVENTORY minecraft:shipwreck type=SHIPWRECK
+  INVENTORY minecraft:shipwreck_beached type=SHIPWRECK
+  INVENTORY minecraft:stronghold type=STRONGHOLD
+  INVENTORY minecraft:swamp_hut type=WITCH_HUT
+  INVENTORY minecraft:trail_ruins type=TRAIL_RUINS
+  INVENTORY minecraft:trial_chambers type=TRIAL_CHAMBER
+  INVENTORY minecraft:village_desert type=VILLAGE
+  INVENTORY minecraft:village_plains type=VILLAGE
+  INVENTORY minecraft:village_savanna type=VILLAGE
+  INVENTORY minecraft:village_snowy type=VILLAGE
+  INVENTORY minecraft:village_taiga type=VILLAGE
+OBSERVATION RUNNING seed=1 dimension=0 id=minecraft:village_desert
+OBSERVATION initial layout MATCH seed=1 structure=minecraft:village_desert start=[442, -935] pieces=133
+OBSERVATION container ACTUAL seed=1 structure=minecraft:village_desert start=[442, -935] positions=[BlockPos{x=7079, y=92, z=-14998}] tables=[minecraft:chests/village/village_desert_house] lootSeeds=[126218749572943252] stacks=[minecraft:breadx1 enchantments={} damage=null potion=null stew=null, minecraft:breadx1 enchantments={} damage=null potion=null stew=null, minecraft:breadx1 enchantments={} damage=null potion=null stew=null, minecraft:breadx1 enchantments={} damage=null potion=null stew=null, minecraft:breadx2 enchantments={} damage=null potion=null stew=null, minecraft:cactusx1 enchantments={} damage=null potion=null stew=null, minecraft:cactusx3 enchantments={} damage=null potion=null stew=null, minecraft:wheatx1 enchantments={} damage=null potion=null stew=null, minecraft:wheatx1 enchantments={} damage=null potion=null stew=null, minecraft:wheatx1 enchantments={} damage=null potion=null stew=null] unrepresented=[]
+OBSERVATION container ACTUAL seed=1 structure=minecraft:village_desert start=[442, -935] positions=[BlockPos{x=7053, y=64, z=-14950}] tables=[minecraft:chests/village/village_weaponsmith] lootSeeds=[8363928618361075071] stacks=[minecraft:applex1 enchantments={} damage=null potion=null stew=null, minecraft:applex1 enchantments={} damage=null potion=null stew=null, minecraft:applex1 enchantments={} damage=null potion=null stew=null, minecraft:applex1 enchantments={} damage=null potion=null stew=null, minecraft:applex2 enchantments={} damage=null potion=null stew=null, minecraft:breadx1 enchantments={} damage=null potion=null stew=null, minecraft:breadx2 enchantments={} damage=null potion=null stew=null, minecraft:diamondx1 enchantments={} damage=null potion=null stew=null, minecraft:iron_bootsx1 enchantments={} damage=null potion=null stew=null] unrepresented=[]
+OBSERVATION container ACTUAL seed=1 structure=minecraft:village_desert start=[442, -935] positions=[BlockPos{x=7031, y=63, z=-14944}] tables=[minecraft:chests/village/village_desert_house] lootSeeds=[4457416868671474009] stacks=[minecraft:breadx1 enchantments={} damage=null potion=null stew=null, minecraft:breadx1 enchantments={} damage=null potion=null stew=null, minecraft:breadx1 enchantments={} damage=null potion=null stew=null, minecraft:breadx1 enchantments={} damage=null potion=null stew=null, minecraft:breadx1 enchantments={} damage=null potion=null stew=null, minecraft:breadx1 enchantments={} damage=null potion=null stew=null, minecraft:breadx3 enchantments={} damage=null potion=null stew=null, minecraft:clay_ballx1 enchantments={} damage=null potion=null stew=null, minecraft:wheatx1 enchantments={} damage=null potion=null stew=null, minecraft:wheatx1 enchantments={} damage=null potion=null stew=null, minecraft:wheatx1 enchantments={} damage=null potion=null stew=null, minecraft:wheatx1 enchantments={} damage=null potion=null stew=null] unrepresented=[]
+OBSERVATION container MATCH seed=1 structure=minecraft:village_desert positions=[BlockPos{x=7031, y=63, z=-14944}] tables=[minecraft:chests/village/village_desert_house] lootSeeds=[4457416868671474009] stacks=[minecraft:breadx1 enchantments={} damage=null potion=null stew=null, minecraft:breadx1 enchantments={} damage=null potion=null stew=null, minecraft:breadx1 enchantments={} damage=null potion=null stew=null, minecraft:breadx1 enchantments={} damage=null potion=null stew=null, minecraft:breadx1 enchantments={} damage=null potion=null stew=null, minecraft:breadx1 enchantments={} damage=null potion=null stew=null, minecraft:breadx3 enchantments={} damage=null potion=null stew=null, minecraft:clay_ballx1 enchantments={} damage=null potion=null stew=null, minecraft:wheatx1 enchantments={} damage=null potion=null stew=null, minecraft:wheatx1 enchantments={} damage=null potion=null stew=null, minecraft:wheatx1 enchantments={} damage=null potion=null stew=null, minecraft:wheatx1 enchantments={} damage=null potion=null stew=null]
+OBSERVATION container MATCH seed=1 structure=minecraft:village_desert positions=[BlockPos{x=7053, y=64, z=-14950}] tables=[minecraft:chests/village/village_weaponsmith] lootSeeds=[8363928618361075071] stacks=[minecraft:applex1 enchantments={} damage=null potion=null stew=null, minecraft:applex1 enchantments={} damage=null potion=null stew=null, minecraft:applex1 enchantments={} damage=null potion=null stew=null, minecraft:applex1 enchantments={} damage=null potion=null stew=null, minecraft:applex2 enchantments={} damage=null potion=null stew=null, minecraft:breadx1 enchantments={} damage=null potion=null stew=null, minecraft:breadx2 enchantments={} damage=null potion=null stew=null, minecraft:diamondx1 enchantments={} damage=null potion=null stew=null, minecraft:iron_bootsx1 enchantments={} damage=null potion=null stew=null]
+OBSERVATION container MATCH seed=1 structure=minecraft:village_desert positions=[BlockPos{x=7079, y=92, z=-14998}] tables=[minecraft:chests/village/village_desert_house] lootSeeds=[126218749572943252] stacks=[minecraft:breadx1 enchantments={} damage=null potion=null stew=null, minecraft:breadx1 enchantments={} damage=null potion=null stew=null, minecraft:breadx1 enchantments={} damage=null potion=null stew=null, minecraft:breadx1 enchantments={} damage=null potion=null stew=null, minecraft:breadx2 enchantments={} damage=null potion=null stew=null, minecraft:cactusx1 enchantments={} damage=null potion=null stew=null, minecraft:cactusx3 enchantments={} damage=null potion=null stew=null, minecraft:wheatx1 enchantments={} damage=null potion=null stew=null, minecraft:wheatx1 enchantments={} damage=null potion=null stew=null, minecraft:wheatx1 enchantments={} damage=null potion=null stew=null]
+PROGRESS seed=1 id=minecraft:village_desert actual=1 predicted=1 missed=0 extra=0 actualChests=3 predictedChests=3 missedChests=0 extraChests=0 lootMismatch=0 modeledLootMatch=3 metadataUnverified=0 layoutMatch=1 layoutMismatch=0 layoutUnverified=0
+  minecraft:village_desert actual=1 predicted=1 missed=0 extra=0 actualChests=3 predictedChests=3 missedChests=0 extraChests=0 lootMismatch=0 modeledLootMatch=3 metadataUnverified=0 layoutMatch=1 layoutMismatch=0 layoutUnverified=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+
+STATUS COMPLETE
+FAILURES 0
+
+UNVERIFIED 3
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:village_desert chest=[BlockPos{x=7031, y=63, z=-14944}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:village_desert chest=[BlockPos{x=7053, y=64, z=-14950}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:village_desert chest=[BlockPos{x=7079, y=92, z=-14998}]

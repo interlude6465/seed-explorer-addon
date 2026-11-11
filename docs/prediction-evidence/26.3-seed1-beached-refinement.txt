@@ -1,0 +1,90 @@
+Seed Explorer 26.3 prediction oracle
+created=2026-11-10T13:42:19.670526800Z
+requestedSeeds=1 requestedDimensions=0 includeTypes=shipwreck_beached omitTypes=<none>
+locateRadiusChunks=384 windowRadiusChunks=96 queryAttempts=2 predictedSamples=2 dungeonRadiusChunks=4 caseTimeoutTicks=1200 skipLoot=false
+
+SEED 1
+RUNTIME requestedSeed=1 actualSeed=1 serverVersion=26.3 requestedPreset=minecraft:normal requestedStructures=true
+DIMENSION 0
+STRUCTURE_REGISTRY count=52
+  INVENTORY minecraft:abandoned_camp_bamboo_jungle type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_birch_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_cherry_grove type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_dappled_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_flower_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_meadow type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_birch_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_pine_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_spruce_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_pale_garden type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_savanna type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_snowy_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_sparse_jungle type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_swamp type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_windswept_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_wooded_badlands type=ABANDONED_CAMP
+  INVENTORY minecraft:ancient_city type=ANCIENT_CITY
+  INVENTORY minecraft:bastion_remnant type=BASTION
+  INVENTORY minecraft:buried_treasure type=TREASURE
+  INVENTORY minecraft:desert_pyramid type=DESERT_PYRAMID
+  INVENTORY minecraft:end_city type=END_CITY
+  INVENTORY minecraft:fortress type=FORTRESS
+  INVENTORY minecraft:igloo type=IGLOO
+  INVENTORY minecraft:jungle_pyramid type=JUNGLE_TEMPLE
+  INVENTORY minecraft:mansion type=MANSION
+  INVENTORY minecraft:mineshaft type=MINESHAFT
+  INVENTORY minecraft:mineshaft_mesa type=MINESHAFT
+  INVENTORY minecraft:monument type=MONUMENT
+  INVENTORY minecraft:nether_fossil type=NETHER_FOSSIL
+  INVENTORY minecraft:ocean_ruin_cold type=OCEAN_RUIN
+  INVENTORY minecraft:ocean_ruin_warm type=OCEAN_RUIN
+  INVENTORY minecraft:pillager_outpost type=OUTPOST
+  INVENTORY minecraft:ruined_portal type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_desert type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_jungle type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_mountain type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_nether type=NETHER_RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_ocean type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_swamp type=RUINED_PORTAL
+  INVENTORY minecraft:shipwreck type=SHIPWRECK
+  INVENTORY minecraft:shipwreck_beached type=SHIPWRECK
+  INVENTORY minecraft:stronghold type=STRONGHOLD
+  INVENTORY minecraft:swamp_hut type=WITCH_HUT
+  INVENTORY minecraft:trail_ruins type=TRAIL_RUINS
+  INVENTORY minecraft:trial_chambers type=TRIAL_CHAMBER
+  INVENTORY minecraft:village_desert type=VILLAGE
+  INVENTORY minecraft:village_plains type=VILLAGE
+  INVENTORY minecraft:village_savanna type=VILLAGE
+  INVENTORY minecraft:village_snowy type=VILLAGE
+  INVENTORY minecraft:village_taiga type=VILLAGE
+OBSERVATION beached observed refinement AMBIGUOUS seed=1 start=[389, 657] candidates=6 observed=3 refinedContainers=3
+OBSERVATION beached observed refinement UNIQUE seed=1 start=[303, -924] candidates=1 observed=2 selectedContainers=2 refinedContainers=2
+OBSERVATION beached observed refinement AMBIGUOUS seed=1 start=[475, 619] candidates=6 observed=3 refinedContainers=3
+OBSERVATION beached observed refinement UNIQUE seed=1 start=[199, -933] candidates=4 observed=2 selectedContainers=2 refinedContainers=2
+PROGRESS seed=1 id=minecraft:shipwreck_beached actual=2 predicted=4 missed=0 extra=0 actualChests=10 predictedChests=10 lootMismatch=0
+  minecraft:shipwreck_beached actual=2 predicted=4 missed=0 extra=0 actualChests=10 predictedChests=10 missedChests=8 extraChests=8 lootMismatch=0 exactLootMatch=0 observedUnique=2 observedAmbiguous=2
+
+STATUS COMPLETE
+FAILURES 16
+  extra chest seed=1 structure=minecraft:shipwreck_beached predicted=6219,61,10529 table=minecraft:chests/shipwreck_treasure groundTruth={state=Block{minecraft:oak_stairs}[facing=north,half=top,shape=outer_right,waterlogged=true],blockEntity=none,table=none,containerEntities=[],insideCached=false,insidePieceFootprint=true,owningPieces=[class=net.minecraft.world.level.levelgen.structure.structures.ShipwreckPieces$ShipwreckPiece,box=BoundingBox{minX=6216, minY=59, minZ=10523, maxX=6243, maxY=67, maxZ=10531}],startPieces=[class=net.minecraft.world.level.levelgen.structure.structures.ShipwreckPieces$ShipwreckPiece,box=BoundingBox{minX=6216, minY=59, minZ=10523, maxX=6243, maxY=67, maxZ=10531}],startChunk=[389, 657],cachedBox=BoundingBox{minX=6216, minY=90, minZ=10523, maxX=6243, maxY=98, maxZ=10531},pieceBox=BoundingBox{minX=6216, minY=59, minZ=10523, maxX=6243, maxY=67, maxZ=10531}}
+  extra chest seed=1 structure=minecraft:shipwreck_beached predicted=6225,59,10528 table=minecraft:chests/shipwreck_map groundTruth={state=Block{minecraft:water}[level=0],blockEntity=none,table=none,containerEntities=[],insideCached=false,insidePieceFootprint=true,owningPieces=[class=net.minecraft.world.level.levelgen.structure.structures.ShipwreckPieces$ShipwreckPiece,box=BoundingBox{minX=6216, minY=59, minZ=10523, maxX=6243, maxY=67, maxZ=10531}],startPieces=[class=net.minecraft.world.level.levelgen.structure.structures.ShipwreckPieces$ShipwreckPiece,box=BoundingBox{minX=6216, minY=59, minZ=10523, maxX=6243, maxY=67, maxZ=10531}],startChunk=[389, 657],cachedBox=BoundingBox{minX=6216, minY=90, minZ=10523, maxX=6243, maxY=98, maxZ=10531},pieceBox=BoundingBox{minX=6216, minY=59, minZ=10523, maxX=6243, maxY=67, maxZ=10531}}
+  extra chest seed=1 structure=minecraft:shipwreck_beached predicted=6235,59,10527 table=minecraft:chests/shipwreck_supply groundTruth={state=Block{minecraft:spruce_stairs}[facing=west,half=top,shape=straight,waterlogged=true],blockEntity=none,table=none,containerEntities=[],insideCached=false,insidePieceFootprint=true,owningPieces=[class=net.minecraft.world.level.levelgen.structure.structures.ShipwreckPieces$ShipwreckPiece,box=BoundingBox{minX=6216, minY=59, minZ=10523, maxX=6243, maxY=67, maxZ=10531}],startPieces=[class=net.minecraft.world.level.levelgen.structure.structures.ShipwreckPieces$ShipwreckPiece,box=BoundingBox{minX=6216, minY=59, minZ=10523, maxX=6243, maxY=67, maxZ=10531}],startChunk=[389, 657],cachedBox=BoundingBox{minX=6216, minY=90, minZ=10523, maxX=6243, maxY=98, maxZ=10531},pieceBox=BoundingBox{minX=6216, minY=59, minZ=10523, maxX=6243, maxY=67, maxZ=10531}}
+  missed chest seed=1 structure=minecraft:shipwreck_beached actual=[BlockPos{x=6235, y=61, z=10527}] tables=[minecraft:chests/shipwreck_supply]
+  missed chest seed=1 structure=minecraft:shipwreck_beached actual=[BlockPos{x=6219, y=63, z=10529}] tables=[minecraft:chests/shipwreck_treasure]
+  missed chest seed=1 structure=minecraft:shipwreck_beached actual=[BlockPos{x=6225, y=61, z=10528}] tables=[minecraft:chests/shipwreck_map]
+  extra chest seed=1 structure=minecraft:shipwreck_beached predicted=7595,57,9921 table=minecraft:chests/shipwreck_treasure groundTruth={state=Block{minecraft:water}[level=0],blockEntity=none,table=none,containerEntities=[],insideCached=false,insidePieceFootprint=true,owningPieces=[class=net.minecraft.world.level.levelgen.structure.structures.ShipwreckPieces$ShipwreckPiece,box=BoundingBox{minX=7592, minY=52, minZ=9915, maxX=7619, maxY=72, maxZ=9923}],startPieces=[class=net.minecraft.world.level.levelgen.structure.structures.ShipwreckPieces$ShipwreckPiece,box=BoundingBox{minX=7592, minY=52, minZ=9915, maxX=7619, maxY=72, maxZ=9923}],startChunk=[475, 619],cachedBox=BoundingBox{minX=7592, minY=90, minZ=9915, maxX=7619, maxY=110, maxZ=9923},pieceBox=BoundingBox{minX=7592, minY=52, minZ=9915, maxX=7619, maxY=72, maxZ=9923}}
+  extra chest seed=1 structure=minecraft:shipwreck_beached predicted=7601,55,9920 table=minecraft:chests/shipwreck_map groundTruth={state=Block{minecraft:water}[level=0],blockEntity=none,table=none,containerEntities=[],insideCached=false,insidePieceFootprint=true,owningPieces=[class=net.minecraft.world.level.levelgen.structure.structures.ShipwreckPieces$ShipwreckPiece,box=BoundingBox{minX=7592, minY=52, minZ=9915, maxX=7619, maxY=72, maxZ=9923}],startPieces=[class=net.minecraft.world.level.levelgen.structure.structures.ShipwreckPieces$ShipwreckPiece,box=BoundingBox{minX=7592, minY=52, minZ=9915, maxX=7619, maxY=72, maxZ=9923}],startChunk=[475, 619],cachedBox=BoundingBox{minX=7592, minY=90, minZ=9915, maxX=7619, maxY=110, maxZ=9923},pieceBox=BoundingBox{minX=7592, minY=52, minZ=9915, maxX=7619, maxY=72, maxZ=9923}}
+  extra chest seed=1 structure=minecraft:shipwreck_beached predicted=7610,55,9919 table=minecraft:chests/shipwreck_supply groundTruth={state=Block{minecraft:water}[level=0],blockEntity=none,table=none,containerEntities=[],insideCached=false,insidePieceFootprint=true,owningPieces=[class=net.minecraft.world.level.levelgen.structure.structures.ShipwreckPieces$ShipwreckPiece,box=BoundingBox{minX=7592, minY=52, minZ=9915, maxX=7619, maxY=72, maxZ=9923}],startPieces=[class=net.minecraft.world.level.levelgen.structure.structures.ShipwreckPieces$ShipwreckPiece,box=BoundingBox{minX=7592, minY=52, minZ=9915, maxX=7619, maxY=72, maxZ=9923}],startChunk=[475, 619],cachedBox=BoundingBox{minX=7592, minY=90, minZ=9915, maxX=7619, maxY=110, maxZ=9923},pieceBox=BoundingBox{minX=7592, minY=52, minZ=9915, maxX=7619, maxY=72, maxZ=9923}}
+  missed chest seed=1 structure=minecraft:shipwreck_beached actual=[BlockPos{x=7610, y=54, z=9919}] tables=[minecraft:chests/shipwreck_supply]
+  missed chest seed=1 structure=minecraft:shipwreck_beached actual=[BlockPos{x=7595, y=56, z=9921}] tables=[minecraft:chests/shipwreck_treasure]
+  missed chest seed=1 structure=minecraft:shipwreck_beached actual=[BlockPos{x=7601, y=54, z=9920}] tables=[minecraft:chests/shipwreck_map]
+  extra chest seed=1 structure=minecraft:shipwreck_beached predicted=3179,59,-14914 table=minecraft:chests/shipwreck_map groundTruth={state=Block{minecraft:stone},blockEntity=none,table=none,containerEntities=[],insideCached=false,insidePieceFootprint=true,owningPieces=[class=net.minecraft.world.level.levelgen.structure.structures.ShipwreckPieces$ShipwreckPiece,box=BoundingBox{minX=3173, minY=59, minZ=-14917, maxX=3188, maxY=67, maxZ=-14909}],startPieces=[class=net.minecraft.world.level.levelgen.structure.structures.ShipwreckPieces$ShipwreckPiece,box=BoundingBox{minX=3173, minY=59, minZ=-14917, maxX=3188, maxY=67, maxZ=-14909}],startChunk=[199, -933],cachedBox=BoundingBox{minX=3173, minY=90, minZ=-14917, maxX=3188, maxY=98, maxZ=-14909},pieceBox=BoundingBox{minX=3173, minY=59, minZ=-14917, maxX=3188, maxY=67, maxZ=-14909}}
+  extra chest seed=1 structure=minecraft:shipwreck_beached predicted=3185,61,-14915 table=minecraft:chests/shipwreck_treasure groundTruth={state=Block{minecraft:oak_stairs}[facing=south,half=top,shape=outer_right,waterlogged=true],blockEntity=none,table=none,containerEntities=[],insideCached=false,insidePieceFootprint=true,owningPieces=[class=net.minecraft.world.level.levelgen.structure.structures.ShipwreckPieces$ShipwreckPiece,box=BoundingBox{minX=3173, minY=59, minZ=-14917, maxX=3188, maxY=67, maxZ=-14909}],startPieces=[class=net.minecraft.world.level.levelgen.structure.structures.ShipwreckPieces$ShipwreckPiece,box=BoundingBox{minX=3173, minY=59, minZ=-14917, maxX=3188, maxY=67, maxZ=-14909}],startChunk=[199, -933],cachedBox=BoundingBox{minX=3173, minY=90, minZ=-14917, maxX=3188, maxY=98, maxZ=-14909},pieceBox=BoundingBox{minX=3173, minY=59, minZ=-14917, maxX=3188, maxY=67, maxZ=-14909}}
+  missed chest seed=1 structure=minecraft:shipwreck_beached actual=[BlockPos{x=3179, y=61, z=-14914}] tables=[minecraft:chests/shipwreck_map]
+  missed chest seed=1 structure=minecraft:shipwreck_beached actual=[BlockPos{x=3185, y=63, z=-14915}] tables=[minecraft:chests/shipwreck_treasure]
+
+UNVERIFIED 2
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:shipwreck_beached chest=[BlockPos{x=4853, y=68, z=-14778}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:shipwreck_beached chest=[BlockPos{x=4854, y=70, z=-14772}]

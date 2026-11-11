@@ -24,6 +24,7 @@ public record ChestLootOutput(int blockX, int blockY, int blockZ, String lootTab
     }
 
     public String summary() {
+        if (lootTableId == null || lootTableId.isBlank()) return "Loot unavailable";
         if (isEmpty()) return "Empty (no prediction)";
         StringBuilder sb = new StringBuilder();
         for (ItemLoot item : predictedItems) {

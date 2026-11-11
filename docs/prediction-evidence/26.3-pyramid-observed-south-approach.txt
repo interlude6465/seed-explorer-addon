@@ -1,0 +1,108 @@
+Seed Explorer 26.3 prediction oracle
+created=2026-11-10T23:08:38.315699600Z
+requestedSeeds=1 requestedDimensions=0 includeTypes=desert_pyramid omitTypes=<none> explicitStarts=1:-700:-126 firstChunk=-700:-123
+locateRadiusChunks=384 windowRadiusChunks=96 queryAttempts=1 predictedSamples=1 dungeonRadiusChunks=4 caseTimeoutTicks=1200 skipLoot=false
+
+SEED 1
+RUNTIME requestedSeed=1 actualSeed=1 serverVersion=26.3 requestedPreset=minecraft:normal requestedStructures=true
+DIMENSION 0
+STRUCTURE_REGISTRY count=52
+  INVENTORY minecraft:abandoned_camp_bamboo_jungle type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_birch_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_cherry_grove type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_dappled_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_flower_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_meadow type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_birch_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_pine_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_spruce_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_pale_garden type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_savanna type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_snowy_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_sparse_jungle type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_swamp type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_windswept_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_wooded_badlands type=ABANDONED_CAMP
+  INVENTORY minecraft:ancient_city type=ANCIENT_CITY
+  INVENTORY minecraft:bastion_remnant type=BASTION
+  INVENTORY minecraft:buried_treasure type=TREASURE
+  INVENTORY minecraft:desert_pyramid type=DESERT_PYRAMID
+  INVENTORY minecraft:end_city type=END_CITY
+  INVENTORY minecraft:fortress type=FORTRESS
+  INVENTORY minecraft:igloo type=IGLOO
+  INVENTORY minecraft:jungle_pyramid type=JUNGLE_TEMPLE
+  INVENTORY minecraft:mansion type=MANSION
+  INVENTORY minecraft:mineshaft type=MINESHAFT
+  INVENTORY minecraft:mineshaft_mesa type=MINESHAFT
+  INVENTORY minecraft:monument type=MONUMENT
+  INVENTORY minecraft:nether_fossil type=NETHER_FOSSIL
+  INVENTORY minecraft:ocean_ruin_cold type=OCEAN_RUIN
+  INVENTORY minecraft:ocean_ruin_warm type=OCEAN_RUIN
+  INVENTORY minecraft:pillager_outpost type=OUTPOST
+  INVENTORY minecraft:ruined_portal type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_desert type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_jungle type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_mountain type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_nether type=NETHER_RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_ocean type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_swamp type=RUINED_PORTAL
+  INVENTORY minecraft:shipwreck type=SHIPWRECK
+  INVENTORY minecraft:shipwreck_beached type=SHIPWRECK
+  INVENTORY minecraft:stronghold type=STRONGHOLD
+  INVENTORY minecraft:swamp_hut type=WITCH_HUT
+  INVENTORY minecraft:trail_ruins type=TRAIL_RUINS
+  INVENTORY minecraft:trial_chambers type=TRIAL_CHAMBER
+  INVENTORY minecraft:village_desert type=VILLAGE
+  INVENTORY minecraft:village_plains type=VILLAGE
+  INVENTORY minecraft:village_savanna type=VILLAGE
+  INVENTORY minecraft:village_snowy type=VILLAGE
+  INVENTORY minecraft:village_taiga type=VILLAGE
+OBSERVATION RUNNING seed=1 dimension=0 id=minecraft:desert_pyramid
+OBSERVATION initial layout MATCH seed=1 structure=minecraft:desert_pyramid start=[-700, -126] pieces=1
+OBSERVATION container ACTUAL seed=1 structure=minecraft:desert_pyramid start=[-700, -126] positions=[BlockPos{x=-11188, y=58, z=-2006}] tables=[minecraft:chests/desert_pyramid] lootSeeds=[1140337087721188763] stacks=[minecraft:bonex1 enchantments={} damage=null potion=null, minecraft:bonex2 enchantments={} damage=null potion=null, minecraft:bonex5 enchantments={} damage=null potion=null, minecraft:copper_horse_armorx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx2 enchantments={} damage=null potion=null, minecraft:gold_ingotx5 enchantments={} damage=null potion=null, minecraft:sandx1 enchantments={} damage=null potion=null, minecraft:sandx2 enchantments={} damage=null potion=null, minecraft:sandx4 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null] unrepresented=[]
+OBSERVATION container ACTUAL seed=1 structure=minecraft:desert_pyramid start=[-700, -126] positions=[BlockPos{x=-11185, y=69, z=-2011}] tables=[minecraft:archaeology/desert_pyramid] lootSeeds=[-3074234519498683] stacks=[minecraft:diamondx1 enchantments={} damage=null potion=null] unrepresented=[]
+OBSERVATION container ACTUAL seed=1 structure=minecraft:desert_pyramid start=[-700, -126] positions=[BlockPos{x=-11192, y=58, z=-2006}] tables=[minecraft:chests/desert_pyramid] lootSeeds=[-1611839974493896567] stacks=[minecraft:bonex1 enchantments={} damage=null potion=null, minecraft:bonex1 enchantments={} damage=null potion=null, minecraft:bonex1 enchantments={} damage=null potion=null, minecraft:bonex1 enchantments={} damage=null potion=null, minecraft:bonex2 enchantments={} damage=null potion=null, minecraft:bonex3 enchantments={} damage=null potion=null, minecraft:golden_applex1 enchantments={} damage=null potion=null, minecraft:gunpowderx1 enchantments={} damage=null potion=null, minecraft:gunpowderx7 enchantments={} damage=null potion=null, minecraft:iron_ingotx1 enchantments={} damage=null potion=null, minecraft:iron_ingotx2 enchantments={} damage=null potion=null, minecraft:leatherx1 enchantments={} damage=null potion=null, minecraft:rotten_fleshx1 enchantments={} damage=null potion=null, minecraft:rotten_fleshx2 enchantments={} damage=null potion=null] unrepresented=[]
+OBSERVATION container ACTUAL seed=1 structure=minecraft:desert_pyramid start=[-700, -126] positions=[BlockPos{x=-11190, y=58, z=-2008}] tables=[minecraft:chests/desert_pyramid] lootSeeds=[-6704773904457241145] stacks=[minecraft:bonex1 enchantments={} damage=null potion=null, minecraft:bonex1 enchantments={} damage=null potion=null, minecraft:bonex1 enchantments={} damage=null potion=null, minecraft:bonex1 enchantments={} damage=null potion=null, minecraft:bonex1 enchantments={} damage=null potion=null, minecraft:bonex3 enchantments={} damage=null potion=null, minecraft:rotten_fleshx1 enchantments={} damage=null potion=null, minecraft:rotten_fleshx1 enchantments={} damage=null potion=null, minecraft:rotten_fleshx1 enchantments={} damage=null potion=null, minecraft:rotten_fleshx1 enchantments={} damage=null potion=null, minecraft:sandx1 enchantments={} damage=null potion=null, minecraft:sandx1 enchantments={} damage=null potion=null, minecraft:spider_eyex1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null] unrepresented=[]
+OBSERVATION container ACTUAL seed=1 structure=minecraft:desert_pyramid start=[-700, -126] positions=[BlockPos{x=-11190, y=58, z=-2004}] tables=[minecraft:chests/desert_pyramid] lootSeeds=[-6406062303074491151] stacks=[minecraft:bonex1 enchantments={} damage=null potion=null, minecraft:bonex1 enchantments={} damage=null potion=null, minecraft:bonex1 enchantments={} damage=null potion=null, minecraft:bonex1 enchantments={} damage=null potion=null, minecraft:bonex2 enchantments={} damage=null potion=null, minecraft:bonex3 enchantments={} damage=null potion=null, minecraft:enchanted_bookx1 enchantments={minecraft:infinity=1} damage=null potion=null, minecraft:gunpowderx1 enchantments={} damage=null potion=null, minecraft:gunpowderx1 enchantments={} damage=null potion=null, minecraft:gunpowderx1 enchantments={} damage=null potion=null, minecraft:gunpowderx5 enchantments={} damage=null potion=null, minecraft:rotten_fleshx1 enchantments={} damage=null potion=null, minecraft:rotten_fleshx1 enchantments={} damage=null potion=null, minecraft:rotten_fleshx1 enchantments={} damage=null potion=null, minecraft:rotten_fleshx1 enchantments={} damage=null potion=null, minecraft:rotten_fleshx1 enchantments={} damage=null potion=null, minecraft:rotten_fleshx3 enchantments={} damage=null potion=null, minecraft:spider_eyex1 enchantments={} damage=null potion=null, minecraft:spider_eyex1 enchantments={} damage=null potion=null, minecraft:spider_eyex1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx2 enchantments={} damage=null potion=null] unrepresented=[]
+OBSERVATION container ACTUAL seed=1 structure=minecraft:desert_pyramid start=[-700, -126] positions=[BlockPos{x=-11182, y=68, z=-2010}] tables=[minecraft:archaeology/desert_pyramid] lootSeeds=[-3073409885773756] stacks=[minecraft:prize_pottery_sherdx1 enchantments={} damage=null potion=null] unrepresented=[]
+OBSERVATION container ACTUAL seed=1 structure=minecraft:desert_pyramid start=[-700, -126] positions=[BlockPos{x=-11184, y=67, z=-2009}] tables=[minecraft:archaeology/desert_pyramid] lootSeeds=[-3073959641583549] stacks=[minecraft:skull_pottery_sherdx1 enchantments={} damage=null potion=null] unrepresented=[]
+OBSERVATION container ACTUAL seed=1 structure=minecraft:desert_pyramid start=[-700, -126] positions=[BlockPos{x=-11184, y=66, z=-2011}] tables=[minecraft:archaeology/desert_pyramid] lootSeeds=[-3073959641591742] stacks=[minecraft:miner_pottery_sherdx1 enchantments={} damage=null potion=null] unrepresented=[]
+OBSERVATION container ACTUAL seed=1 structure=minecraft:desert_pyramid start=[-700, -126] positions=[BlockPos{x=-11182, y=68, z=-2008}] tables=[minecraft:archaeology/desert_pyramid] lootSeeds=[-3073409885765564] stacks=[minecraft:diamondx1 enchantments={} damage=null potion=null] unrepresented=[]
+OBSERVATION container ACTUAL seed=1 structure=minecraft:desert_pyramid start=[-700, -126] positions=[BlockPos{x=-11183, y=68, z=-2010}] tables=[minecraft:archaeology/desert_pyramid] lootSeeds=[-3073684763680700] stacks=[minecraft:tntx1 enchantments={} damage=null potion=null] unrepresented=[]
+OBSERVATION container ACTUAL seed=1 structure=minecraft:desert_pyramid start=[-700, -126] positions=[BlockPos{x=-11183, y=68, z=-2009}] tables=[minecraft:archaeology/desert_pyramid] lootSeeds=[-3073684763676604] stacks=[minecraft:archer_pottery_sherdx1 enchantments={} damage=null potion=null] unrepresented=[]
+OBSERVATION container ACTUAL seed=1 structure=minecraft:desert_pyramid start=[-700, -126] positions=[BlockPos{x=-11182, y=68, z=-2009}] tables=[minecraft:archaeology/desert_pyramid] lootSeeds=[-3073409885769660] stacks=[minecraft:tntx1 enchantments={} damage=null potion=null] unrepresented=[]
+OBSERVATION desert_pyramid full-history matches seed=1 start=[-700, -126] matching=2 candidates=4
+OBSERVATION desert_pyramid observed refinement UNIQUE seed=1 start=[-700, -126] candidates=4 observed=12 selectedContainers=12 refinedContainers=12
+OBSERVATION container MATCH seed=1 structure=minecraft:desert_pyramid positions=[BlockPos{x=-11192, y=58, z=-2006}] tables=[minecraft:chests/desert_pyramid] lootSeeds=[-1611839974493896567] stacks=[minecraft:bonex1 enchantments={} damage=null potion=null, minecraft:bonex1 enchantments={} damage=null potion=null, minecraft:bonex1 enchantments={} damage=null potion=null, minecraft:bonex1 enchantments={} damage=null potion=null, minecraft:bonex2 enchantments={} damage=null potion=null, minecraft:bonex3 enchantments={} damage=null potion=null, minecraft:golden_applex1 enchantments={} damage=null potion=null, minecraft:gunpowderx1 enchantments={} damage=null potion=null, minecraft:gunpowderx7 enchantments={} damage=null potion=null, minecraft:iron_ingotx1 enchantments={} damage=null potion=null, minecraft:iron_ingotx2 enchantments={} damage=null potion=null, minecraft:leatherx1 enchantments={} damage=null potion=null, minecraft:rotten_fleshx1 enchantments={} damage=null potion=null, minecraft:rotten_fleshx2 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=1 structure=minecraft:desert_pyramid positions=[BlockPos{x=-11190, y=58, z=-2008}] tables=[minecraft:chests/desert_pyramid] lootSeeds=[-6704773904457241145] stacks=[minecraft:bonex1 enchantments={} damage=null potion=null, minecraft:bonex1 enchantments={} damage=null potion=null, minecraft:bonex1 enchantments={} damage=null potion=null, minecraft:bonex1 enchantments={} damage=null potion=null, minecraft:bonex1 enchantments={} damage=null potion=null, minecraft:bonex3 enchantments={} damage=null potion=null, minecraft:rotten_fleshx1 enchantments={} damage=null potion=null, minecraft:rotten_fleshx1 enchantments={} damage=null potion=null, minecraft:rotten_fleshx1 enchantments={} damage=null potion=null, minecraft:rotten_fleshx1 enchantments={} damage=null potion=null, minecraft:sandx1 enchantments={} damage=null potion=null, minecraft:sandx1 enchantments={} damage=null potion=null, minecraft:spider_eyex1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=1 structure=minecraft:desert_pyramid positions=[BlockPos{x=-11190, y=58, z=-2004}] tables=[minecraft:chests/desert_pyramid] lootSeeds=[-6406062303074491151] stacks=[minecraft:bonex1 enchantments={} damage=null potion=null, minecraft:bonex1 enchantments={} damage=null potion=null, minecraft:bonex1 enchantments={} damage=null potion=null, minecraft:bonex1 enchantments={} damage=null potion=null, minecraft:bonex2 enchantments={} damage=null potion=null, minecraft:bonex3 enchantments={} damage=null potion=null, minecraft:enchanted_bookx1 enchantments={minecraft:infinity=1} damage=null potion=null, minecraft:gunpowderx1 enchantments={} damage=null potion=null, minecraft:gunpowderx1 enchantments={} damage=null potion=null, minecraft:gunpowderx1 enchantments={} damage=null potion=null, minecraft:gunpowderx5 enchantments={} damage=null potion=null, minecraft:rotten_fleshx1 enchantments={} damage=null potion=null, minecraft:rotten_fleshx1 enchantments={} damage=null potion=null, minecraft:rotten_fleshx1 enchantments={} damage=null potion=null, minecraft:rotten_fleshx1 enchantments={} damage=null potion=null, minecraft:rotten_fleshx1 enchantments={} damage=null potion=null, minecraft:rotten_fleshx3 enchantments={} damage=null potion=null, minecraft:spider_eyex1 enchantments={} damage=null potion=null, minecraft:spider_eyex1 enchantments={} damage=null potion=null, minecraft:spider_eyex1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx2 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=1 structure=minecraft:desert_pyramid positions=[BlockPos{x=-11188, y=58, z=-2006}] tables=[minecraft:chests/desert_pyramid] lootSeeds=[1140337087721188763] stacks=[minecraft:bonex1 enchantments={} damage=null potion=null, minecraft:bonex2 enchantments={} damage=null potion=null, minecraft:bonex5 enchantments={} damage=null potion=null, minecraft:copper_horse_armorx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx2 enchantments={} damage=null potion=null, minecraft:gold_ingotx5 enchantments={} damage=null potion=null, minecraft:sandx1 enchantments={} damage=null potion=null, minecraft:sandx2 enchantments={} damage=null potion=null, minecraft:sandx4 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=1 structure=minecraft:desert_pyramid positions=[BlockPos{x=-11185, y=69, z=-2011}] tables=[minecraft:archaeology/desert_pyramid] lootSeeds=[-3074234519498683] stacks=[minecraft:diamondx1 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=1 structure=minecraft:desert_pyramid positions=[BlockPos{x=-11184, y=66, z=-2011}] tables=[minecraft:archaeology/desert_pyramid] lootSeeds=[-3073959641591742] stacks=[minecraft:miner_pottery_sherdx1 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=1 structure=minecraft:desert_pyramid positions=[BlockPos{x=-11184, y=67, z=-2009}] tables=[minecraft:archaeology/desert_pyramid] lootSeeds=[-3073959641583549] stacks=[minecraft:skull_pottery_sherdx1 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=1 structure=minecraft:desert_pyramid positions=[BlockPos{x=-11183, y=68, z=-2010}] tables=[minecraft:archaeology/desert_pyramid] lootSeeds=[-3073684763680700] stacks=[minecraft:tntx1 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=1 structure=minecraft:desert_pyramid positions=[BlockPos{x=-11183, y=68, z=-2009}] tables=[minecraft:archaeology/desert_pyramid] lootSeeds=[-3073684763676604] stacks=[minecraft:archer_pottery_sherdx1 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=1 structure=minecraft:desert_pyramid positions=[BlockPos{x=-11182, y=68, z=-2010}] tables=[minecraft:archaeology/desert_pyramid] lootSeeds=[-3073409885773756] stacks=[minecraft:prize_pottery_sherdx1 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=1 structure=minecraft:desert_pyramid positions=[BlockPos{x=-11182, y=68, z=-2009}] tables=[minecraft:archaeology/desert_pyramid] lootSeeds=[-3073409885769660] stacks=[minecraft:tntx1 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=1 structure=minecraft:desert_pyramid positions=[BlockPos{x=-11182, y=68, z=-2008}] tables=[minecraft:archaeology/desert_pyramid] lootSeeds=[-3073409885765564] stacks=[minecraft:diamondx1 enchantments={} damage=null potion=null]
+PROGRESS seed=1 id=minecraft:desert_pyramid actual=1 predicted=1 missed=0 extra=0 actualChests=12 predictedChests=12 missedChests=0 extraChests=0 lootMismatch=0 modeledLootMatch=12 metadataUnverified=0 layoutMatch=1 layoutMismatch=0 layoutUnverified=0
+  minecraft:desert_pyramid actual=1 predicted=1 missed=0 extra=0 actualChests=12 predictedChests=12 missedChests=0 extraChests=0 lootMismatch=0 modeledLootMatch=12 metadataUnverified=0 layoutMatch=1 layoutMismatch=0 layoutUnverified=0 exactLootMatch=0 observedUnique=1 observedAmbiguous=0
+
+STATUS COMPLETE
+FAILURES 0
+
+UNVERIFIED 12
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:desert_pyramid chest=[BlockPos{x=-11192, y=58, z=-2006}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:desert_pyramid chest=[BlockPos{x=-11190, y=58, z=-2008}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:desert_pyramid chest=[BlockPos{x=-11190, y=58, z=-2004}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:desert_pyramid chest=[BlockPos{x=-11188, y=58, z=-2006}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:desert_pyramid chest=[BlockPos{x=-11185, y=69, z=-2011}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:desert_pyramid chest=[BlockPos{x=-11184, y=66, z=-2011}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:desert_pyramid chest=[BlockPos{x=-11184, y=67, z=-2009}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:desert_pyramid chest=[BlockPos{x=-11183, y=68, z=-2010}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:desert_pyramid chest=[BlockPos{x=-11183, y=68, z=-2009}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:desert_pyramid chest=[BlockPos{x=-11182, y=68, z=-2010}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:desert_pyramid chest=[BlockPos{x=-11182, y=68, z=-2009}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:desert_pyramid chest=[BlockPos{x=-11182, y=68, z=-2008}]

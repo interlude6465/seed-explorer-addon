@@ -1,0 +1,556 @@
+Seed Explorer 26.3 prediction oracle
+created=2026-11-10T13:30:23.421946900Z
+requestedSeeds=123456789,-7046029254386353131 requestedDimensions=-1,0,1 includeTypes=<all> omitTypes=<none>
+locateRadiusChunks=384 windowRadiusChunks=96 queryAttempts=1 predictedSamples=1 dungeonRadiusChunks=2 caseTimeoutTicks=1200 skipLoot=true
+
+SEED 123456789
+RUNTIME requestedSeed=123456789 actualSeed=123456789 serverVersion=26.3 requestedPreset=minecraft:normal requestedStructures=true
+DIMENSION -1
+STRUCTURE_REGISTRY count=52
+  INVENTORY minecraft:abandoned_camp_bamboo_jungle type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_birch_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_cherry_grove type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_dappled_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_flower_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_meadow type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_birch_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_pine_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_spruce_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_pale_garden type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_savanna type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_snowy_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_sparse_jungle type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_swamp type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_windswept_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_wooded_badlands type=ABANDONED_CAMP
+  INVENTORY minecraft:ancient_city type=ANCIENT_CITY
+  INVENTORY minecraft:bastion_remnant type=BASTION
+  INVENTORY minecraft:buried_treasure type=TREASURE
+  INVENTORY minecraft:desert_pyramid type=DESERT_PYRAMID
+  INVENTORY minecraft:end_city type=END_CITY
+  INVENTORY minecraft:fortress type=FORTRESS
+  INVENTORY minecraft:igloo type=IGLOO
+  INVENTORY minecraft:jungle_pyramid type=JUNGLE_TEMPLE
+  INVENTORY minecraft:mansion type=MANSION
+  INVENTORY minecraft:mineshaft type=MINESHAFT
+  INVENTORY minecraft:mineshaft_mesa type=MINESHAFT
+  INVENTORY minecraft:monument type=MONUMENT
+  INVENTORY minecraft:nether_fossil type=NETHER_FOSSIL
+  INVENTORY minecraft:ocean_ruin_cold type=OCEAN_RUIN
+  INVENTORY minecraft:ocean_ruin_warm type=OCEAN_RUIN
+  INVENTORY minecraft:pillager_outpost type=OUTPOST
+  INVENTORY minecraft:ruined_portal type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_desert type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_jungle type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_mountain type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_nether type=NETHER_RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_ocean type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_swamp type=RUINED_PORTAL
+  INVENTORY minecraft:shipwreck type=SHIPWRECK
+  INVENTORY minecraft:shipwreck_beached type=SHIPWRECK
+  INVENTORY minecraft:stronghold type=STRONGHOLD
+  INVENTORY minecraft:swamp_hut type=WITCH_HUT
+  INVENTORY minecraft:trail_ruins type=TRAIL_RUINS
+  INVENTORY minecraft:trial_chambers type=TRIAL_CHAMBER
+  INVENTORY minecraft:village_desert type=VILLAGE
+  INVENTORY minecraft:village_plains type=VILLAGE
+  INVENTORY minecraft:village_savanna type=VILLAGE
+  INVENTORY minecraft:village_snowy type=VILLAGE
+  INVENTORY minecraft:village_taiga type=VILLAGE
+PROGRESS seed=123456789 id=minecraft:bastion_remnant actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:fortress actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:nether_fossil actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:ruined_portal_nether actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+  minecraft:bastion_remnant actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:fortress actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:nether_fossil actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:ruined_portal_nether actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+
+DIMENSION 0
+STRUCTURE_REGISTRY count=52
+  INVENTORY minecraft:abandoned_camp_bamboo_jungle type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_birch_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_cherry_grove type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_dappled_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_flower_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_meadow type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_birch_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_pine_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_spruce_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_pale_garden type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_savanna type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_snowy_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_sparse_jungle type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_swamp type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_windswept_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_wooded_badlands type=ABANDONED_CAMP
+  INVENTORY minecraft:ancient_city type=ANCIENT_CITY
+  INVENTORY minecraft:bastion_remnant type=BASTION
+  INVENTORY minecraft:buried_treasure type=TREASURE
+  INVENTORY minecraft:desert_pyramid type=DESERT_PYRAMID
+  INVENTORY minecraft:end_city type=END_CITY
+  INVENTORY minecraft:fortress type=FORTRESS
+  INVENTORY minecraft:igloo type=IGLOO
+  INVENTORY minecraft:jungle_pyramid type=JUNGLE_TEMPLE
+  INVENTORY minecraft:mansion type=MANSION
+  INVENTORY minecraft:mineshaft type=MINESHAFT
+  INVENTORY minecraft:mineshaft_mesa type=MINESHAFT
+  INVENTORY minecraft:monument type=MONUMENT
+  INVENTORY minecraft:nether_fossil type=NETHER_FOSSIL
+  INVENTORY minecraft:ocean_ruin_cold type=OCEAN_RUIN
+  INVENTORY minecraft:ocean_ruin_warm type=OCEAN_RUIN
+  INVENTORY minecraft:pillager_outpost type=OUTPOST
+  INVENTORY minecraft:ruined_portal type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_desert type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_jungle type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_mountain type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_nether type=NETHER_RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_ocean type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_swamp type=RUINED_PORTAL
+  INVENTORY minecraft:shipwreck type=SHIPWRECK
+  INVENTORY minecraft:shipwreck_beached type=SHIPWRECK
+  INVENTORY minecraft:stronghold type=STRONGHOLD
+  INVENTORY minecraft:swamp_hut type=WITCH_HUT
+  INVENTORY minecraft:trail_ruins type=TRAIL_RUINS
+  INVENTORY minecraft:trial_chambers type=TRIAL_CHAMBER
+  INVENTORY minecraft:village_desert type=VILLAGE
+  INVENTORY minecraft:village_plains type=VILLAGE
+  INVENTORY minecraft:village_savanna type=VILLAGE
+  INVENTORY minecraft:village_snowy type=VILLAGE
+  INVENTORY minecraft:village_taiga type=VILLAGE
+PROGRESS seed=123456789 id=minecraft:abandoned_camp_bamboo_jungle actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:abandoned_camp_birch_forest actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:abandoned_camp_cherry_grove actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:abandoned_camp_dappled_forest actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:abandoned_camp_flower_forest actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:abandoned_camp_forest actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:abandoned_camp_meadow actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:abandoned_camp_old_growth_birch_forest actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:abandoned_camp_old_growth_pine_taiga actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:abandoned_camp_old_growth_spruce_taiga actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:abandoned_camp_pale_garden actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:abandoned_camp_savanna actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:abandoned_camp_snowy_taiga actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:abandoned_camp_sparse_jungle actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:abandoned_camp_swamp actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:abandoned_camp_taiga actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:abandoned_camp_windswept_forest actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:abandoned_camp_wooded_badlands actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:ancient_city actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:buried_treasure actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:desert_pyramid actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:igloo actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:jungle_pyramid actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:mansion actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:mineshaft actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:mineshaft_mesa actual=0 predicted=0 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:monument actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:ocean_ruin_cold actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:ocean_ruin_warm actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:pillager_outpost actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:ruined_portal actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:ruined_portal_desert actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:ruined_portal_jungle actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:ruined_portal_mountain actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:ruined_portal_ocean actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:ruined_portal_swamp actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:shipwreck actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:shipwreck_beached actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:stronghold actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:swamp_hut actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:trail_ruins actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:trial_chambers actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:village_desert actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:village_plains actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:village_savanna actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:village_snowy actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=123456789 id=minecraft:village_taiga actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+  minecraft:abandoned_camp_bamboo_jungle actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:abandoned_camp_birch_forest actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:abandoned_camp_cherry_grove actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:abandoned_camp_dappled_forest actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:abandoned_camp_flower_forest actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:abandoned_camp_forest actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:abandoned_camp_meadow actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:abandoned_camp_old_growth_birch_forest actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:abandoned_camp_old_growth_pine_taiga actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:abandoned_camp_old_growth_spruce_taiga actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:abandoned_camp_pale_garden actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:abandoned_camp_savanna actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:abandoned_camp_snowy_taiga actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:abandoned_camp_sparse_jungle actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:abandoned_camp_swamp actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:abandoned_camp_taiga actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:abandoned_camp_windswept_forest actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:abandoned_camp_wooded_badlands actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:ancient_city actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:buried_treasure actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:desert_pyramid actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:igloo actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:jungle_pyramid actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:mansion actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:mineshaft actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:mineshaft_mesa actual=0 predicted=0 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:monument actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:ocean_ruin_cold actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:ocean_ruin_warm actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:pillager_outpost actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:ruined_portal actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:ruined_portal_desert actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:ruined_portal_jungle actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:ruined_portal_mountain actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:ruined_portal_ocean actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:ruined_portal_swamp actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:shipwreck actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:shipwreck_beached actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:stronghold actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:swamp_hut actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:trail_ruins actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:trial_chambers actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:village_desert actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:village_plains actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:village_savanna actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:village_snowy actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:village_taiga actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+
+PROGRESS seed=123456789 type=DUNGEON actual=1 predicted=1
+DIMENSION 1
+STRUCTURE_REGISTRY count=52
+  INVENTORY minecraft:abandoned_camp_bamboo_jungle type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_birch_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_cherry_grove type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_dappled_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_flower_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_meadow type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_birch_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_pine_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_spruce_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_pale_garden type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_savanna type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_snowy_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_sparse_jungle type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_swamp type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_windswept_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_wooded_badlands type=ABANDONED_CAMP
+  INVENTORY minecraft:ancient_city type=ANCIENT_CITY
+  INVENTORY minecraft:bastion_remnant type=BASTION
+  INVENTORY minecraft:buried_treasure type=TREASURE
+  INVENTORY minecraft:desert_pyramid type=DESERT_PYRAMID
+  INVENTORY minecraft:end_city type=END_CITY
+  INVENTORY minecraft:fortress type=FORTRESS
+  INVENTORY minecraft:igloo type=IGLOO
+  INVENTORY minecraft:jungle_pyramid type=JUNGLE_TEMPLE
+  INVENTORY minecraft:mansion type=MANSION
+  INVENTORY minecraft:mineshaft type=MINESHAFT
+  INVENTORY minecraft:mineshaft_mesa type=MINESHAFT
+  INVENTORY minecraft:monument type=MONUMENT
+  INVENTORY minecraft:nether_fossil type=NETHER_FOSSIL
+  INVENTORY minecraft:ocean_ruin_cold type=OCEAN_RUIN
+  INVENTORY minecraft:ocean_ruin_warm type=OCEAN_RUIN
+  INVENTORY minecraft:pillager_outpost type=OUTPOST
+  INVENTORY minecraft:ruined_portal type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_desert type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_jungle type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_mountain type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_nether type=NETHER_RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_ocean type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_swamp type=RUINED_PORTAL
+  INVENTORY minecraft:shipwreck type=SHIPWRECK
+  INVENTORY minecraft:shipwreck_beached type=SHIPWRECK
+  INVENTORY minecraft:stronghold type=STRONGHOLD
+  INVENTORY minecraft:swamp_hut type=WITCH_HUT
+  INVENTORY minecraft:trail_ruins type=TRAIL_RUINS
+  INVENTORY minecraft:trial_chambers type=TRIAL_CHAMBER
+  INVENTORY minecraft:village_desert type=VILLAGE
+  INVENTORY minecraft:village_plains type=VILLAGE
+  INVENTORY minecraft:village_savanna type=VILLAGE
+  INVENTORY minecraft:village_snowy type=VILLAGE
+  INVENTORY minecraft:village_taiga type=VILLAGE
+PROGRESS seed=123456789 id=minecraft:end_city actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+  minecraft:end_city actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+
+SEED -7046029254386353131
+RUNTIME requestedSeed=-7046029254386353131 actualSeed=-7046029254386353131 serverVersion=26.3 requestedPreset=minecraft:normal requestedStructures=true
+DIMENSION -1
+STRUCTURE_REGISTRY count=52
+  INVENTORY minecraft:abandoned_camp_bamboo_jungle type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_birch_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_cherry_grove type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_dappled_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_flower_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_meadow type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_birch_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_pine_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_spruce_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_pale_garden type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_savanna type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_snowy_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_sparse_jungle type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_swamp type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_windswept_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_wooded_badlands type=ABANDONED_CAMP
+  INVENTORY minecraft:ancient_city type=ANCIENT_CITY
+  INVENTORY minecraft:bastion_remnant type=BASTION
+  INVENTORY minecraft:buried_treasure type=TREASURE
+  INVENTORY minecraft:desert_pyramid type=DESERT_PYRAMID
+  INVENTORY minecraft:end_city type=END_CITY
+  INVENTORY minecraft:fortress type=FORTRESS
+  INVENTORY minecraft:igloo type=IGLOO
+  INVENTORY minecraft:jungle_pyramid type=JUNGLE_TEMPLE
+  INVENTORY minecraft:mansion type=MANSION
+  INVENTORY minecraft:mineshaft type=MINESHAFT
+  INVENTORY minecraft:mineshaft_mesa type=MINESHAFT
+  INVENTORY minecraft:monument type=MONUMENT
+  INVENTORY minecraft:nether_fossil type=NETHER_FOSSIL
+  INVENTORY minecraft:ocean_ruin_cold type=OCEAN_RUIN
+  INVENTORY minecraft:ocean_ruin_warm type=OCEAN_RUIN
+  INVENTORY minecraft:pillager_outpost type=OUTPOST
+  INVENTORY minecraft:ruined_portal type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_desert type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_jungle type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_mountain type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_nether type=NETHER_RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_ocean type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_swamp type=RUINED_PORTAL
+  INVENTORY minecraft:shipwreck type=SHIPWRECK
+  INVENTORY minecraft:shipwreck_beached type=SHIPWRECK
+  INVENTORY minecraft:stronghold type=STRONGHOLD
+  INVENTORY minecraft:swamp_hut type=WITCH_HUT
+  INVENTORY minecraft:trail_ruins type=TRAIL_RUINS
+  INVENTORY minecraft:trial_chambers type=TRIAL_CHAMBER
+  INVENTORY minecraft:village_desert type=VILLAGE
+  INVENTORY minecraft:village_plains type=VILLAGE
+  INVENTORY minecraft:village_savanna type=VILLAGE
+  INVENTORY minecraft:village_snowy type=VILLAGE
+  INVENTORY minecraft:village_taiga type=VILLAGE
+PROGRESS seed=-7046029254386353131 id=minecraft:bastion_remnant actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:fortress actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:nether_fossil actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:ruined_portal_nether actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+  minecraft:bastion_remnant actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:fortress actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:nether_fossil actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:ruined_portal_nether actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+
+DIMENSION 0
+STRUCTURE_REGISTRY count=52
+  INVENTORY minecraft:abandoned_camp_bamboo_jungle type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_birch_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_cherry_grove type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_dappled_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_flower_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_meadow type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_birch_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_pine_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_spruce_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_pale_garden type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_savanna type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_snowy_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_sparse_jungle type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_swamp type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_windswept_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_wooded_badlands type=ABANDONED_CAMP
+  INVENTORY minecraft:ancient_city type=ANCIENT_CITY
+  INVENTORY minecraft:bastion_remnant type=BASTION
+  INVENTORY minecraft:buried_treasure type=TREASURE
+  INVENTORY minecraft:desert_pyramid type=DESERT_PYRAMID
+  INVENTORY minecraft:end_city type=END_CITY
+  INVENTORY minecraft:fortress type=FORTRESS
+  INVENTORY minecraft:igloo type=IGLOO
+  INVENTORY minecraft:jungle_pyramid type=JUNGLE_TEMPLE
+  INVENTORY minecraft:mansion type=MANSION
+  INVENTORY minecraft:mineshaft type=MINESHAFT
+  INVENTORY minecraft:mineshaft_mesa type=MINESHAFT
+  INVENTORY minecraft:monument type=MONUMENT
+  INVENTORY minecraft:nether_fossil type=NETHER_FOSSIL
+  INVENTORY minecraft:ocean_ruin_cold type=OCEAN_RUIN
+  INVENTORY minecraft:ocean_ruin_warm type=OCEAN_RUIN
+  INVENTORY minecraft:pillager_outpost type=OUTPOST
+  INVENTORY minecraft:ruined_portal type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_desert type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_jungle type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_mountain type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_nether type=NETHER_RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_ocean type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_swamp type=RUINED_PORTAL
+  INVENTORY minecraft:shipwreck type=SHIPWRECK
+  INVENTORY minecraft:shipwreck_beached type=SHIPWRECK
+  INVENTORY minecraft:stronghold type=STRONGHOLD
+  INVENTORY minecraft:swamp_hut type=WITCH_HUT
+  INVENTORY minecraft:trail_ruins type=TRAIL_RUINS
+  INVENTORY minecraft:trial_chambers type=TRIAL_CHAMBER
+  INVENTORY minecraft:village_desert type=VILLAGE
+  INVENTORY minecraft:village_plains type=VILLAGE
+  INVENTORY minecraft:village_savanna type=VILLAGE
+  INVENTORY minecraft:village_snowy type=VILLAGE
+  INVENTORY minecraft:village_taiga type=VILLAGE
+PROGRESS seed=-7046029254386353131 id=minecraft:abandoned_camp_bamboo_jungle actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:abandoned_camp_birch_forest actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:abandoned_camp_cherry_grove actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:abandoned_camp_dappled_forest actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:abandoned_camp_flower_forest actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:abandoned_camp_forest actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:abandoned_camp_meadow actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:abandoned_camp_old_growth_birch_forest actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:abandoned_camp_old_growth_pine_taiga actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:abandoned_camp_old_growth_spruce_taiga actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:abandoned_camp_pale_garden actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:abandoned_camp_savanna actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:abandoned_camp_snowy_taiga actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:abandoned_camp_sparse_jungle actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:abandoned_camp_swamp actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:abandoned_camp_taiga actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:abandoned_camp_windswept_forest actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:abandoned_camp_wooded_badlands actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:ancient_city actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:buried_treasure actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:desert_pyramid actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:igloo actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:jungle_pyramid actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:mansion actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:mineshaft actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:mineshaft_mesa actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:monument actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:ocean_ruin_cold actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:ocean_ruin_warm actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:pillager_outpost actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:ruined_portal actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:ruined_portal_desert actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:ruined_portal_jungle actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:ruined_portal_mountain actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:ruined_portal_ocean actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:ruined_portal_swamp actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:shipwreck actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:shipwreck_beached actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:stronghold actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:swamp_hut actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:trail_ruins actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:trial_chambers actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:village_desert actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:village_plains actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:village_savanna actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:village_snowy actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+PROGRESS seed=-7046029254386353131 id=minecraft:village_taiga actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+  minecraft:abandoned_camp_bamboo_jungle actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:abandoned_camp_birch_forest actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:abandoned_camp_cherry_grove actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:abandoned_camp_dappled_forest actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:abandoned_camp_flower_forest actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:abandoned_camp_forest actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:abandoned_camp_meadow actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:abandoned_camp_old_growth_birch_forest actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:abandoned_camp_old_growth_pine_taiga actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:abandoned_camp_old_growth_spruce_taiga actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:abandoned_camp_pale_garden actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:abandoned_camp_savanna actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:abandoned_camp_snowy_taiga actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:abandoned_camp_sparse_jungle actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:abandoned_camp_swamp actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:abandoned_camp_taiga actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:abandoned_camp_windswept_forest actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:abandoned_camp_wooded_badlands actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:ancient_city actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:buried_treasure actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:desert_pyramid actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:igloo actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:jungle_pyramid actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:mansion actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:mineshaft actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:mineshaft_mesa actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:monument actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:ocean_ruin_cold actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:ocean_ruin_warm actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:pillager_outpost actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:ruined_portal actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:ruined_portal_desert actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:ruined_portal_jungle actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:ruined_portal_mountain actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:ruined_portal_ocean actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:ruined_portal_swamp actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:shipwreck actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:shipwreck_beached actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:stronghold actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:swamp_hut actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:trail_ruins actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:trial_chambers actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:village_desert actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:village_plains actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:village_savanna actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:village_snowy actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:village_taiga actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+
+PROGRESS seed=-7046029254386353131 type=DUNGEON actual=0 predicted=0
+DIMENSION 1
+STRUCTURE_REGISTRY count=52
+  INVENTORY minecraft:abandoned_camp_bamboo_jungle type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_birch_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_cherry_grove type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_dappled_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_flower_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_meadow type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_birch_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_pine_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_spruce_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_pale_garden type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_savanna type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_snowy_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_sparse_jungle type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_swamp type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_windswept_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_wooded_badlands type=ABANDONED_CAMP
+  INVENTORY minecraft:ancient_city type=ANCIENT_CITY
+  INVENTORY minecraft:bastion_remnant type=BASTION
+  INVENTORY minecraft:buried_treasure type=TREASURE
+  INVENTORY minecraft:desert_pyramid type=DESERT_PYRAMID
+  INVENTORY minecraft:end_city type=END_CITY
+  INVENTORY minecraft:fortress type=FORTRESS
+  INVENTORY minecraft:igloo type=IGLOO
+  INVENTORY minecraft:jungle_pyramid type=JUNGLE_TEMPLE
+  INVENTORY minecraft:mansion type=MANSION
+  INVENTORY minecraft:mineshaft type=MINESHAFT
+  INVENTORY minecraft:mineshaft_mesa type=MINESHAFT
+  INVENTORY minecraft:monument type=MONUMENT
+  INVENTORY minecraft:nether_fossil type=NETHER_FOSSIL
+  INVENTORY minecraft:ocean_ruin_cold type=OCEAN_RUIN
+  INVENTORY minecraft:ocean_ruin_warm type=OCEAN_RUIN
+  INVENTORY minecraft:pillager_outpost type=OUTPOST
+  INVENTORY minecraft:ruined_portal type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_desert type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_jungle type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_mountain type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_nether type=NETHER_RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_ocean type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_swamp type=RUINED_PORTAL
+  INVENTORY minecraft:shipwreck type=SHIPWRECK
+  INVENTORY minecraft:shipwreck_beached type=SHIPWRECK
+  INVENTORY minecraft:stronghold type=STRONGHOLD
+  INVENTORY minecraft:swamp_hut type=WITCH_HUT
+  INVENTORY minecraft:trail_ruins type=TRAIL_RUINS
+  INVENTORY minecraft:trial_chambers type=TRIAL_CHAMBER
+  INVENTORY minecraft:village_desert type=VILLAGE
+  INVENTORY minecraft:village_plains type=VILLAGE
+  INVENTORY minecraft:village_savanna type=VILLAGE
+  INVENTORY minecraft:village_snowy type=VILLAGE
+  INVENTORY minecraft:village_taiga type=VILLAGE
+PROGRESS seed=-7046029254386353131 id=minecraft:end_city actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 lootMismatch=0
+  minecraft:end_city actual=2 predicted=3 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+
+STATUS COMPLETE
+FAILURES 0
+
+UNVERIFIED 3
+  seed=123456789 id=minecraft:mineshaft_mesa (no actual or predicted sample located)
+  seed=123456789 type=END_GATEWAY (not a structure-registry entry; requires a configured-feature oracle)
+  seed=-7046029254386353131 type=END_GATEWAY (not a structure-registry entry; requires a configured-feature oracle)

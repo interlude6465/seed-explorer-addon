@@ -1413,12 +1413,13 @@ public class SeedExplorerCommand extends Command {
     }
 
     private boolean isBlockLoaded(BlockPos pos) {
-        return mc.level != null && mc.level.getChunkSource().hasChunk(Math.floorDiv(pos.getX(), 16), Math.floorDiv(pos.getZ(), 16));
+        return mc.level != null && mc.level.getChunkSource().getChunkNow(
+            Math.floorDiv(pos.getX(), 16), Math.floorDiv(pos.getZ(), 16)) != null;
     }
 
     /**
      * True once the target chest block has actually arrived at pos. {@link #isBlockLoaded}
-     * only checks {@code hasChunk}, which returns true for a stale/still-settling client
+     * only checks cache residency, which can include a stale/still-settling client
      * chunk that still shows terrain. Deep/far targets were being skipped as
      * "not-container" on the first tick hasChunk flipped true because the real chest block
      * had not been swapped in yet. Gate the terminal read on the block (or its randomizable
@@ -2370,7 +2371,7 @@ public class SeedExplorerCommand extends Command {
         if (mc.level == null) return new ChestCompareResult(false, false, predictedSummary, "no-client-level");
 
         BlockPos pos = new BlockPos(chest.blockX(), chest.blockY(), chest.blockZ());
-        if (!mc.level.hasChunkAt(pos)) {
+        if (!isBlockLoaded(pos)) {
             return new ChestCompareResult(false, false, predictedSummary, "unloaded");
         }
 

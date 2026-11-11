@@ -19,6 +19,22 @@ import java.util.Set;
  * Client-state-free facade for exact vanilla structure container replay.
  */
 public final class StandaloneStructureLootPredictor {
+    /**
+     * Exact means the complete 26.3 chain (container position, table, seed, and
+     * items) has passed an independent generated-world oracle. The offline
+     * simulator agreeing with itself is not sufficient evidence.
+     */
+    private static final Set<String> VALIDATED_26_3_STRUCTURE_KEYS = Set.of(
+        "minecraft:buried_treasure",
+        "minecraft:igloo",
+        "minecraft:ruined_portal",
+        "minecraft:ruined_portal_desert",
+        "minecraft:ruined_portal_jungle",
+        "minecraft:ruined_portal_mountain",
+        "minecraft:ruined_portal_ocean",
+        "minecraft:ruined_portal_swamp"
+    );
+
     private StandaloneStructureLootPredictor() {
     }
 
@@ -26,24 +42,69 @@ public final class StandaloneStructureLootPredictor {
                                                  ResourceKey<Structure> structureKey,
                                                  int startChunkX, int startChunkZ,
                                                  int maxFallbackRolls) {
+        return predictDetailed(context, structureKey, startChunkX, startChunkZ, maxFallbackRolls).inventories();
+    }
+
+    public record DetailedPrediction(List<VanillaLootStructureSimulator.SimulatedContainer> containers,
+                                     List<ChestLootOutput> inventories) {
+        public DetailedPrediction {
+            containers = List.copyOf(containers);
+            inventories = List.copyOf(inventories);
+        }
+    }
+
+    /** Keeps each physical container's seed for independent inventory-fill verification. */
+    public static DetailedPrediction predictDetailed(PredictionContext context,
+                                                       ResourceKey<Structure> structureKey,
+                                                       int startChunkX, int startChunkZ,
+                                                       int maxFallbackRolls) {
         Objects.requireNonNull(context, "context");
         Objects.requireNonNull(structureKey, "structureKey");
         if (maxFallbackRolls < 1) throw new IllegalArgumentException("maxFallbackRolls must be positive");
 
         BundledLootTableLoader.VersionProfile profile =
             BundledLootTableLoader.VersionProfile.forVersion(context.minecraftVersion());
-        VanillaLootTables.loadAllForProfile(profile);
 
         List<VanillaLootStructureSimulator.SimulatedContainer> containers =
             VanillaLootStructureSimulator.simulate(context, structureKey, startChunkX, startChunkZ);
+        return new DetailedPrediction(containers, outputs(context, containers, maxFallbackRolls,
+            independentlyValidated(context, structureKey)));
+    }
+
+    /** Converts a simulator-selected container candidate into modeled loot.
+     * Selection may use live block positions, so this path deliberately cannot
+     * claim seed-only exactness even when every modeled component is complete. */
+    public static List<ChestLootOutput> predictContainers(
+        PredictionContext context,
+        List<VanillaLootStructureSimulator.SimulatedContainer> containers,
+        int maxFallbackRolls) {
+        Objects.requireNonNull(context, "context");
+        Objects.requireNonNull(containers, "containers");
+        if (maxFallbackRolls < 1) {
+            throw new IllegalArgumentException("maxFallbackRolls must be positive");
+        }
+
+        BundledLootTableLoader.VersionProfile profile =
+            BundledLootTableLoader.VersionProfile.forVersion(context.minecraftVersion());
+        return outputs(context, List.copyOf(containers), maxFallbackRolls, false);
+    }
+
+    private static List<ChestLootOutput> outputs(
+        PredictionContext context,
+        List<VanillaLootStructureSimulator.SimulatedContainer> containers,
+        int maxFallbackRolls,
+        boolean independentlyValidated) {
+        BundledLootTableLoader.VersionProfile profile =
+            BundledLootTableLoader.VersionProfile.forVersion(context.minecraftVersion());
         List<ChestLootOutput> outputs = new ArrayList<>(containers.size());
         for (List<VanillaLootStructureSimulator.SimulatedContainer> members
             : sharedChestInventories(containers)) {
             VanillaLootStructureSimulator.SimulatedContainer container = members.getFirst();
             List<ItemLoot> items = exactItems(context, members);
-            boolean exact = items != null;
+            boolean exact = items != null && independentlyValidated
+                && metadataComplete(items);
             if (items == null) {
-                items = fallbackItems(members, maxFallbackRolls);
+                items = fallbackItems(profile, members, maxFallbackRolls);
             }
             outputs.add(new ChestLootOutput(container.x(), container.y(), container.z(),
                 container.lootTableId(), items, container.lootSeed(), exact));
@@ -106,7 +167,6 @@ public final class StandaloneStructureLootPredictor {
                                                          int maxFallbackRolls) {
         BundledLootTableLoader.VersionProfile profile =
             BundledLootTableLoader.VersionProfile.forVersion(context.minecraftVersion());
-        VanillaLootTables.loadAllForProfile(profile);
         for (VanillaLootStructureSimulator.SimulatedDungeon dungeon
             : VanillaLootStructureSimulator.simulateDungeons(context.worldSeed(),
                 structure.startChunkX, structure.startChunkZ)) {
@@ -116,11 +176,13 @@ public final class StandaloneStructureLootPredictor {
             for (VanillaLootStructureSimulator.SimulatedContainer container : dungeon.containers()) {
                 List<ItemLoot> items = LootTableSimulator.simulateVanilla(context,
                     container.lootTableId(), container.lootSeed(), container.x(), container.y(), container.z());
-                boolean exact = items != null;
+                // Dungeon replay is deterministic, but its complete 26.3
+                // position/seed chain is not yet independently validated.
+                boolean exact = false;
                 if (items == null) {
-                    LootTableDef fallback = VanillaLootTables.get(container.lootTableId());
+                    LootTableDef fallback = VanillaLootTables.get(profile, container.lootTableId());
                     items = fallback == null ? List.of()
-                        : LootTableSimulator.simulate(fallback, container.lootSeed(), maxFallbackRolls);
+                        : LootTableSimulator.simulate(profile, fallback, container.lootSeed(), maxFallbackRolls);
                 }
                 outputs.add(new ChestLootOutput(container.x(), container.y(), container.z(),
                     container.lootTableId(), items, container.lootSeed(), exact));
@@ -135,9 +197,16 @@ public final class StandaloneStructureLootPredictor {
         return ResourceKey.create(Registries.STRUCTURE, Identifier.parse(variant));
     }
 
+    private static boolean independentlyValidated(PredictionContext context,
+                                                   ResourceKey<Structure> structureKey) {
+        return "26.3".equals(context.minecraftVersion())
+            && VALIDATED_26_3_STRUCTURE_KEYS.contains(structureKey.identifier().toString());
+    }
+
     private static ResourceKey<Structure> ruinedPortalKey(PredictionContext context,
                                                            GeneratedStructure structure) {
         return switch (structure.variant) {
+            case "minecraft:ruined_portal" -> BuiltinStructures.RUINED_PORTAL_STANDARD;
             case "minecraft:ruined_portal_desert" -> BuiltinStructures.RUINED_PORTAL_DESERT;
             case "minecraft:ruined_portal_jungle" -> BuiltinStructures.RUINED_PORTAL_JUNGLE;
             case "minecraft:ruined_portal_swamp" -> BuiltinStructures.RUINED_PORTAL_SWAMP;
@@ -193,13 +262,13 @@ public final class StandaloneStructureLootPredictor {
     }
 
     private static List<ItemLoot> fallbackItems(
-        List<VanillaLootStructureSimulator.SimulatedContainer> members, int maxFallbackRolls) {
+        BundledLootTableLoader.VersionProfile profile, List<VanillaLootStructureSimulator.SimulatedContainer> members, int maxFallbackRolls) {
         List<ItemLoot> merged = new ArrayList<>();
         for (VanillaLootStructureSimulator.SimulatedContainer member : members) {
-            LootTableDef fallback = VanillaLootTables.get(member.lootTableId());
+            LootTableDef fallback = VanillaLootTables.get(profile, member.lootTableId());
             if (fallback != null) {
                 mergeItems(merged, LootTableSimulator.simulate(
-                    fallback, member.lootSeed(), maxFallbackRolls));
+                    profile, fallback, member.lootSeed(), maxFallbackRolls));
             }
         }
         return List.copyOf(merged);
@@ -260,7 +329,9 @@ public final class StandaloneStructureLootPredictor {
                 existing.enchantmentLevel(), existing.referenceTableId(),
                 existing.levelsEnchantment(), existing.enchantMinLevel(),
                 existing.enchantMaxLevel(), existing.enchantmentSummary(),
-                existing.hasDamageRoll()));
+                existing.hasDamageRoll(), existing.damage(), existing.potionContents(),
+                existing.hasUnrepresentedComponents(), existing.mapDecorations(),
+                existing.suspiciousStewEffects()));
         }
     }
 
@@ -274,7 +345,16 @@ public final class StandaloneStructureLootPredictor {
             && first.enchantMinLevel() == second.enchantMinLevel()
             && first.enchantMaxLevel() == second.enchantMaxLevel()
             && Objects.equals(first.enchantmentSummary(), second.enchantmentSummary())
-            && first.hasDamageRoll() == second.hasDamageRoll();
+            && first.hasDamageRoll() == second.hasDamageRoll()
+            && Objects.equals(first.damage(), second.damage())
+            && Objects.equals(first.potionContents(), second.potionContents())
+                    && Objects.equals(first.mapDecorations(), second.mapDecorations())
+                    && Objects.equals(first.suspiciousStewEffects(), second.suspiciousStewEffects())
+            && first.hasUnrepresentedComponents() == second.hasUnrepresentedComponents();
+    }
+
+    private static boolean metadataComplete(List<ItemLoot> items) {
+        return items.stream().noneMatch(ItemLoot::hasUnrepresentedComponents);
     }
 
     public static List<ItemLoot> mergeEquivalentItems(List<ItemLoot> items) {

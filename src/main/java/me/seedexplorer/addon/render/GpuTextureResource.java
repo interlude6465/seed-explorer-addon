@@ -20,11 +20,15 @@ import java.nio.IntBuffer;
 public final class GpuTextureResource extends AbstractTexture {
     public GpuTextureResource(int width, int height, GpuFormat format,
                               FilterMode minFilter, FilterMode magFilter) {
+        this(width,height,format,minFilter,magFilter,1);
+    }
+
+    public GpuTextureResource(int width,int height,GpuFormat format,FilterMode minFilter,FilterMode magFilter,int mipLevels) {
         texture = RenderSystem.getDevice().createTexture(
-            "Seed Explorer terrain atlas", 15, format, width, height, 1, 1);
+            "Seed Explorer terrain atlas", 15, format, width, height, 1, mipLevels);
         sampler = RenderSystem.getSamplerCache().getSampler(
             AddressMode.REPEAT, AddressMode.REPEAT,
-            minFilter, magFilter, false);
+            minFilter, magFilter, mipLevels > 1);
         textureView = RenderSystem.getDevice().createTextureView(texture);
     }
 
@@ -42,6 +46,29 @@ public final class GpuTextureResource extends AbstractTexture {
             MemoryUtil.memCopy(MemoryUtil.memAddress(buffer), image.getPointer(), buffer.remaining());
             RenderSystem.getDevice().createCommandEncoder().writeToTexture(texture, image);
         }
+    }
+
+    /** CPU mip generation runs once per atlas, with sprite gutters preventing color bleed. */
+    public void uploadMipmapped(ByteBuffer buffer,int levels) {
+        NativeImage previous=createUploadImage();
+        buffer.rewind();MemoryUtil.memCopy(MemoryUtil.memAddress(buffer),previous.getPointer(),buffer.remaining());
+        var encoder=RenderSystem.getDevice().createCommandEncoder();
+        encoder.writeToTexture(texture,previous);
+        try {
+            for(int level=1;level<levels;level++) {
+                NativeImage next=new NativeImage(Math.max(1,width()>>level),Math.max(1,height()>>level),false);
+                for(int y=0;y<next.getHeight();y++)for(int x=0;x<next.getWidth();x++) {
+                    int a=previous.getPixel(x*2,y*2),b=previous.getPixel(Math.min(x*2+1,previous.getWidth()-1),y*2);
+                    int c=previous.getPixel(x*2,Math.min(y*2+1,previous.getHeight()-1));
+                    int d=previous.getPixel(Math.min(x*2+1,previous.getWidth()-1),Math.min(y*2+1,previous.getHeight()-1));
+                    int color=0;for(int shift=0;shift<=24;shift+=8)
+                        color|=((((a>>>shift)&255)+((b>>>shift)&255)+((c>>>shift)&255)+((d>>>shift)&255)+2)/4)<<shift;
+                    next.setPixel(x,y,color);
+                }
+                encoder.writeToTexture(texture,next,level,0,0,0);
+                previous.close();previous=next;
+            }
+        } finally {previous.close();}
     }
 
     public static GpuTextureResource readResource(String path, boolean flipY,

@@ -1,0 +1,347 @@
+Seed Explorer 26.3 prediction oracle
+created=2026-11-10T22:00:30.472129300Z
+requestedSeeds=1,-9223372036854775808 requestedDimensions=-1,1 includeTypes=bastion_remnant,fortress,ruined_portal_nether,end_city,nether_fossil omitTypes=<none> explicitStarts=<none> firstChunk=<default>
+locateRadiusChunks=384 windowRadiusChunks=96 queryAttempts=1 predictedSamples=1 dungeonRadiusChunks=4 caseTimeoutTicks=1200 skipLoot=false
+
+SEED 1
+RUNTIME requestedSeed=1 actualSeed=1 serverVersion=26.3 requestedPreset=minecraft:normal requestedStructures=true
+DIMENSION -1
+STRUCTURE_REGISTRY count=52
+  INVENTORY minecraft:abandoned_camp_bamboo_jungle type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_birch_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_cherry_grove type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_dappled_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_flower_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_meadow type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_birch_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_pine_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_spruce_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_pale_garden type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_savanna type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_snowy_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_sparse_jungle type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_swamp type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_windswept_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_wooded_badlands type=ABANDONED_CAMP
+  INVENTORY minecraft:ancient_city type=ANCIENT_CITY
+  INVENTORY minecraft:bastion_remnant type=BASTION
+  INVENTORY minecraft:buried_treasure type=TREASURE
+  INVENTORY minecraft:desert_pyramid type=DESERT_PYRAMID
+  INVENTORY minecraft:end_city type=END_CITY
+  INVENTORY minecraft:fortress type=FORTRESS
+  INVENTORY minecraft:igloo type=IGLOO
+  INVENTORY minecraft:jungle_pyramid type=JUNGLE_TEMPLE
+  INVENTORY minecraft:mansion type=MANSION
+  INVENTORY minecraft:mineshaft type=MINESHAFT
+  INVENTORY minecraft:mineshaft_mesa type=MINESHAFT
+  INVENTORY minecraft:monument type=MONUMENT
+  INVENTORY minecraft:nether_fossil type=NETHER_FOSSIL
+  INVENTORY minecraft:ocean_ruin_cold type=OCEAN_RUIN
+  INVENTORY minecraft:ocean_ruin_warm type=OCEAN_RUIN
+  INVENTORY minecraft:pillager_outpost type=OUTPOST
+  INVENTORY minecraft:ruined_portal type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_desert type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_jungle type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_mountain type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_nether type=NETHER_RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_ocean type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_swamp type=RUINED_PORTAL
+  INVENTORY minecraft:shipwreck type=SHIPWRECK
+  INVENTORY minecraft:shipwreck_beached type=SHIPWRECK
+  INVENTORY minecraft:stronghold type=STRONGHOLD
+  INVENTORY minecraft:swamp_hut type=WITCH_HUT
+  INVENTORY minecraft:trail_ruins type=TRAIL_RUINS
+  INVENTORY minecraft:trial_chambers type=TRIAL_CHAMBER
+  INVENTORY minecraft:village_desert type=VILLAGE
+  INVENTORY minecraft:village_plains type=VILLAGE
+  INVENTORY minecraft:village_savanna type=VILLAGE
+  INVENTORY minecraft:village_snowy type=VILLAGE
+  INVENTORY minecraft:village_taiga type=VILLAGE
+OBSERVATION initial layout MATCH seed=1 structure=minecraft:bastion_remnant start=[-1015, 394] pieces=98
+OBSERVATION container MATCH seed=1 structure=minecraft:bastion_remnant positions=[BlockPos{x=-16234, y=38, z=6313}] tables=[minecraft:chests/bastion_other] lootSeeds=[-2552240794731968934] stacks=[minecraft:ancient_debrisx1 enchantments={} damage=null potion=null, minecraft:bone_blockx1 enchantments={} damage=null potion=null, minecraft:bone_blockx1 enchantments={} damage=null potion=null, minecraft:bone_blockx1 enchantments={} damage=null potion=null, minecraft:cooked_porkchopx1 enchantments={} damage=null potion=null, minecraft:golden_bootsx1 enchantments={minecraft:soul_speed=1} damage=null potion=null, minecraft:iron_nuggetx1 enchantments={} damage=null potion=null, minecraft:iron_nuggetx7 enchantments={} damage=null potion=null, minecraft:iron_swordx1 enchantments={minecraft:smite=4} damage=57 potion=null, minecraft:magma_creamx1 enchantments={} damage=null potion=null, minecraft:magma_creamx1 enchantments={} damage=null potion=null, minecraft:magma_creamx1 enchantments={} damage=null potion=null, minecraft:snout_armor_trim_smithing_templatex1 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=1 structure=minecraft:bastion_remnant positions=[BlockPos{x=-16232, y=72, z=6315}, BlockPos{x=-16233, y=72, z=6315}] tables=[minecraft:chests/bastion_other, minecraft:chests/bastion_other] lootSeeds=[-207951699668880643, 5933906789600163243] stacks=[minecraft:arrowx4 enchantments={} damage=null potion=null, minecraft:arrowx8 enchantments={} damage=null potion=null, minecraft:cooked_porkchopx1 enchantments={} damage=null potion=null, minecraft:crossbowx1 enchantments={minecraft:piercing=4} damage=291 potion=null, minecraft:gilded_blackstonex1 enchantments={} damage=null potion=null, minecraft:gilded_blackstonex1 enchantments={} damage=null potion=null, minecraft:gilded_blackstonex2 enchantments={} damage=null potion=null, minecraft:gold_nuggetx1 enchantments={} damage=null potion=null, minecraft:gold_nuggetx1 enchantments={} damage=null potion=null, minecraft:gold_nuggetx1 enchantments={} damage=null potion=null, minecraft:gold_nuggetx1 enchantments={} damage=null potion=null, minecraft:golden_applex1 enchantments={} damage=null potion=null, minecraft:golden_bootsx1 enchantments={} damage=null potion=null, minecraft:golden_bootsx1 enchantments={} damage=null potion=null, minecraft:golden_chestplatex1 enchantments={} damage=null potion=null, minecraft:iron_blockx1 enchantments={} damage=null potion=null, minecraft:iron_nuggetx1 enchantments={} damage=null potion=null, minecraft:iron_nuggetx1 enchantments={} damage=null potion=null, minecraft:iron_nuggetx1 enchantments={} damage=null potion=null, minecraft:magma_creamx1 enchantments={} damage=null potion=null, minecraft:magma_creamx1 enchantments={} damage=null potion=null, minecraft:magma_creamx2 enchantments={} damage=null potion=null, minecraft:netherite_upgrade_smithing_templatex1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx2 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=1 structure=minecraft:bastion_remnant positions=[BlockPos{x=-16230, y=33, z=6276}] tables=[minecraft:chests/bastion_hoglin_stable] lootSeeds=[-8390394914076599299] stacks=[minecraft:gilded_blackstonex1 enchantments={} damage=null potion=null, minecraft:gilded_blackstonex2 enchantments={} damage=null potion=null, minecraft:golden_applex1 enchantments={} damage=null potion=null, minecraft:leatherx1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx3 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=1 structure=minecraft:bastion_remnant positions=[BlockPos{x=-16229, y=72, z=6315}] tables=[minecraft:chests/bastion_other] lootSeeds=[-8228042607936566035] stacks=[minecraft:crying_obsidianx1 enchantments={} damage=null potion=null, minecraft:crying_obsidianx1 enchantments={} damage=null potion=null, minecraft:gilded_blackstonex1 enchantments={} damage=null potion=null, minecraft:gilded_blackstonex2 enchantments={} damage=null potion=null, minecraft:iron_blockx1 enchantments={} damage=null potion=null, minecraft:iron_chainx1 enchantments={} damage=null potion=null, minecraft:iron_chainx1 enchantments={} damage=null potion=null, minecraft:iron_nuggetx1 enchantments={} damage=null potion=null, minecraft:iron_nuggetx1 enchantments={} damage=null potion=null, minecraft:iron_nuggetx1 enchantments={} damage=null potion=null, minecraft:iron_nuggetx1 enchantments={} damage=null potion=null, minecraft:iron_nuggetx1 enchantments={} damage=null potion=null, minecraft:music_disc_pigstepx1 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=1 structure=minecraft:bastion_remnant positions=[BlockPos{x=-16220, y=58, z=6314}] tables=[minecraft:chests/bastion_other] lootSeeds=[2675983046689198604] stacks=[minecraft:arrowx1 enchantments={} damage=null potion=null, minecraft:arrowx1 enchantments={} damage=null potion=null, minecraft:arrowx1 enchantments={} damage=null potion=null, minecraft:arrowx1 enchantments={} damage=null potion=null, minecraft:arrowx1 enchantments={} damage=null potion=null, minecraft:bone_blockx1 enchantments={} damage=null potion=null, minecraft:bone_blockx1 enchantments={} damage=null potion=null, minecraft:bone_blockx2 enchantments={} damage=null potion=null, minecraft:cooked_porkchopx1 enchantments={} damage=null potion=null, minecraft:crossbowx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx2 enchantments={} damage=null potion=null, minecraft:gold_ingotx2 enchantments={} damage=null potion=null, minecraft:spectral_arrowx3 enchantments={} damage=null potion=null, minecraft:spectral_arrowx7 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=1 structure=minecraft:bastion_remnant positions=[BlockPos{x=-16211, y=35, z=6308}] tables=[minecraft:chests/bastion_other] lootSeeds=[2899413481053441269] stacks=[minecraft:arrowx1 enchantments={} damage=null potion=null, minecraft:arrowx1 enchantments={} damage=null potion=null, minecraft:arrowx1 enchantments={} damage=null potion=null, minecraft:arrowx12 enchantments={} damage=null potion=null, minecraft:arrowx2 enchantments={} damage=null potion=null, minecraft:cooked_porkchopx1 enchantments={} damage=null potion=null, minecraft:diamond_shovelx1 enchantments={} damage=null potion=null, minecraft:golden_chestplatex1 enchantments={} damage=null potion=null, minecraft:iron_blockx1 enchantments={} damage=null potion=null, minecraft:snout_armor_trim_smithing_templatex1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx2 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=1 structure=minecraft:bastion_remnant positions=[BlockPos{x=-16207, y=33, z=6278}] tables=[minecraft:chests/bastion_hoglin_stable] lootSeeds=[7822751146806154914] stacks=[minecraft:glowstonex1 enchantments={} damage=null potion=null, minecraft:glowstonex1 enchantments={} damage=null potion=null, minecraft:glowstonex1 enchantments={} damage=null potion=null, minecraft:glowstonex1 enchantments={} damage=null potion=null, minecraft:golden_axex1 enchantments={minecraft:vanishing_curse=1} damage=null potion=null, minecraft:saddlex1 enchantments={} damage=null potion=null, minecraft:soul_sandx1 enchantments={} damage=null potion=null, minecraft:soul_sandx1 enchantments={} damage=null potion=null, minecraft:soul_sandx1 enchantments={} damage=null potion=null, minecraft:soul_sandx1 enchantments={} damage=null potion=null, minecraft:soul_sandx1 enchantments={} damage=null potion=null, minecraft:soul_sandx1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx2 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=1 structure=minecraft:bastion_remnant positions=[BlockPos{x=-16207, y=45, z=6278}] tables=[minecraft:chests/bastion_hoglin_stable] lootSeeds=[-3919298658653370447] stacks=[minecraft:ancient_debrisx1 enchantments={} damage=null potion=null, minecraft:crimson_nyliumx1 enchantments={} damage=null potion=null, minecraft:crimson_nyliumx1 enchantments={} damage=null potion=null, minecraft:glowstonex1 enchantments={} damage=null potion=null, minecraft:glowstonex5 enchantments={} damage=null potion=null, minecraft:golden_axex1 enchantments={minecraft:smite=5} damage=null potion=null, minecraft:leatherx1 enchantments={} damage=null potion=null, minecraft:leatherx1 enchantments={} damage=null potion=null, minecraft:leatherx1 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=1 structure=minecraft:bastion_remnant positions=[BlockPos{x=-16202, y=51, z=6301}] tables=[minecraft:chests/bastion_hoglin_stable] lootSeeds=[1751986800388903122] stacks=[minecraft:arrowx1 enchantments={} damage=null potion=null, minecraft:arrowx1 enchantments={} damage=null potion=null, minecraft:arrowx1 enchantments={} damage=null potion=null, minecraft:arrowx1 enchantments={} damage=null potion=null, minecraft:arrowx2 enchantments={} damage=null potion=null, minecraft:arrowx6 enchantments={} damage=null potion=null, minecraft:crimson_fungusx1 enchantments={} damage=null potion=null, minecraft:crimson_fungusx2 enchantments={} damage=null potion=null, minecraft:crimson_fungusx4 enchantments={} damage=null potion=null, minecraft:saddlex1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx2 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=1 structure=minecraft:bastion_remnant positions=[BlockPos{x=-16199, y=68, z=6319}] tables=[minecraft:chests/bastion_other] lootSeeds=[-5179005866822552977] stacks=[minecraft:ancient_debrisx1 enchantments={} damage=null potion=null, minecraft:cooked_porkchopx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:gold_nuggetx1 enchantments={} damage=null potion=null, minecraft:gold_nuggetx5 enchantments={} damage=null potion=null, minecraft:golden_swordx1 enchantments={} damage=null potion=null, minecraft:magma_creamx1 enchantments={} damage=null potion=null, minecraft:magma_creamx1 enchantments={} damage=null potion=null, minecraft:magma_creamx1 enchantments={} damage=null potion=null, minecraft:magma_creamx1 enchantments={} damage=null potion=null, minecraft:magma_creamx2 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=1 structure=minecraft:bastion_remnant positions=[BlockPos{x=-16195, y=58, z=6310}] tables=[minecraft:chests/bastion_other] lootSeeds=[6189276125635217912] stacks=[minecraft:arrowx1 enchantments={} damage=null potion=null, minecraft:arrowx1 enchantments={} damage=null potion=null, minecraft:arrowx1 enchantments={} damage=null potion=null, minecraft:arrowx1 enchantments={} damage=null potion=null, minecraft:arrowx1 enchantments={} damage=null potion=null, minecraft:arrowx1 enchantments={} damage=null potion=null, minecraft:arrowx2 enchantments={} damage=null potion=null, minecraft:arrowx4 enchantments={} damage=null potion=null, minecraft:arrowx5 enchantments={} damage=null potion=null, minecraft:arrowx8 enchantments={} damage=null potion=null, minecraft:enchanted_bookx1 enchantments={minecraft:soul_speed=1} damage=null potion=null, minecraft:gilded_blackstonex1 enchantments={} damage=null potion=null, minecraft:gilded_blackstonex3 enchantments={} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx3 enchantments={} damage=null potion=null, minecraft:gold_nuggetx1 enchantments={} damage=null potion=null, minecraft:gold_nuggetx1 enchantments={} damage=null potion=null, minecraft:gold_nuggetx1 enchantments={} damage=null potion=null, minecraft:gold_nuggetx4 enchantments={} damage=null potion=null, minecraft:golden_leggingsx1 enchantments={} damage=null potion=null, minecraft:netherite_upgrade_smithing_templatex1 enchantments={} damage=null potion=null]
+PROGRESS seed=1 id=minecraft:bastion_remnant actual=1 predicted=1 missed=0 extra=0 actualChests=11 predictedChests=11 missedChests=0 extraChests=0 lootMismatch=0 modeledLootMatch=11 metadataUnverified=0 layoutMatch=1 layoutMismatch=0 layoutUnverified=0
+OBSERVATION initial layout MATCH seed=1 structure=minecraft:fortress start=[420, -635] pieces=136
+OBSERVATION container MATCH seed=1 structure=minecraft:fortress positions=[BlockPos{x=6768, y=75, z=-10197}] tables=[minecraft:chests/nether_bridge] lootSeeds=[-6317198462772827584] stacks=[minecraft:diamond_horse_armorx1 enchantments={} damage=null potion=null, minecraft:golden_chestplatex1 enchantments={} damage=null potion=null, minecraft:golden_chestplatex1 enchantments={} damage=null potion=null, minecraft:golden_horse_armorx1 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=1 structure=minecraft:fortress positions=[BlockPos{x=6790, y=75, z=-10155}] tables=[minecraft:chests/nether_bridge] lootSeeds=[6717804916066256296] stacks=[minecraft:copper_horse_armorx1 enchantments={} damage=null potion=null, minecraft:golden_chestplatex1 enchantments={} damage=null potion=null, minecraft:iron_horse_armorx1 enchantments={} damage=null potion=null, minecraft:iron_horse_armorx1 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=1 structure=minecraft:fortress positions=[BlockPos{x=6793, y=61, z=-10191}] tables=[minecraft:chests/nether_bridge] lootSeeds=[-1235080165959899956] stacks=[minecraft:copper_horse_armorx1 enchantments={} damage=null potion=null, minecraft:flint_and_steelx1 enchantments={} damage=null potion=null, minecraft:flint_and_steelx1 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=1 structure=minecraft:fortress positions=[BlockPos{x=6800, y=53, z=-10203}] tables=[minecraft:chests/nether_bridge] lootSeeds=[18818712051823066] stacks=[minecraft:copper_horse_armorx1 enchantments={} damage=null potion=null, minecraft:diamondx1 enchantments={} damage=null potion=null, minecraft:iron_horse_armorx1 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=1 structure=minecraft:fortress positions=[BlockPos{x=6803, y=68, z=-10150}] tables=[minecraft:chests/nether_bridge] lootSeeds=[6682108176271057043] stacks=[minecraft:flint_and_steelx1 enchantments={} damage=null potion=null, minecraft:iron_horse_armorx1 enchantments={} damage=null potion=null, minecraft:saddlex1 enchantments={} damage=null potion=null, minecraft:saddlex1 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=1 structure=minecraft:fortress positions=[BlockPos{x=6805, y=68, z=-10172}] tables=[minecraft:chests/nether_bridge] lootSeeds=[-181705873972373803] stacks=[minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:golden_horse_armorx1 enchantments={} damage=null potion=null]
+PROGRESS seed=1 id=minecraft:fortress actual=1 predicted=1 missed=0 extra=0 actualChests=6 predictedChests=6 missedChests=0 extraChests=0 lootMismatch=0 modeledLootMatch=6 metadataUnverified=0 layoutMatch=1 layoutMismatch=0 layoutUnverified=0
+OBSERVATION initial layout MATCH seed=1 structure=minecraft:nether_fossil start=[268, -1026] pieces=1
+PROGRESS seed=1 id=minecraft:nether_fossil actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 modeledLootMatch=0 metadataUnverified=0 layoutMatch=1 layoutMismatch=0 layoutUnverified=0
+OBSERVATION initial layout MATCH seed=1 structure=minecraft:ruined_portal_nether start=[-599, -68] pieces=1
+OBSERVATION container MATCH seed=1 structure=minecraft:ruined_portal_nether positions=[BlockPos{x=-9582, y=29, z=-1088}] tables=[minecraft:chests/ruined_portal] lootSeeds=[4278785763173100887] stacks=[minecraft:fire_chargex1 enchantments={} damage=null potion=null, minecraft:golden_chestplatex1 enchantments={minecraft:fire_protection=3} damage=null potion=null, minecraft:golden_swordx1 enchantments={minecraft:sweeping_edge=1} damage=null potion=null, minecraft:iron_nuggetx1 enchantments={} damage=null potion=null, minecraft:iron_nuggetx2 enchantments={} damage=null potion=null, minecraft:iron_nuggetx2 enchantments={} damage=null potion=null, minecraft:iron_nuggetx6 enchantments={} damage=null potion=null, minecraft:obsidianx1 enchantments={} damage=null potion=null, minecraft:obsidianx1 enchantments={} damage=null potion=null]
+OBSERVATION initial layout MATCH seed=1 structure=minecraft:ruined_portal_nether start=[-549, -59] pieces=1
+PROGRESS seed=1 id=minecraft:ruined_portal_nether actual=2 predicted=2 missed=0 extra=0 actualChests=1 predictedChests=1 missedChests=0 extraChests=0 lootMismatch=0 modeledLootMatch=1 metadataUnverified=0 layoutMatch=2 layoutMismatch=0 layoutUnverified=0
+  minecraft:bastion_remnant actual=1 predicted=1 missed=0 extra=0 actualChests=11 predictedChests=11 missedChests=0 extraChests=0 lootMismatch=0 modeledLootMatch=11 metadataUnverified=0 layoutMatch=1 layoutMismatch=0 layoutUnverified=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:fortress actual=1 predicted=1 missed=0 extra=0 actualChests=6 predictedChests=6 missedChests=0 extraChests=0 lootMismatch=0 modeledLootMatch=6 metadataUnverified=0 layoutMatch=1 layoutMismatch=0 layoutUnverified=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:nether_fossil actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 modeledLootMatch=0 metadataUnverified=0 layoutMatch=1 layoutMismatch=0 layoutUnverified=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:ruined_portal_nether actual=2 predicted=2 missed=0 extra=0 actualChests=1 predictedChests=1 missedChests=0 extraChests=0 lootMismatch=0 modeledLootMatch=1 metadataUnverified=0 layoutMatch=2 layoutMismatch=0 layoutUnverified=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+
+DIMENSION 1
+STRUCTURE_REGISTRY count=52
+  INVENTORY minecraft:abandoned_camp_bamboo_jungle type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_birch_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_cherry_grove type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_dappled_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_flower_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_meadow type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_birch_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_pine_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_spruce_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_pale_garden type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_savanna type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_snowy_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_sparse_jungle type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_swamp type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_windswept_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_wooded_badlands type=ABANDONED_CAMP
+  INVENTORY minecraft:ancient_city type=ANCIENT_CITY
+  INVENTORY minecraft:bastion_remnant type=BASTION
+  INVENTORY minecraft:buried_treasure type=TREASURE
+  INVENTORY minecraft:desert_pyramid type=DESERT_PYRAMID
+  INVENTORY minecraft:end_city type=END_CITY
+  INVENTORY minecraft:fortress type=FORTRESS
+  INVENTORY minecraft:igloo type=IGLOO
+  INVENTORY minecraft:jungle_pyramid type=JUNGLE_TEMPLE
+  INVENTORY minecraft:mansion type=MANSION
+  INVENTORY minecraft:mineshaft type=MINESHAFT
+  INVENTORY minecraft:mineshaft_mesa type=MINESHAFT
+  INVENTORY minecraft:monument type=MONUMENT
+  INVENTORY minecraft:nether_fossil type=NETHER_FOSSIL
+  INVENTORY minecraft:ocean_ruin_cold type=OCEAN_RUIN
+  INVENTORY minecraft:ocean_ruin_warm type=OCEAN_RUIN
+  INVENTORY minecraft:pillager_outpost type=OUTPOST
+  INVENTORY minecraft:ruined_portal type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_desert type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_jungle type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_mountain type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_nether type=NETHER_RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_ocean type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_swamp type=RUINED_PORTAL
+  INVENTORY minecraft:shipwreck type=SHIPWRECK
+  INVENTORY minecraft:shipwreck_beached type=SHIPWRECK
+  INVENTORY minecraft:stronghold type=STRONGHOLD
+  INVENTORY minecraft:swamp_hut type=WITCH_HUT
+  INVENTORY minecraft:trail_ruins type=TRAIL_RUINS
+  INVENTORY minecraft:trial_chambers type=TRIAL_CHAMBER
+  INVENTORY minecraft:village_desert type=VILLAGE
+  INVENTORY minecraft:village_plains type=VILLAGE
+  INVENTORY minecraft:village_savanna type=VILLAGE
+  INVENTORY minecraft:village_snowy type=VILLAGE
+  INVENTORY minecraft:village_taiga type=VILLAGE
+OBSERVATION initial layout MATCH seed=1 structure=minecraft:end_city start=[-578, 884] pieces=51
+OBSERVATION container MATCH seed=1 structure=minecraft:end_city positions=[BlockPos{x=-9249, y=117, z=14152}] tables=[minecraft:chests/end_city_treasure] lootSeeds=[1362497172151137980] stacks=[minecraft:beetroot_seedsx1 enchantments={} damage=null potion=null, minecraft:beetroot_seedsx1 enchantments={} damage=null potion=null, minecraft:beetroot_seedsx1 enchantments={} damage=null potion=null, minecraft:beetroot_seedsx2 enchantments={} damage=null potion=null, minecraft:beetroot_seedsx2 enchantments={} damage=null potion=null, minecraft:beetroot_seedsx2 enchantments={} damage=null potion=null, minecraft:beetroot_seedsx3 enchantments={} damage=null potion=null, minecraft:diamond_chestplatex1 enchantments={minecraft:fire_protection=3} damage=null potion=null, minecraft:iron_shovelx1 enchantments={minecraft:efficiency=3} damage=null potion=null, minecraft:iron_swordx1 enchantments={minecraft:knockback=2, minecraft:smite=5, minecraft:unbreaking=3} damage=null potion=null]
+OBSERVATION container MATCH seed=1 structure=minecraft:end_city positions=[BlockPos{x=-9247, y=117, z=14150}] tables=[minecraft:chests/end_city_treasure] lootSeeds=[5875608748547006662] stacks=[minecraft:beetroot_seedsx1 enchantments={} damage=null potion=null, minecraft:beetroot_seedsx1 enchantments={} damage=null potion=null, minecraft:beetroot_seedsx1 enchantments={} damage=null potion=null, minecraft:beetroot_seedsx2 enchantments={} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx5 enchantments={} damage=null potion=null, minecraft:iron_bootsx1 enchantments={minecraft:mending=1, minecraft:unbreaking=3} damage=null potion=null, minecraft:iron_ingotx1 enchantments={} damage=null potion=null, minecraft:iron_ingotx2 enchantments={} damage=null potion=null, minecraft:iron_ingotx2 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=1 structure=minecraft:end_city positions=[BlockPos{x=-9243, y=125, z=14200}] tables=[minecraft:chests/end_city_treasure] lootSeeds=[-7094809441390948404] stacks=[minecraft:diamond_leggingsx1 enchantments={minecraft:binding_curse=1, minecraft:protection=4} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx6 enchantments={} damage=null potion=null, minecraft:iron_chestplatex1 enchantments={minecraft:binding_curse=1, minecraft:mending=1, minecraft:unbreaking=3} damage=null potion=null, minecraft:iron_ingotx1 enchantments={} damage=null potion=null, minecraft:iron_ingotx1 enchantments={} damage=null potion=null, minecraft:iron_ingotx1 enchantments={} damage=null potion=null, minecraft:iron_ingotx2 enchantments={} damage=null potion=null, minecraft:iron_ingotx2 enchantments={} damage=null potion=null, minecraft:iron_ingotx2 enchantments={} damage=null potion=null, minecraft:iron_ingotx2 enchantments={} damage=null potion=null, minecraft:iron_ingotx2 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=1 structure=minecraft:end_city positions=[BlockPos{x=-9241, y=111, z=14231}] tables=[minecraft:chests/end_city_treasure] lootSeeds=[-3098535170280086918] stacks=[minecraft:gold_ingotx3 enchantments={} damage=null potion=null, minecraft:gold_ingotx3 enchantments={} damage=null potion=null, minecraft:iron_ingotx1 enchantments={} damage=null potion=null, minecraft:iron_ingotx1 enchantments={} damage=null potion=null, minecraft:iron_ingotx1 enchantments={} damage=null potion=null, minecraft:iron_ingotx1 enchantments={} damage=null potion=null, minecraft:iron_ingotx2 enchantments={} damage=null potion=null, minecraft:iron_ingotx2 enchantments={} damage=null potion=null, minecraft:iron_ingotx2 enchantments={} damage=null potion=null, minecraft:iron_ingotx3 enchantments={} damage=null potion=null, minecraft:iron_ingotx3 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=1 structure=minecraft:end_city positions=[BlockPos{x=-9239, y=111, z=14231}] tables=[minecraft:chests/end_city_treasure] lootSeeds=[402693734332286071] stacks=[minecraft:diamond_chestplatex1 enchantments={minecraft:protection=3} damage=null potion=null, minecraft:diamond_helmetx1 enchantments={minecraft:protection=3} damage=null potion=null, minecraft:diamond_shovelx1 enchantments={minecraft:efficiency=3} damage=null potion=null, minecraft:emeraldx1 enchantments={} damage=null potion=null, minecraft:emeraldx2 enchantments={} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx5 enchantments={} damage=null potion=null, minecraft:iron_chestplatex1 enchantments={minecraft:mending=1, minecraft:protection=3} damage=null potion=null]
+PROGRESS seed=1 id=minecraft:end_city actual=1 predicted=1 missed=0 extra=0 actualChests=5 predictedChests=5 missedChests=0 extraChests=0 lootMismatch=0 modeledLootMatch=5 metadataUnverified=0 layoutMatch=1 layoutMismatch=0 layoutUnverified=0
+  minecraft:end_city actual=1 predicted=1 missed=0 extra=0 actualChests=5 predictedChests=5 missedChests=0 extraChests=0 lootMismatch=0 modeledLootMatch=5 metadataUnverified=0 layoutMatch=1 layoutMismatch=0 layoutUnverified=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+
+SEED -9223372036854775808
+RUNTIME requestedSeed=-9223372036854775808 actualSeed=-9223372036854775808 serverVersion=26.3 requestedPreset=minecraft:normal requestedStructures=true
+DIMENSION -1
+STRUCTURE_REGISTRY count=52
+  INVENTORY minecraft:abandoned_camp_bamboo_jungle type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_birch_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_cherry_grove type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_dappled_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_flower_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_meadow type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_birch_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_pine_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_spruce_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_pale_garden type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_savanna type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_snowy_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_sparse_jungle type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_swamp type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_windswept_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_wooded_badlands type=ABANDONED_CAMP
+  INVENTORY minecraft:ancient_city type=ANCIENT_CITY
+  INVENTORY minecraft:bastion_remnant type=BASTION
+  INVENTORY minecraft:buried_treasure type=TREASURE
+  INVENTORY minecraft:desert_pyramid type=DESERT_PYRAMID
+  INVENTORY minecraft:end_city type=END_CITY
+  INVENTORY minecraft:fortress type=FORTRESS
+  INVENTORY minecraft:igloo type=IGLOO
+  INVENTORY minecraft:jungle_pyramid type=JUNGLE_TEMPLE
+  INVENTORY minecraft:mansion type=MANSION
+  INVENTORY minecraft:mineshaft type=MINESHAFT
+  INVENTORY minecraft:mineshaft_mesa type=MINESHAFT
+  INVENTORY minecraft:monument type=MONUMENT
+  INVENTORY minecraft:nether_fossil type=NETHER_FOSSIL
+  INVENTORY minecraft:ocean_ruin_cold type=OCEAN_RUIN
+  INVENTORY minecraft:ocean_ruin_warm type=OCEAN_RUIN
+  INVENTORY minecraft:pillager_outpost type=OUTPOST
+  INVENTORY minecraft:ruined_portal type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_desert type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_jungle type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_mountain type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_nether type=NETHER_RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_ocean type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_swamp type=RUINED_PORTAL
+  INVENTORY minecraft:shipwreck type=SHIPWRECK
+  INVENTORY minecraft:shipwreck_beached type=SHIPWRECK
+  INVENTORY minecraft:stronghold type=STRONGHOLD
+  INVENTORY minecraft:swamp_hut type=WITCH_HUT
+  INVENTORY minecraft:trail_ruins type=TRAIL_RUINS
+  INVENTORY minecraft:trial_chambers type=TRIAL_CHAMBER
+  INVENTORY minecraft:village_desert type=VILLAGE
+  INVENTORY minecraft:village_plains type=VILLAGE
+  INVENTORY minecraft:village_savanna type=VILLAGE
+  INVENTORY minecraft:village_snowy type=VILLAGE
+  INVENTORY minecraft:village_taiga type=VILLAGE
+OBSERVATION initial layout MATCH seed=-9223372036854775808 structure=minecraft:bastion_remnant start=[-616, -95] pieces=79
+OBSERVATION container MATCH seed=-9223372036854775808 structure=minecraft:bastion_remnant positions=[BlockPos{x=-9865, y=73, z=-1495}, BlockPos{x=-9865, y=73, z=-1494}] tables=[minecraft:chests/bastion_other, minecraft:chests/bastion_other] lootSeeds=[-3449059301695988690, -4486702990473135443] stacks=[minecraft:ancient_debrisx1 enchantments={} damage=null potion=null, minecraft:arrowx1 enchantments={} damage=null potion=null, minecraft:arrowx1 enchantments={} damage=null potion=null, minecraft:arrowx1 enchantments={} damage=null potion=null, minecraft:arrowx1 enchantments={} damage=null potion=null, minecraft:arrowx1 enchantments={} damage=null potion=null, minecraft:arrowx10 enchantments={} damage=null potion=null, minecraft:arrowx2 enchantments={} damage=null potion=null, minecraft:arrowx6 enchantments={} damage=null potion=null, minecraft:golden_bootsx1 enchantments={} damage=null potion=null, minecraft:golden_swordx1 enchantments={} damage=null potion=null, minecraft:iron_blockx1 enchantments={} damage=null potion=null, minecraft:iron_ingotx1 enchantments={} damage=null potion=null, minecraft:iron_ingotx1 enchantments={} damage=null potion=null, minecraft:iron_ingotx3 enchantments={} damage=null potion=null, minecraft:iron_nuggetx1 enchantments={} damage=null potion=null, minecraft:iron_nuggetx1 enchantments={} damage=null potion=null, minecraft:iron_nuggetx1 enchantments={} damage=null potion=null, minecraft:iron_nuggetx1 enchantments={} damage=null potion=null, minecraft:iron_nuggetx1 enchantments={} damage=null potion=null, minecraft:iron_nuggetx1 enchantments={} damage=null potion=null, minecraft:iron_nuggetx2 enchantments={} damage=null potion=null, minecraft:iron_nuggetx3 enchantments={} damage=null potion=null, minecraft:iron_nuggetx4 enchantments={} damage=null potion=null, minecraft:obsidianx1 enchantments={} damage=null potion=null, minecraft:obsidianx1 enchantments={} damage=null potion=null, minecraft:obsidianx1 enchantments={} damage=null potion=null, minecraft:obsidianx1 enchantments={} damage=null potion=null, minecraft:obsidianx1 enchantments={} damage=null potion=null, minecraft:obsidianx3 enchantments={} damage=null potion=null, minecraft:spectral_arrowx1 enchantments={} damage=null potion=null, minecraft:spectral_arrowx1 enchantments={} damage=null potion=null, minecraft:spectral_arrowx1 enchantments={} damage=null potion=null, minecraft:spectral_arrowx1 enchantments={} damage=null potion=null, minecraft:spectral_arrowx1 enchantments={} damage=null potion=null, minecraft:spectral_arrowx1 enchantments={} damage=null potion=null, minecraft:spectral_arrowx1 enchantments={} damage=null potion=null, minecraft:spectral_arrowx6 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx3 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=-9223372036854775808 structure=minecraft:bastion_remnant positions=[BlockPos{x=-9865, y=73, z=-1490}] tables=[minecraft:chests/bastion_other] lootSeeds=[-1706739450557399501] stacks=[minecraft:bone_blockx1 enchantments={} damage=null potion=null, minecraft:bone_blockx1 enchantments={} damage=null potion=null, minecraft:bone_blockx1 enchantments={} damage=null potion=null, minecraft:bone_blockx3 enchantments={} damage=null potion=null, minecraft:crying_obsidianx1 enchantments={} damage=null potion=null, minecraft:crying_obsidianx2 enchantments={} damage=null potion=null, minecraft:gold_blockx1 enchantments={} damage=null potion=null, minecraft:golden_carrotx1 enchantments={} damage=null potion=null, minecraft:golden_carrotx1 enchantments={} damage=null potion=null, minecraft:golden_carrotx1 enchantments={} damage=null potion=null, minecraft:golden_carrotx2 enchantments={} damage=null potion=null, minecraft:golden_carrotx3 enchantments={} damage=null potion=null, minecraft:iron_chainx1 enchantments={} damage=null potion=null, minecraft:iron_chainx1 enchantments={} damage=null potion=null, minecraft:iron_chainx1 enchantments={} damage=null potion=null, minecraft:iron_chainx1 enchantments={} damage=null potion=null, minecraft:iron_chainx1 enchantments={} damage=null potion=null, minecraft:iron_chainx1 enchantments={} damage=null potion=null, minecraft:iron_nuggetx1 enchantments={} damage=null potion=null, minecraft:iron_nuggetx4 enchantments={} damage=null potion=null, minecraft:obsidianx1 enchantments={} damage=null potion=null, minecraft:obsidianx5 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=-9223372036854775808 structure=minecraft:bastion_remnant positions=[BlockPos{x=-9862, y=36, z=-1499}, BlockPos{x=-9862, y=36, z=-1500}] tables=[minecraft:chests/bastion_other, minecraft:chests/bastion_other] lootSeeds=[5393192979255416707, 8297083886461051607] stacks=[minecraft:arrowx1 enchantments={} damage=null potion=null, minecraft:arrowx1 enchantments={} damage=null potion=null, minecraft:arrowx1 enchantments={} damage=null potion=null, minecraft:arrowx1 enchantments={} damage=null potion=null, minecraft:arrowx2 enchantments={} damage=null potion=null, minecraft:arrowx2 enchantments={} damage=null potion=null, minecraft:crossbowx1 enchantments={minecraft:vanishing_curse=1} damage=105 potion=null, minecraft:diamond_shovelx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:golden_bootsx1 enchantments={minecraft:soul_speed=1} damage=null potion=null, minecraft:golden_chestplatex1 enchantments={} damage=null potion=null, minecraft:golden_swordx1 enchantments={} damage=null potion=null, minecraft:iron_nuggetx1 enchantments={} damage=null potion=null, minecraft:iron_nuggetx3 enchantments={} damage=null potion=null, minecraft:magma_creamx1 enchantments={} damage=null potion=null, minecraft:magma_creamx1 enchantments={} damage=null potion=null, minecraft:magma_creamx1 enchantments={} damage=null potion=null, minecraft:magma_creamx1 enchantments={} damage=null potion=null, minecraft:magma_creamx2 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx2 enchantments={} damage=null potion=null, minecraft:stringx4 enchantments={} damage=null potion=null, minecraft:stringx5 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=-9223372036854775808 structure=minecraft:bastion_remnant positions=[BlockPos{x=-9847, y=40, z=-1487}] tables=[minecraft:chests/bastion_other] lootSeeds=[-8568359352955079557] stacks=[minecraft:bone_blockx1 enchantments={} damage=null potion=null, minecraft:bone_blockx1 enchantments={} damage=null potion=null, minecraft:bone_blockx4 enchantments={} damage=null potion=null, minecraft:crying_obsidianx1 enchantments={} damage=null potion=null, minecraft:crying_obsidianx1 enchantments={} damage=null potion=null, minecraft:crying_obsidianx1 enchantments={} damage=null potion=null, minecraft:crying_obsidianx2 enchantments={} damage=null potion=null, minecraft:diamond_pickaxex1 enchantments={minecraft:unbreaking=1} damage=null potion=null, minecraft:gilded_blackstonex1 enchantments={} damage=null potion=null, minecraft:gilded_blackstonex1 enchantments={} damage=null potion=null, minecraft:gilded_blackstonex1 enchantments={} damage=null potion=null, minecraft:gilded_blackstonex2 enchantments={} damage=null potion=null, minecraft:golden_axex1 enchantments={minecraft:unbreaking=1} damage=null potion=null, minecraft:magma_creamx1 enchantments={} damage=null potion=null, minecraft:magma_creamx1 enchantments={} damage=null potion=null, minecraft:netherite_upgrade_smithing_templatex1 enchantments={} damage=null potion=null, minecraft:obsidianx1 enchantments={} damage=null potion=null, minecraft:obsidianx1 enchantments={} damage=null potion=null, minecraft:obsidianx1 enchantments={} damage=null potion=null, minecraft:obsidianx1 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=-9223372036854775808 structure=minecraft:bastion_remnant positions=[BlockPos{x=-9836, y=33, z=-1494}] tables=[minecraft:chests/bastion_other] lootSeeds=[4742585202037901436] stacks=[minecraft:gilded_blackstonex1 enchantments={} damage=null potion=null, minecraft:gilded_blackstonex1 enchantments={} damage=null potion=null, minecraft:gilded_blackstonex1 enchantments={} damage=null potion=null, minecraft:gilded_blackstonex1 enchantments={} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx3 enchantments={} damage=null potion=null, minecraft:gold_nuggetx1 enchantments={} damage=null potion=null, minecraft:gold_nuggetx5 enchantments={} damage=null potion=null, minecraft:golden_bootsx1 enchantments={} damage=null potion=null, minecraft:magma_creamx1 enchantments={} damage=null potion=null, minecraft:magma_creamx1 enchantments={} damage=null potion=null, minecraft:music_disc_pigstepx1 enchantments={} damage=null potion=null, minecraft:snout_armor_trim_smithing_templatex1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx1 enchantments={} damage=null potion=null, minecraft:stringx2 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=-9223372036854775808 structure=minecraft:bastion_remnant positions=[BlockPos{x=-9833, y=40, z=-1487}] tables=[minecraft:chests/bastion_other] lootSeeds=[6519369993950315143] stacks=[minecraft:crossbowx1 enchantments={minecraft:multishot=1} damage=195 potion=null, minecraft:crying_obsidianx1 enchantments={} damage=null potion=null, minecraft:crying_obsidianx4 enchantments={} damage=null potion=null, minecraft:gilded_blackstonex1 enchantments={} damage=null potion=null, minecraft:gilded_blackstonex1 enchantments={} damage=null potion=null, minecraft:gilded_blackstonex1 enchantments={} damage=null potion=null, minecraft:gilded_blackstonex1 enchantments={} damage=null potion=null, minecraft:gilded_blackstonex1 enchantments={} damage=null potion=null, minecraft:gilded_blackstonex2 enchantments={} damage=null potion=null, minecraft:golden_chestplatex1 enchantments={} damage=null potion=null, minecraft:iron_nuggetx1 enchantments={} damage=null potion=null, minecraft:iron_nuggetx1 enchantments={} damage=null potion=null, minecraft:iron_nuggetx2 enchantments={} damage=null potion=null, minecraft:iron_nuggetx2 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=-9223372036854775808 structure=minecraft:bastion_remnant positions=[BlockPos{x=-9827, y=36, z=-1510}] tables=[minecraft:chests/bastion_other] lootSeeds=[-5144856410233844672] stacks=[minecraft:arrowx1 enchantments={} damage=null potion=null, minecraft:arrowx1 enchantments={} damage=null potion=null, minecraft:arrowx13 enchantments={} damage=null potion=null, minecraft:enchanted_bookx1 enchantments={minecraft:soul_speed=2} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:iron_chainx1 enchantments={} damage=null potion=null, minecraft:iron_chainx2 enchantments={} damage=null potion=null, minecraft:iron_chainx2 enchantments={} damage=null potion=null, minecraft:magma_creamx1 enchantments={} damage=null potion=null, minecraft:magma_creamx1 enchantments={} damage=null potion=null, minecraft:obsidianx1 enchantments={} damage=null potion=null, minecraft:obsidianx1 enchantments={} damage=null potion=null, minecraft:obsidianx2 enchantments={} damage=null potion=null]
+PROGRESS seed=-9223372036854775808 id=minecraft:bastion_remnant actual=1 predicted=1 missed=0 extra=0 actualChests=7 predictedChests=7 missedChests=0 extraChests=0 lootMismatch=0 modeledLootMatch=7 metadataUnverified=0 layoutMatch=1 layoutMismatch=0 layoutUnverified=0
+OBSERVATION initial layout MATCH seed=-9223372036854775808 structure=minecraft:fortress start=[859, -367] pieces=56
+OBSERVATION initial layout MATCH seed=-9223372036854775808 structure=minecraft:fortress start=[899, -351] pieces=141
+OBSERVATION container MATCH seed=-9223372036854775808 structure=minecraft:fortress positions=[BlockPos{x=14424, y=72, z=-5636}] tables=[minecraft:chests/nether_bridge] lootSeeds=[1444692347300681544] stacks=[minecraft:flint_and_steelx1 enchantments={} damage=null potion=null, minecraft:iron_horse_armorx1 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=-9223372036854775808 structure=minecraft:fortress positions=[BlockPos{x=14439, y=57, z=-5532}] tables=[minecraft:chests/nether_bridge] lootSeeds=[6215924400791806866] stacks=[minecraft:flint_and_steelx1 enchantments={} damage=null potion=null, minecraft:iron_ingotx1 enchantments={} damage=null potion=null, minecraft:iron_ingotx1 enchantments={} damage=null potion=null, minecraft:iron_ingotx3 enchantments={} damage=null potion=null, minecraft:rib_armor_trim_smithing_templatex1 enchantments={} damage=null potion=null, minecraft:saddlex1 enchantments={} damage=null potion=null, minecraft:saddlex1 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=-9223372036854775808 structure=minecraft:fortress positions=[BlockPos{x=14444, y=57, z=-5584}] tables=[minecraft:chests/nether_bridge] lootSeeds=[1765747804108255176] stacks=[minecraft:copper_horse_armorx1 enchantments={} damage=null potion=null, minecraft:diamond_horse_armorx1 enchantments={} damage=null potion=null, minecraft:flint_and_steelx1 enchantments={} damage=null potion=null, minecraft:nether_wartx1 enchantments={} damage=null potion=null, minecraft:nether_wartx1 enchantments={} damage=null potion=null, minecraft:nether_wartx4 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=-9223372036854775808 structure=minecraft:fortress positions=[BlockPos{x=14467, y=72, z=-5594}] tables=[minecraft:chests/nether_bridge] lootSeeds=[2173734295301802282] stacks=[minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:saddlex1 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=-9223372036854775808 structure=minecraft:fortress positions=[BlockPos{x=14469, y=50, z=-5634}] tables=[minecraft:chests/nether_bridge] lootSeeds=[6867153378776736467] stacks=[minecraft:flint_and_steelx1 enchantments={} damage=null potion=null, minecraft:golden_horse_armorx1 enchantments={} damage=null potion=null, minecraft:iron_horse_armorx1 enchantments={} damage=null potion=null, minecraft:saddlex1 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=-9223372036854775808 structure=minecraft:fortress positions=[BlockPos{x=14470, y=57, z=-5619}] tables=[minecraft:chests/nether_bridge] lootSeeds=[-1927079943762398154] stacks=[minecraft:golden_horse_armorx1 enchantments={} damage=null potion=null, minecraft:obsidianx1 enchantments={} damage=null potion=null, minecraft:obsidianx1 enchantments={} damage=null potion=null, minecraft:obsidianx2 enchantments={} damage=null potion=null, minecraft:saddlex1 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=-9223372036854775808 structure=minecraft:fortress positions=[BlockPos{x=14490, y=65, z=-5611}] tables=[minecraft:chests/nether_bridge] lootSeeds=[5006940324092904088] stacks=[minecraft:gold_ingotx1 enchantments={} damage=null potion=null, minecraft:golden_chestplatex1 enchantments={} damage=null potion=null, minecraft:iron_horse_armorx1 enchantments={} damage=null potion=null]
+PROGRESS seed=-9223372036854775808 id=minecraft:fortress actual=2 predicted=2 missed=0 extra=0 actualChests=7 predictedChests=7 missedChests=0 extraChests=0 lootMismatch=0 modeledLootMatch=7 metadataUnverified=0 layoutMatch=2 layoutMismatch=0 layoutUnverified=0
+OBSERVATION initial layout MATCH seed=-9223372036854775808 structure=minecraft:nether_fossil start=[770, -202] pieces=1
+PROGRESS seed=-9223372036854775808 id=minecraft:nether_fossil actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 modeledLootMatch=0 metadataUnverified=0 layoutMatch=1 layoutMismatch=0 layoutUnverified=0
+OBSERVATION initial layout MATCH seed=-9223372036854775808 structure=minecraft:ruined_portal_nether start=[922, 570] pieces=1
+OBSERVATION initial layout MATCH seed=-9223372036854775808 structure=minecraft:ruined_portal_nether start=[928, 614] pieces=1
+OBSERVATION container MATCH seed=-9223372036854775808 structure=minecraft:ruined_portal_nether positions=[BlockPos{x=14862, y=85, z=9832}] tables=[minecraft:chests/ruined_portal] lootSeeds=[2886929708898903307] stacks=[minecraft:flint_and_steelx1 enchantments={} damage=null potion=null, minecraft:golden_leggingsx1 enchantments={minecraft:blast_protection=1} damage=null potion=null, minecraft:golden_pickaxex1 enchantments={minecraft:fortune=2} damage=null potion=null, minecraft:golden_shovelx1 enchantments={minecraft:unbreaking=3} damage=null potion=null]
+PROGRESS seed=-9223372036854775808 id=minecraft:ruined_portal_nether actual=2 predicted=2 missed=0 extra=0 actualChests=1 predictedChests=1 missedChests=0 extraChests=0 lootMismatch=0 modeledLootMatch=1 metadataUnverified=0 layoutMatch=2 layoutMismatch=0 layoutUnverified=0
+  minecraft:bastion_remnant actual=1 predicted=1 missed=0 extra=0 actualChests=7 predictedChests=7 missedChests=0 extraChests=0 lootMismatch=0 modeledLootMatch=7 metadataUnverified=0 layoutMatch=1 layoutMismatch=0 layoutUnverified=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:fortress actual=2 predicted=2 missed=0 extra=0 actualChests=7 predictedChests=7 missedChests=0 extraChests=0 lootMismatch=0 modeledLootMatch=7 metadataUnverified=0 layoutMatch=2 layoutMismatch=0 layoutUnverified=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:nether_fossil actual=1 predicted=1 missed=0 extra=0 actualChests=0 predictedChests=0 missedChests=0 extraChests=0 lootMismatch=0 modeledLootMatch=0 metadataUnverified=0 layoutMatch=1 layoutMismatch=0 layoutUnverified=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+  minecraft:ruined_portal_nether actual=2 predicted=2 missed=0 extra=0 actualChests=1 predictedChests=1 missedChests=0 extraChests=0 lootMismatch=0 modeledLootMatch=1 metadataUnverified=0 layoutMatch=2 layoutMismatch=0 layoutUnverified=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+
+DIMENSION 1
+STRUCTURE_REGISTRY count=52
+  INVENTORY minecraft:abandoned_camp_bamboo_jungle type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_birch_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_cherry_grove type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_dappled_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_flower_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_meadow type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_birch_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_pine_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_spruce_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_pale_garden type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_savanna type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_snowy_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_sparse_jungle type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_swamp type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_windswept_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_wooded_badlands type=ABANDONED_CAMP
+  INVENTORY minecraft:ancient_city type=ANCIENT_CITY
+  INVENTORY minecraft:bastion_remnant type=BASTION
+  INVENTORY minecraft:buried_treasure type=TREASURE
+  INVENTORY minecraft:desert_pyramid type=DESERT_PYRAMID
+  INVENTORY minecraft:end_city type=END_CITY
+  INVENTORY minecraft:fortress type=FORTRESS
+  INVENTORY minecraft:igloo type=IGLOO
+  INVENTORY minecraft:jungle_pyramid type=JUNGLE_TEMPLE
+  INVENTORY minecraft:mansion type=MANSION
+  INVENTORY minecraft:mineshaft type=MINESHAFT
+  INVENTORY minecraft:mineshaft_mesa type=MINESHAFT
+  INVENTORY minecraft:monument type=MONUMENT
+  INVENTORY minecraft:nether_fossil type=NETHER_FOSSIL
+  INVENTORY minecraft:ocean_ruin_cold type=OCEAN_RUIN
+  INVENTORY minecraft:ocean_ruin_warm type=OCEAN_RUIN
+  INVENTORY minecraft:pillager_outpost type=OUTPOST
+  INVENTORY minecraft:ruined_portal type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_desert type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_jungle type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_mountain type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_nether type=NETHER_RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_ocean type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_swamp type=RUINED_PORTAL
+  INVENTORY minecraft:shipwreck type=SHIPWRECK
+  INVENTORY minecraft:shipwreck_beached type=SHIPWRECK
+  INVENTORY minecraft:stronghold type=STRONGHOLD
+  INVENTORY minecraft:swamp_hut type=WITCH_HUT
+  INVENTORY minecraft:trail_ruins type=TRAIL_RUINS
+  INVENTORY minecraft:trial_chambers type=TRIAL_CHAMBER
+  INVENTORY minecraft:village_desert type=VILLAGE
+  INVENTORY minecraft:village_plains type=VILLAGE
+  INVENTORY minecraft:village_savanna type=VILLAGE
+  INVENTORY minecraft:village_snowy type=VILLAGE
+  INVENTORY minecraft:village_taiga type=VILLAGE
+OBSERVATION initial layout MATCH seed=-9223372036854775808 structure=minecraft:end_city start=[-116, -334] pieces=12
+OBSERVATION container MATCH seed=-9223372036854775808 structure=minecraft:end_city positions=[BlockPos{x=-1851, y=109, z=-5330}] tables=[minecraft:chests/end_city_treasure] lootSeeds=[7388512335136389653] stacks=[minecraft:diamond_pickaxex1 enchantments={minecraft:unbreaking=3} damage=null potion=null, minecraft:diamond_swordx1 enchantments={minecraft:fire_aspect=2} damage=null potion=null, minecraft:iron_ingotx1 enchantments={} damage=null potion=null, minecraft:iron_ingotx1 enchantments={} damage=null potion=null, minecraft:iron_ingotx1 enchantments={} damage=null potion=null, minecraft:iron_ingotx5 enchantments={} damage=null potion=null]
+OBSERVATION container MATCH seed=-9223372036854775808 structure=minecraft:end_city positions=[BlockPos{x=-1849, y=109, z=-5328}] tables=[minecraft:chests/end_city_treasure] lootSeeds=[7923604749249292847] stacks=[minecraft:diamond_horse_armorx1 enchantments={} damage=null potion=null, minecraft:diamond_spearx1 enchantments={minecraft:mending=1, minecraft:sharpness=3} damage=null potion=null, minecraft:diamondx1 enchantments={} damage=null potion=null, minecraft:diamondx1 enchantments={} damage=null potion=null, minecraft:iron_leggingsx1 enchantments={minecraft:projectile_protection=4} damage=null potion=null]
+OBSERVATION initial layout MATCH seed=-9223372036854775808 structure=minecraft:end_city start=[-56, -396] pieces=17
+PROGRESS seed=-9223372036854775808 id=minecraft:end_city actual=2 predicted=2 missed=0 extra=0 actualChests=2 predictedChests=2 missedChests=0 extraChests=0 lootMismatch=0 modeledLootMatch=2 metadataUnverified=0 layoutMatch=2 layoutMismatch=0 layoutUnverified=0
+  minecraft:end_city actual=2 predicted=2 missed=0 extra=0 actualChests=2 predictedChests=2 missedChests=0 extraChests=0 lootMismatch=0 modeledLootMatch=2 metadataUnverified=0 layoutMatch=2 layoutMismatch=0 layoutUnverified=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+
+STATUS COMPLETE
+FAILURES 0
+
+UNVERIFIED 40
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:bastion_remnant chest=[BlockPos{x=-16234, y=38, z=6313}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:bastion_remnant chest=[BlockPos{x=-16232, y=72, z=6315}, BlockPos{x=-16233, y=72, z=6315}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:bastion_remnant chest=[BlockPos{x=-16230, y=33, z=6276}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:bastion_remnant chest=[BlockPos{x=-16229, y=72, z=6315}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:bastion_remnant chest=[BlockPos{x=-16220, y=58, z=6314}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:bastion_remnant chest=[BlockPos{x=-16211, y=35, z=6308}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:bastion_remnant chest=[BlockPos{x=-16207, y=33, z=6278}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:bastion_remnant chest=[BlockPos{x=-16207, y=45, z=6278}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:bastion_remnant chest=[BlockPos{x=-16202, y=51, z=6301}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:bastion_remnant chest=[BlockPos{x=-16199, y=68, z=6319}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:bastion_remnant chest=[BlockPos{x=-16195, y=58, z=6310}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:fortress chest=[BlockPos{x=6768, y=75, z=-10197}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:fortress chest=[BlockPos{x=6790, y=75, z=-10155}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:fortress chest=[BlockPos{x=6793, y=61, z=-10191}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:fortress chest=[BlockPos{x=6800, y=53, z=-10203}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:fortress chest=[BlockPos{x=6803, y=68, z=-10150}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:fortress chest=[BlockPos{x=6805, y=68, z=-10172}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ruined_portal_nether chest=[BlockPos{x=-9582, y=29, z=-1088}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:end_city chest=[BlockPos{x=-9249, y=117, z=14152}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:end_city chest=[BlockPos{x=-9247, y=117, z=14150}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:end_city chest=[BlockPos{x=-9243, y=125, z=14200}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:end_city chest=[BlockPos{x=-9241, y=111, z=14231}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:end_city chest=[BlockPos{x=-9239, y=111, z=14231}]
+  modeled loot matched but exact flag is false seed=-9223372036854775808 structure=minecraft:bastion_remnant chest=[BlockPos{x=-9865, y=73, z=-1495}, BlockPos{x=-9865, y=73, z=-1494}]
+  modeled loot matched but exact flag is false seed=-9223372036854775808 structure=minecraft:bastion_remnant chest=[BlockPos{x=-9865, y=73, z=-1490}]
+  modeled loot matched but exact flag is false seed=-9223372036854775808 structure=minecraft:bastion_remnant chest=[BlockPos{x=-9862, y=36, z=-1499}, BlockPos{x=-9862, y=36, z=-1500}]
+  modeled loot matched but exact flag is false seed=-9223372036854775808 structure=minecraft:bastion_remnant chest=[BlockPos{x=-9847, y=40, z=-1487}]
+  modeled loot matched but exact flag is false seed=-9223372036854775808 structure=minecraft:bastion_remnant chest=[BlockPos{x=-9836, y=33, z=-1494}]
+  modeled loot matched but exact flag is false seed=-9223372036854775808 structure=minecraft:bastion_remnant chest=[BlockPos{x=-9833, y=40, z=-1487}]
+  modeled loot matched but exact flag is false seed=-9223372036854775808 structure=minecraft:bastion_remnant chest=[BlockPos{x=-9827, y=36, z=-1510}]
+  modeled loot matched but exact flag is false seed=-9223372036854775808 structure=minecraft:fortress chest=[BlockPos{x=14424, y=72, z=-5636}]
+  modeled loot matched but exact flag is false seed=-9223372036854775808 structure=minecraft:fortress chest=[BlockPos{x=14439, y=57, z=-5532}]
+  modeled loot matched but exact flag is false seed=-9223372036854775808 structure=minecraft:fortress chest=[BlockPos{x=14444, y=57, z=-5584}]
+  modeled loot matched but exact flag is false seed=-9223372036854775808 structure=minecraft:fortress chest=[BlockPos{x=14467, y=72, z=-5594}]
+  modeled loot matched but exact flag is false seed=-9223372036854775808 structure=minecraft:fortress chest=[BlockPos{x=14469, y=50, z=-5634}]
+  modeled loot matched but exact flag is false seed=-9223372036854775808 structure=minecraft:fortress chest=[BlockPos{x=14470, y=57, z=-5619}]
+  modeled loot matched but exact flag is false seed=-9223372036854775808 structure=minecraft:fortress chest=[BlockPos{x=14490, y=65, z=-5611}]
+  modeled loot matched but exact flag is false seed=-9223372036854775808 structure=minecraft:ruined_portal_nether chest=[BlockPos{x=14862, y=85, z=9832}]
+  modeled loot matched but exact flag is false seed=-9223372036854775808 structure=minecraft:end_city chest=[BlockPos{x=-1851, y=109, z=-5330}]
+  modeled loot matched but exact flag is false seed=-9223372036854775808 structure=minecraft:end_city chest=[BlockPos{x=-1849, y=109, z=-5328}]

@@ -9,6 +9,7 @@ import net.minecraft.world.inventory.EnchantmentMenu;
 import net.minecraft.world.level.Level;
 
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -23,6 +24,8 @@ public final class StandaloneAncillaryRuntime {
     private final StandaloneLootSearchService lootSearch = new StandaloneLootSearchService();
     private final StandaloneCommandRouter commands;
     private final CopyOnWriteArrayList<ChestLootOutput> rememberedLoot = new CopyOnWriteArrayList<>();
+    private final LinkedHashMap<String, List<ChestLootOutput>> displayedLootByStructure = new LinkedHashMap<>();
+    private volatile long sessionGeneration;
     private boolean connected;
     private Object activeLevel;
     private Object activeDimension;
@@ -45,6 +48,11 @@ public final class StandaloneAncillaryRuntime {
     }
 
     public void tick(Minecraft client) {
+        if (refreshSession(client)) predictedMine.tick(client);
+    }
+
+    /** Also called when dispatching UI work, before the next client tick. */
+    boolean refreshSession(Minecraft client) {
         boolean nowConnected = client != null && client.player != null && client.level != null;
         Object level = nowConnected ? client.level : null;
         Object dimension = nowConnected ? client.level.dimension() : null;
@@ -62,7 +70,7 @@ public final class StandaloneAncillaryRuntime {
         activeSeed = seed;
         activeVersion = version;
         activeDimensionId = nowConnected ? dimensionId : Integer.MIN_VALUE;
-        if (nowConnected) predictedMine.tick(client);
+        return nowConnected;
     }
 
     public boolean handleChat(String raw) {
@@ -78,18 +86,59 @@ public final class StandaloneAncillaryRuntime {
         return true;
     }
 
-    public void rememberLoot(PredictionContext context, List<ChestLootOutput> chests) {
+    public synchronized void rememberLoot(PredictionContext context, List<ChestLootOutput> chests) {
         if (chests == null || chests.isEmpty()) return;
-        if (context == null || context.worldSeed() != activeSeed
-            || !context.minecraftVersion().equals(activeVersion)
-            || context.dimension() != activeDimensionId) return;
-        rememberedLoot.addAll(chests);
-        while (rememberedLoot.size() > 512) rememberedLoot.removeFirst();
-        StandalonePredictedChestOverlay.get().remember(chests);
+        if (!contextMatches(context)) return;
+        rememberCoordinates(chests);
+        StandalonePredictedChestOverlay.get().remember(context, chests);
     }
 
     public void rememberLoot(PredictionContext context, ChestLootOutput chest) {
         if (chest != null) rememberLoot(context, List.of(chest));
+    }
+
+    synchronized void rememberStructureLoot(PredictionContext context, String structureKey,
+                                            List<ChestLootOutput> canonical,
+                                            List<ChestLootOutput> displayed) {
+        if (!contextMatches(context) || structureKey == null || displayed == null) return;
+        List<ChestLootOutput> previous = displayedLootByStructure.getOrDefault(structureKey, List.of());
+        List<ChestLootOutput> canonicalOutputs = canonical == null ? List.of() : canonical;
+        List<ChestLootOutput> updated = StandaloneRememberedLoot.replace(rememberedLoot,
+            canonicalOutputs, previous, displayed, 512);
+        rememberedLoot.clear();
+        rememberedLoot.addAll(updated);
+        StandalonePredictedChestOverlay.get().forget(context, canonical == null ? List.of() : canonical);
+        StandalonePredictedChestOverlay.get().forget(context, previous);
+        rememberLoot(context, displayed);
+        displayedLootByStructure.put(structureKey, List.copyOf(displayed));
+        while (displayedLootByStructure.size() > 128) {
+            String eldest = displayedLootByStructure.keySet().iterator().next();
+            displayedLootByStructure.remove(eldest);
+        }
+    }
+
+    private void rememberCoordinates(List<ChestLootOutput> chests) {
+        List<ChestLootOutput> updated = StandaloneRememberedLoot.remember(rememberedLoot, chests, 512);
+        rememberedLoot.clear();
+        rememberedLoot.addAll(updated);
+    }
+
+    private boolean contextMatches(PredictionContext context) {
+        return context != null && context.worldSeed() == activeSeed
+            && context.minecraftVersion().equals(activeVersion)
+            && context.dimension() == activeDimensionId;
+    }
+
+    long sessionGeneration() {
+        return sessionGeneration;
+    }
+
+    boolean isCurrentSession(PredictionContext context, Object expectedLevel, long generation) {
+        Minecraft client = Minecraft.getInstance();
+        return sessionGeneration == generation && activeLevel == expectedLevel
+            && client.level == expectedLevel && context != null
+            && context.worldSeed() == config.seed()
+            && context.minecraftVersion().equals(config.predictionVersion());
     }
 
     public void onContainerInteraction(net.minecraft.core.BlockPos position) {
@@ -104,11 +153,13 @@ public final class StandaloneAncillaryRuntime {
         return seedCracker;
     }
 
-    public void resetSession() {
+    public synchronized void resetSession() {
+        sessionGeneration++;
         predictedMine.stop();
         enchantingRng.reset();
         seedCracker.reset();
         rememberedLoot.clear();
+        displayedLootByStructure.clear();
         StandalonePredictedChestOverlay.get().clear();
     }
 

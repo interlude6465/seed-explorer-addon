@@ -1,10 +1,13 @@
 package me.seedexplorer.addon.tools;
 
 import me.seedexplorer.addon.worldgen.GeneratedTerrainHeightmap;
+import me.seedexplorer.addon.worldgen.WorldgenEngine;
 import net.minecraft.SharedConstants;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.levelgen.structure.BuiltinStructures;
+import net.minecraft.world.level.levelgen.structure.StructureStart;
 
 import java.util.List;
 import java.util.Map;
@@ -45,12 +48,28 @@ public final class NaturalDecorationProbe {
         Bootstrap.bootStrap();
 
         ChunkPos target = new ChunkPos(chunkX, chunkZ);
+        List<StructureStart> terrainStarts = List.of();
+        String villageStart = System.getProperty("seedexplorer.villageStart");
+        if (villageStart != null) {
+            String[] coordinates = villageStart.split(",");
+            if (coordinates.length != 2) {
+                throw new IllegalArgumentException("villageStart must be chunkX,chunkZ");
+            }
+            StructureStart start = WorldgenEngine.generateSelectedStructureStart(seed, dimension,
+                BuiltinStructures.VILLAGE_PLAINS,
+                new ChunkPos(Integer.parseInt(coordinates[0]), Integer.parseInt(coordinates[1])));
+            if (!start.isValid()) {
+                throw new IllegalStateException("Requested plains village start is invalid: "
+                    + villageStart);
+            }
+            terrainStarts = List.of(start);
+        }
         GeneratedTerrainHeightmap firstTerrain = new GeneratedTerrainHeightmap(
-            seed, dimension, List.of(), false);
+            seed, dimension, terrainStarts, false);
         GeneratedTerrainHeightmap.NaturalDecorationSnapshot first =
             firstTerrain.naturalDecorationSnapshot(target);
         GeneratedTerrainHeightmap secondTerrain = new GeneratedTerrainHeightmap(
-            seed, dimension, List.of(), false);
+            seed, dimension, terrainStarts, false);
         GeneratedTerrainHeightmap.NaturalDecorationSnapshot second =
             secondTerrain.naturalDecorationSnapshot(target);
 
@@ -95,6 +114,32 @@ public final class NaturalDecorationProbe {
             + " chunk=" + chunkX + "," + chunkZ + " blocks=" + first.blocks().size()
             + " hash=" + Long.toUnsignedString(first.deterministicHash()));
         System.out.println("states=" + counts);
+        String inspectPosition = System.getProperty("seedexplorer.inspectPosition");
+        if (inspectPosition != null) {
+            String[] coordinates = inspectPosition.split(",");
+            if (coordinates.length != 3) {
+                throw new IllegalArgumentException("inspectPosition must be x,y,z");
+            }
+            int x = Integer.parseInt(coordinates[0]);
+            int y = Integer.parseInt(coordinates[1]);
+            int z = Integer.parseInt(coordinates[2]);
+            String observed = first.blocks().stream()
+                .filter(block -> block.x() == x && block.y() == y && block.z() == z)
+                .map(block -> String.valueOf(BuiltInRegistries.BLOCK.getKey(
+                    block.state().getBlock())))
+                .findFirst().orElse("<no-natural-block>");
+            String inspection = "inspected=" + x + "," + y + "," + z
+                + " state=" + observed + " seed=" + seed + " chunk=" + chunkX + "," + chunkZ
+                + " hash=" + Long.toUnsignedString(first.deterministicHash());
+            System.out.println(inspection);
+            try {
+                java.nio.file.Files.writeString(
+                    java.nio.file.Path.of("build", "natural-decoration-inspection.txt"),
+                    inspection + System.lineSeparator());
+            } catch (java.io.IOException error) {
+                throw new IllegalStateException("Could not save natural-decoration inspection", error);
+            }
+        }
     }
 
     private static List<String> keys(

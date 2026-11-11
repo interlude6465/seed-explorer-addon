@@ -6,8 +6,10 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.mojang.serialization.JsonOps;
 import me.seedexplorer.addon.worldgen.PredictionContext;
+import me.seedexplorer.addon.worldgen.VanillaStructurePredictor;
 import me.seedexplorer.addon.worldgen.WorldgenEngine;
 import net.minecraft.core.HolderSet;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
@@ -22,7 +24,6 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.ChunkPos;
-import net.minecraft.world.level.chunk.ChunkGeneratorStructureState;
 import net.minecraft.tags.EnchantmentTags;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.Enchantment;
@@ -33,6 +34,7 @@ import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.level.levelgen.structure.Structure;
+import net.minecraft.world.level.levelgen.structure.StructureSet;
 import net.minecraft.world.level.levelgen.structure.placement.ConcentricRingsStructurePlacement;
 import net.minecraft.world.level.levelgen.structure.placement.RandomSpreadStructurePlacement;
 import net.minecraft.world.level.levelgen.structure.placement.StructurePlacement;
@@ -87,10 +89,16 @@ public final class LootTableSimulator {
     }
 
     public static List<ItemLoot> simulate(LootTableDef table, long seed, int maxRolls) {
+        return simulate(null, table, seed, maxRolls);
+    }
+
+    /** Keeps nested fallback tables in the caller's selected prediction version. */
+    public static List<ItemLoot> simulate(BundledLootTableLoader.VersionProfile profile,
+                                          LootTableDef table, long seed, int maxRolls) {
         if (table.pools().isEmpty()) return List.of();
         LootRandom random = new LootRandom(seed);
         List<ItemLoot> results = new ArrayList<>();
-        simulateOnRandom(table, random, maxRolls, new HashMap<>(), results, new int[]{0});
+        simulateOnRandom(profile, table, random, maxRolls, new HashMap<>(), results, new int[]{0});
         return List.copyOf(results);
     }
 
@@ -114,17 +122,54 @@ public final class LootTableSimulator {
                                                   int blockX, int blockY, int blockZ) {
         PredictionContext context = legacyContext(worldSeed, dimension);
         return simulateVanilla(context, tableId, seed,
-            new LootLocation(worldSeed, dimension, blockX, blockY, blockZ));
+            new LootLocation(worldSeed, context.minecraftVersion(), dimension,
+                blockX, blockY, blockZ));
     }
 
     public static List<ItemLoot> simulateVanilla(PredictionContext context, String tableId, long seed,
                                                   int blockX, int blockY, int blockZ) {
         return simulateVanilla(context, tableId, seed,
-            new LootLocation(context.worldSeed(), context.dimension(), blockX, blockY, blockZ));
+            new LootLocation(context.worldSeed(), context.minecraftVersion(), context.dimension(),
+                blockX, blockY, blockZ));
     }
 
     private static List<ItemLoot> simulateVanilla(PredictionContext context, String tableId, long seed,
                                                    LootLocation location) {
+        List<ItemStack> stacks = simulateVanillaStacks(context, tableId, seed, location, 0);
+        if (stacks == null) return null;
+        List<ItemLoot> results = new ArrayList<>();
+        for (ItemStack stack : stacks) {
+            if (stack == null || stack.isEmpty()) continue;
+            String itemId = net.minecraft.core.registries.BuiltInRegistries.ITEM
+                .getKey(stack.getItem()).toString();
+            ItemLoot item = ItemLoot.of(itemId, stack.getCount(), stack.getCount(), 0)
+                .withDisplayName(ItemLoot.displayText(stack.getHoverName()));
+            String summary = enchantmentSummary(stack);
+            if (summary != null && !summary.isBlank()) item = item.withPredictedEnchantments(summary);
+            Integer damage = damageComponent(stack);
+            if (damage != null) item = item.withDamage(damage);
+            String potion = potionContentsComponent(stack);
+            if (potion != null) item = item.withPotionContents(potion);
+            String decorations = mapDecorationsComponent(stack);
+            if (decorations != null) item = item.withMapDecorations(decorations);
+            String stew = suspiciousStewEffectsComponent(stack);
+            if (stew != null) item = item.withSuspiciousStewEffects(stew);
+            if (hasUnrepresentedLootComponents(stack)) item = item.withUnrepresentedComponents();
+            results.add(item);
+        }
+        return List.copyOf(mergeExactStacks(results));
+    }
+
+    /** Replays vanilla inventory filling, including stack splitting and capacity. */
+    public static List<ItemStack> simulateContainerStacks(PredictionContext context, String tableId,
+                                                          long seed, int x, int y, int z, int slots) {
+        if (slots < 1) throw new IllegalArgumentException("container slots must be positive");
+        return simulateVanillaStacks(context, tableId, seed,
+            new LootLocation(context.worldSeed(), context.minecraftVersion(), context.dimension(), x, y, z), slots);
+    }
+
+    private static List<ItemStack> simulateVanillaStacks(PredictionContext context, String tableId,
+                                                         long seed, LootLocation location, int slots) {
         if (tableId == null || !tableId.startsWith("minecraft:")) return null;
         try {
             BundledLootTableLoader.VersionProfile profile = versionProfile(context);
@@ -174,19 +219,20 @@ public final class LootTableSimulator {
                     new Vec3(blockX + 0.5, blockY + 0.5, blockZ + 0.5))
                 .create(LootContextParamSets.CHEST);
 
-            List<ItemLoot> results = new ArrayList<>();
-            for (ItemStack stack : table.getRandomItems(params, seed)) {
-                if (stack == null || stack.isEmpty()) continue;
-                String itemId = net.minecraft.core.registries.BuiltInRegistries.ITEM
-                    .getKey(stack.getItem()).toString();
-                ItemLoot item = ItemLoot.of(itemId, stack.getCount(), stack.getCount(), 0);
-                String summary = enchantmentSummary(stack);
-                if (summary != null && !summary.isBlank()) {
-                    item = item.withPredictedEnchantments(summary);
-                }
-                results.add(item);
+            if (slots == 0) return List.copyOf(table.getRandomItems(params, seed));
+            // Brushable blocks retain the first rolled item, without chest
+            // splitting/shuffling. Vanilla archaeology tables use zero luck.
+            if (tableId.startsWith("minecraft:archaeology/")) {
+                return table.getRandomItems(params, seed).stream().limit(1).map(ItemStack::copy).toList();
             }
-            return List.copyOf(mergeExactStacks(results));
+            var inventory = new net.minecraft.world.SimpleContainer(slots);
+            table.fill(inventory, params, seed);
+            List<ItemStack> results = new ArrayList<>();
+            for (int slot = 0; slot < slots; slot++) {
+                ItemStack stack = inventory.getItem(slot);
+                if (!stack.isEmpty()) results.add(stack.copy());
+            }
+            return List.copyOf(results);
         } catch (Throwable failure) {
             reportVanillaFailure(tableId, failure);
             VanillaLootStructureSimulator.probe("[real-loot] failed table=" + tableId
@@ -222,14 +268,78 @@ public final class LootTableSimulator {
         return object;
     }
 
+    public static Integer damageComponent(ItemStack stack) {
+        if (stack == null || !stack.hasNonDefault(DataComponents.DAMAGE)) return null;
+        return stack.get(DataComponents.DAMAGE);
+    }
+
+    public static String potionContentsComponent(ItemStack stack) {
+        if (stack == null) return null;
+        var contents = stack.get(DataComponents.POTION_CONTENTS);
+        if (contents == null) return null;
+        String potion = contents.potion()
+            .flatMap(Holder::unwrapKey)
+            .map(key -> key.identifier().toString())
+            .orElse("");
+        return potion
+            + "|color=" + contents.customColor().map(String::valueOf).orElse("")
+            + "|name=" + contents.customName().orElse("")
+            + "|effects=" + contents.customEffects();
+    }
+
+    /** Stable across registry instances, unlike Holder object identity. */
+    public static String mapDecorationsComponent(ItemStack stack) {
+        if (stack == null) return null;
+        var decorations = stack.get(DataComponents.MAP_DECORATIONS);
+        if (decorations == null) return null;
+        var sorted = new java.util.TreeMap<String, String>();
+        decorations.decorations().forEach((id, entry) -> sorted.put(id,
+            entry.type().unwrapKey().orElseThrow().identifier() + "@"
+                + entry.x() + "," + entry.z() + "," + entry.rotation()));
+        return sorted.toString();
+    }
+
+    public static String suspiciousStewEffectsComponent(ItemStack stack) {
+        if (stack == null) return null;
+        var effects = stack.get(DataComponents.SUSPICIOUS_STEW_EFFECTS);
+        if (effects == null) return null;
+        return effects.effects().stream().map(entry ->
+            entry.effect().unwrapKey().orElseThrow().identifier() + "@" + entry.duration())
+            .toList().toString();
+    }
+
+    /** Components not represented by ItemLoot keep verification honest without
+     * discarding modeled damage, potion contents, or enchantments. */
+    public static boolean hasUnrepresentedLootComponents(ItemStack stack) {
+        if (stack == null) return false;
+        var patch = stack.getComponentsPatch().split();
+        for (var component : patch.added().keySet()) {
+            if (!modeledLootComponent(component)) return true;
+        }
+        for (var component : patch.removed()) {
+            if (!modeledLootComponent(component)) return true;
+        }
+        return false;
+    }
+
+    private static boolean modeledLootComponent(
+        net.minecraft.core.component.DataComponentType<?> type) {
+        return type == DataComponents.DAMAGE
+            || type == DataComponents.POTION_CONTENTS
+            || type == DataComponents.SUSPICIOUS_STEW_EFFECTS
+            || type == DataComponents.ENCHANTMENTS
+            || type == DataComponents.STORED_ENCHANTMENTS;
+    }
+
     /**
      * Exploration-map functions need a fully running ServerLevel only to locate
-     * the destination and attach saved-map data. Predict the destination with the
-     * same structure placements, then remove those non-random mutations. The
-     * exposed item id/count stream remains vanilla-exact.
+     * the destination and attach saved-map data. Reproduce target decorations for
+     * maps that do not skip claimed structures. Map IDs and map preview data belong
+     * to the running world's saved data and are deliberately not fabricated.
+     * Maps that skip claimed structures still require that world's claim history.
      */
     private static JsonElement resolveExplorationMaps(JsonElement element, LootLocation location,
-                                                       Map<String, Boolean> availability) {
+                                                       Map<String, Optional<BlockPos>> availability) {
         if (element == null || element.isJsonNull()) return element;
         if (element.isJsonArray()) {
             JsonArray resolved = new JsonArray();
@@ -265,11 +375,15 @@ public final class LootTableSimulator {
     /** Returns true when an exploration map cannot find a destination. */
     private static boolean resolveExplorationModifierList(JsonObject owner, String key,
                                                            LootLocation location,
-                                                           Map<String, Boolean> availability) {
+                                                           Map<String, Optional<BlockPos>> availability) {
         JsonElement modifiers = owner.get(key);
         if (modifiers == null) return false;
-        JsonArray source = modifiers.isJsonArray() ? modifiers.getAsJsonArray() : null;
-        if (source == null) return false;
+        JsonArray source;
+        if (modifiers.isJsonArray()) source = modifiers.getAsJsonArray();
+        else if (modifiers.isJsonObject()) {
+            source = new JsonArray();
+            source.add(modifiers);
+        } else return false;
 
         JsonArray retained = new JsonArray();
         boolean foundExploration = false;
@@ -284,8 +398,14 @@ public final class LootTableSimulator {
                 int radius = function.has("search_radius")
                     ? function.get("search_radius").getAsInt() : 50;
                 String cacheKey = destination + '|' + radius;
-                destinationAvailable &= availability.computeIfAbsent(cacheKey,
-                    ignored -> hasMapDestination(location, destination, radius));
+                Optional<BlockPos> target = availability.computeIfAbsent(cacheKey,
+                    ignored -> findMapDestination(location, destination, radius));
+                destinationAvailable &= target.isPresent();
+                boolean skipsClaimed = !function.has("skip_existing_chunks")
+                    || function.get("skip_existing_chunks").getAsBoolean();
+                if (!skipsClaimed && target.isPresent()) {
+                    retained.add(mapDecorationModifier(function, target.get()));
+                }
                 continue;
             }
             // This filter only validates that exploration_map attached map data.
@@ -309,9 +429,32 @@ public final class LootTableSimulator {
         return type != null && type.isJsonPrimitive() ? type.getAsString() : "";
     }
 
-    private static boolean hasMapDestination(LootLocation location, String destination,
+    private static JsonObject mapDecorationModifier(JsonObject function, BlockPos target) {
+        String decorationId = function.has("decoration")
+            ? function.get("decoration").getAsString() : "minecraft:mansion";
+        var decoration = WorldgenEngine.offlineRegistryAccess()
+            .lookupOrThrow(Registries.MAP_DECORATION_TYPE)
+            .getOrThrow(ResourceKey.create(Registries.MAP_DECORATION_TYPE,
+                Identifier.parse(decorationId)));
+        ItemStack template = new ItemStack(net.minecraft.world.item.Items.MAP);
+        net.minecraft.world.level.saveddata.maps.MapItemSavedData.addTargetDecoration(
+            template, target, "+", decoration);
+        JsonObject replacement = new JsonObject();
+        replacement.addProperty("type", "minecraft:set_components");
+        replacement.add("components", net.minecraft.core.component.DataComponentPatch.CODEC
+            .encodeStart(RegistryOps.create(JsonOps.INSTANCE, WorldgenEngine.offlineRegistryAccess()),
+                template.getComponentsPatch()).getOrThrow());
+        return replacement;
+    }
+
+    private record MapPlacement(StructurePlacement placement,
+                                Set<ResourceKey<Structure>> keys) { }
+
+    /** Mirrors vanilla's locate ordering, including its first candidate on each
+     * random-spread ring (which is not necessarily the Euclidean-nearest start). */
+    private static Optional<BlockPos> findMapDestination(LootLocation location, String destination,
                                               int searchRadius) {
-        if (destination == null || destination.isBlank()) return false;
+        if (destination == null || destination.isBlank()) return Optional.empty();
         Registry<Structure> structures = WorldgenEngine.offlineRegistryAccess()
             .lookupOrThrow(Registries.STRUCTURE);
         HolderSet<Structure> targets;
@@ -325,41 +468,78 @@ public final class LootTableSimulator {
             Holder.Reference<Structure> holder = structures.get(key).orElse(null);
             targets = holder == null ? null : HolderSet.direct(holder);
         }
-        if (targets == null || targets.size() == 0) return false;
+        if (targets == null || targets.size() == 0) return Optional.empty();
 
-        var state = WorldgenEngine.structureState(location.worldSeed(), location.dimension());
-        if (state == null) return false;
+        Set<ResourceKey<Structure>> targetKeys = new HashSet<>();
+        for (Holder<Structure> target : targets) {
+            target.unwrapKey().ifPresent(targetKeys::add);
+        }
+        if (targetKeys.isEmpty()) return Optional.empty();
+
+        var structureSets = WorldgenEngine.vanillaLookup()
+            .lookupOrThrow(Registries.STRUCTURE_SET);
         int centerChunkX = Math.floorDiv(location.x(), 16);
         int centerChunkZ = Math.floorDiv(location.z(), 16);
-        for (Holder<Structure> target : targets) {
-            ResourceKey<Structure> key = target.unwrapKey().orElse(null);
-            if (key == null) continue;
-            for (StructurePlacement placement : state.getPlacementsForStructure(target)) {
-                if (placement instanceof RandomSpreadStructurePlacement randomSpread
-                    && hasRandomSpreadDestination(location, key, randomSpread,
-                        state, centerChunkX, centerChunkZ, searchRadius)) {
-                    return true;
-                }
-                if (placement instanceof ConcentricRingsStructurePlacement rings) {
-                    List<ChunkPos> positions = state.getRingPositionsFor(rings);
-                    if (positions != null && positions.stream().anyMatch(chunk ->
-                        WorldgenEngine.generateStructureStart(location.worldSeed(),
-                            location.dimension(), key, chunk).isValid())) {
-                        return true;
+        BlockPos origin = new BlockPos(location.x(), location.y(), location.z());
+        BlockPos nearest = null;
+        double nearestDistance = Double.MAX_VALUE;
+        List<MapPlacement> randomPlacements = new ArrayList<>();
+        for (Holder.Reference<StructureSet> setHolder : structureSets.listElements().toList()) {
+            StructureSet set = setHolder.value();
+            Set<ResourceKey<Structure>> matchingKeys = new HashSet<>();
+            for (StructureSet.StructureSelectionEntry entry : set.structures()) {
+                entry.structure().unwrapKey()
+                    .filter(targetKeys::contains)
+                    .ifPresent(matchingKeys::add);
+            }
+            if (matchingKeys.isEmpty()) continue;
+
+            StructurePlacement placement = set.placement();
+            if (placement instanceof RandomSpreadStructurePlacement) {
+                randomPlacements.add(new MapPlacement(placement, matchingKeys));
+            }
+            if (placement instanceof ConcentricRingsStructurePlacement) {
+                ResourceKey<StructureSet> setKey = setHolder.unwrapKey().orElse(null);
+                if (setKey == null) continue;
+                for (ChunkPos chunk : WorldgenEngine.ringPositions(
+                    location.worldSeed(), location.dimension(), setKey)) {
+                    double distance = new BlockPos(chunk.getMiddleBlockX(), 32,
+                        chunk.getMiddleBlockZ()).distSqr(origin);
+                    if (distance >= nearestDistance) continue;
+                    for (ResourceKey<Structure> key : matchingKeys) {
+                        if (hasExactStructureAt(location, key, chunk)) {
+                            nearest = placement.getLocatePos(chunk);
+                            nearestDistance = distance;
+                            break;
+                        }
                     }
                 }
             }
         }
-        return false;
+        for (int radius = 0; radius <= searchRadius; radius++) {
+            boolean found = false;
+            for (MapPlacement entry : randomPlacements) {
+                BlockPos candidate = randomSpreadDestinationOnRing(location, entry.keys(),
+                    (RandomSpreadStructurePlacement) entry.placement(),
+                    centerChunkX, centerChunkZ, radius);
+                if (candidate == null) continue;
+                found = true;
+                double distance = candidate.distSqr(origin);
+                if (distance < nearestDistance) {
+                    nearest = candidate;
+                    nearestDistance = distance;
+                }
+            }
+            if (found) break;
+        }
+        return Optional.ofNullable(nearest);
     }
 
-    private static boolean hasRandomSpreadDestination(
-        LootLocation location, ResourceKey<Structure> key,
+    private static BlockPos randomSpreadDestinationOnRing(
+        LootLocation location, Set<ResourceKey<Structure>> keys,
         RandomSpreadStructurePlacement placement,
-        ChunkGeneratorStructureState state,
-        int centerChunkX, int centerChunkZ, int searchRadius) {
+        int centerChunkX, int centerChunkZ, int radius) {
         int spacing = placement.spacing();
-        for (int radius = 0; radius <= searchRadius; radius++) {
             for (int dx = -radius; dx <= radius; dx++) {
                 boolean xEdge = dx == -radius || dx == radius;
                 for (int dz = -radius; dz <= radius; dz++) {
@@ -367,17 +547,26 @@ public final class LootTableSimulator {
                     ChunkPos candidate = placement.getPotentialStructureChunk(
                         location.worldSeed(), centerChunkX + spacing * dx,
                         centerChunkZ + spacing * dz);
-                    if (!placement.isStructureChunk(state, candidate.x(), candidate.z())) {
-                        continue;
-                    }
-                    if (WorldgenEngine.generateStructureStart(location.worldSeed(),
-                        location.dimension(), key, candidate).isValid()) {
-                        return true;
+                    if (!placement.applyAdditionalChunkRestrictions(
+                        candidate.x(), candidate.z(), location.worldSeed())) continue;
+                    for (ResourceKey<Structure> key : keys) {
+                        if (hasExactStructureAt(location, key, candidate)) return placement.getLocatePos(candidate);
                     }
                 }
             }
-        }
-        return false;
+        return null;
+    }
+
+    private static boolean hasExactStructureAt(LootLocation location,
+                                                ResourceKey<Structure> key,
+                                                ChunkPos chunk) {
+        PredictionContext context = new PredictionContext(location.worldSeed(),
+            location.minecraftVersion(), location.dimension());
+        return VanillaStructurePredictor.predictStructure(context,
+            key.identifier().toString(), chunk.x(), chunk.z(), chunk.x(), chunk.z())
+            .stream()
+            .anyMatch(structure -> structure.startChunkX == chunk.x()
+                && structure.startChunkZ == chunk.z());
     }
 
     /** Returns false when the owning loot node must be excluded. */
@@ -441,7 +630,8 @@ public final class LootTableSimulator {
         return false;
     }
 
-    private record LootLocation(long worldSeed, int dimension, int x, int y, int z) {
+    private record LootLocation(long worldSeed, String minecraftVersion,
+                                int dimension, int x, int y, int z) {
     }
 
     private static ServerLevel liveLevel(int dimension, LootLocation location) {
@@ -470,11 +660,68 @@ public final class LootTableSimulator {
                 reportVanillaFailure(tableId, new IllegalStateException("resource unavailable"));
                 return null;
             }
-            return JsonParser.parseReader(new InputStreamReader(in));
+            return normalizeHistoricalLootJson(JsonParser.parseReader(new InputStreamReader(in)), profile);
         } catch (Throwable failure) {
             reportVanillaFailure(tableId, failure);
             return null;
         }
+    }
+
+    public static boolean enchantmentAvailableInProfile(BundledLootTableLoader.VersionProfile profile, String id) {
+        if (profile == null || profile.major() != 1) return true;
+        if (profile.minor() < 21 && (id.equals("density") || id.equals("breach"))) return false;
+        return !id.equals("lunge") || (profile.minor() >= 21 && profile.patch() >= 11);
+    }
+
+    public static Set<String> randomLootEnchantments(BundledLootTableLoader.VersionProfile profile) {
+        return RANDOM_LOOT_ENCHANTMENTS.stream()
+            .filter(id -> enchantmentAvailableInProfile(profile, id))
+            .collect(java.util.stream.Collectors.toUnmodifiableSet());
+    }
+
+    /** Translate old loot-function field names before the current codec can silently ignore them. */
+    private static JsonElement normalizeHistoricalLootJson(
+        JsonElement element, BundledLootTableLoader.VersionProfile profile) {
+        if (element == null || element.isJsonNull()) return element;
+        if (element.isJsonArray()) {
+            for (JsonElement child : element.getAsJsonArray()) normalizeHistoricalLootJson(child, profile);
+            return element;
+        }
+        if (!element.isJsonObject()) return element;
+        JsonObject object = element.getAsJsonObject();
+        if (object.has("functions") && !object.has("modifier")) {
+            object.add("modifier", object.remove("functions"));
+        }
+        if (object.has("function") && !object.has("type")) {
+            object.add("type", object.remove("function"));
+        }
+        String type = object.has("type") && object.get("type").isJsonPrimitive()
+            ? object.get("type").getAsString() : "";
+        if ("minecraft:loot_table".equals(type) && object.has("name") && !object.has("value")) {
+            object.add("value", object.remove("name"));
+        }
+        boolean randomEnchant = "minecraft:enchant_randomly".equals(type);
+        boolean levelEnchant = "minecraft:enchant_with_levels".equals(type);
+        if ((randomEnchant || levelEnchant) && !"26.3".equals(profile.minecraftVersion())) {
+            if (randomEnchant && object.has("enchantments")) {
+                object.add("options", object.remove("enchantments"));
+            }
+            JsonElement options = object.get("options");
+            boolean randomLootTag = options != null && options.isJsonPrimitive()
+                && "#minecraft:on_random_loot".equals(options.getAsString());
+            if (options == null || randomLootTag) {
+                JsonArray historicalOptions = new JsonArray();
+                boolean treasure = !levelEnchant || !object.has("treasure") || object.get("treasure").getAsBoolean();
+                for (String id : RANDOM_LOOT_ENCHANTMENTS) {
+                    if (!enchantmentAvailableInProfile(profile, id)) continue;
+                    if (!treasure && (id.endsWith("_curse") || id.equals("mending") || id.equals("frost_walker"))) continue;
+                    historicalOptions.add("minecraft:" + id);
+                }
+                object.add("options", historicalOptions);
+            }
+        }
+        for (var entry : object.entrySet()) normalizeHistoricalLootJson(entry.getValue(), profile);
+        return object;
     }
 
     private static JsonElement expandNestedLootTables(
@@ -548,7 +795,13 @@ public final class LootTableSimulator {
             for (int i = 0; i < merged.size(); i++) {
                 ItemLoot existing = merged.get(i);
                 if (existing.itemId().equals(item.itemId())
-                    && Objects.equals(existing.enchantmentSummary(), item.enchantmentSummary())) {
+                    && Objects.equals(existing.enchantmentSummary(), item.enchantmentSummary())
+                    && Objects.equals(existing.damage(), item.damage())
+                    && Objects.equals(existing.potionContents(), item.potionContents())
+                    && Objects.equals(existing.mapDecorations(), item.mapDecorations())
+                    && Objects.equals(existing.suspiciousStewEffects(), item.suspiciousStewEffects())
+                    && existing.hasUnrepresentedComponents()
+                        == item.hasUnrepresentedComponents()) {
                     existingIndex = i;
                     break;
                 }
@@ -562,12 +815,14 @@ public final class LootTableSimulator {
             merged.set(existingIndex, new ItemLoot(existing.itemId(), count, count, 0,
                 existing.displayName(), existing.randomEnchantment(), existing.enchantmentId(),
                 existing.enchantmentLevel(), null, false, 0, 0,
-                existing.enchantmentSummary(), false));
+                existing.enchantmentSummary(), false, existing.damage(),
+                existing.potionContents(), existing.hasUnrepresentedComponents(), existing.mapDecorations(),
+                existing.suspiciousStewEffects()));
         }
         return merged;
     }
 
-    private static void simulateOnRandom(LootTableDef table, LootRandom random, int maxRolls,
+    private static void simulateOnRandom(BundledLootTableLoader.VersionProfile profile, LootTableDef table, LootRandom random, int maxRolls,
                                           Map<String, Boolean> resolving, List<ItemLoot> results,
                                           int[] totalRollsRef) {
         for (LootPool pool : table.pools()) {
@@ -587,9 +842,11 @@ public final class LootTableSimulator {
 
                 if (selected.referenceTableId() != null) {
                     if (resolving.putIfAbsent(selected.referenceTableId(), Boolean.TRUE) == null) {
-                        LootTableDef refTable = VanillaLootTables.get(selected.referenceTableId());
+                        LootTableDef refTable = profile == null
+                            ? VanillaLootTables.get(selected.referenceTableId())
+                            : VanillaLootTables.get(profile, selected.referenceTableId());
                         if (refTable != null) {
-                            simulateOnRandom(refTable, random, maxRolls, resolving, results, totalRollsRef);
+                            simulateOnRandom(profile, refTable, random, maxRolls, resolving, results, totalRollsRef);
                         }
                         resolving.remove(selected.referenceTableId());
                     }
@@ -611,13 +868,16 @@ public final class LootTableSimulator {
                 if (selected.randomEnchantment()) {
                     EnchantmentRoll roll = selected.enchantmentId() != null
                         ? consumeSpecificRandomEnchantment(random, selected.enchantmentId())
-                        : consumeRandomEnchantment(random, selected.itemId());
+                        : consumeRandomEnchantment(profile, random, selected.itemId());
                     selected = new ItemLoot(selected.itemId(), selected.minCount(), selected.maxCount(),
                         selected.weight(), selected.displayName(), true,
-                        roll.id(), roll.level(), selected.referenceTableId());
+                        roll.id(), roll.level(), selected.referenceTableId(), selected.levelsEnchantment(),
+                        selected.enchantMinLevel(), selected.enchantMaxLevel(), selected.enchantmentSummary(),
+                        selected.hasDamageRoll(), selected.damage(), selected.potionContents(),
+                        selected.hasUnrepresentedComponents(), selected.mapDecorations(), selected.suspiciousStewEffects());
                 }
                 if (selected.levelsEnchantment()) {
-                    selected = applyLevelsEnchantment(selected, random);
+                    selected = applyLevelsEnchantment(profile, selected, random);
                 }
 
                 merge(results, selected, count);
@@ -634,13 +894,17 @@ public final class LootTableSimulator {
             results.set(i, new ItemLoot(selected.itemId(), mergedCount, mergedCount,
                 selected.weight(), selected.displayName(), selected.randomEnchantment(),
                 selected.enchantmentId(), selected.enchantmentLevel(), null,
-                false, 0, 0, selected.enchantmentSummary()));
+                false, 0, 0, selected.enchantmentSummary(), selected.hasDamageRoll(),
+                selected.damage(), selected.potionContents(), selected.hasUnrepresentedComponents(),
+                selected.mapDecorations(), selected.suspiciousStewEffects()));
             return;
         }
         results.add(new ItemLoot(selected.itemId(), count, count, selected.weight(),
             selected.displayName(), selected.randomEnchantment(),
             selected.enchantmentId(), selected.enchantmentLevel(), null,
-            false, 0, 0, selected.enchantmentSummary()));
+            false, 0, 0, selected.enchantmentSummary(), selected.hasDamageRoll(),
+            selected.damage(), selected.potionContents(), selected.hasUnrepresentedComponents(),
+            selected.mapDecorations(), selected.suspiciousStewEffects()));
     }
 
     private static boolean canMerge(ItemLoot existing, ItemLoot selected) {
@@ -648,7 +912,12 @@ public final class LootTableSimulator {
             && existing.randomEnchantment() == selected.randomEnchantment()
             && Objects.equals(existing.enchantmentId(), selected.enchantmentId())
             && existing.enchantmentLevel() == selected.enchantmentLevel()
-            && Objects.equals(existing.enchantmentSummary(), selected.enchantmentSummary());
+            && Objects.equals(existing.enchantmentSummary(), selected.enchantmentSummary())
+            && Objects.equals(existing.damage(), selected.damage())
+            && Objects.equals(existing.potionContents(), selected.potionContents())
+            && Objects.equals(existing.mapDecorations(), selected.mapDecorations())
+            && Objects.equals(existing.suspiciousStewEffects(), selected.suspiciousStewEffects())
+            && existing.hasUnrepresentedComponents() == selected.hasUnrepresentedComponents();
     }
 
     private static ItemLoot selectWeightedEntry(LootPool pool, LootRandom random) {
@@ -672,16 +941,18 @@ public final class LootTableSimulator {
 
 
 
-    private static EnchantmentRoll consumeRandomEnchantment(LootRandom random, String itemId) {
+    private static EnchantmentRoll consumeRandomEnchantment(BundledLootTableLoader.VersionProfile profile, LootRandom random, String itemId) {
         // Vanilla's EnchantRandomlyFunction splits by item type:
         // - enchanted_book: uses the #minecraft:on_random_loot tag (the 40-entry list).
         // - non-book gear (swords, helmets, etc.): uses ALL enchantments in the registry.
         // Using the wrong pool size causes nextInt(N) to diverge from vanilla's stream.
         boolean isBook = "minecraft:enchanted_book".equals(itemId);
+        List<String> availableIds = RANDOM_LOOT_ENCHANTMENTS.stream()
+            .filter(id -> enchantmentAvailableInProfile(profile, id)).toList();
         if (isBook) {
             // Books use #minecraft:on_random_loot — same as the RANDOM_LOOT_ENCHANTMENTS list.
             var registry = WorldgenEngine.vanillaLookup().lookupOrThrow(Registries.ENCHANTMENT);
-            List<Holder<Enchantment>> options = RANDOM_LOOT_ENCHANTMENTS.stream()
+            List<Holder<Enchantment>> options = availableIds.stream()
                 .map(id -> ResourceKey.create(Registries.ENCHANTMENT, Identifier.withDefaultNamespace(id)))
                 .map(registry::getOrThrow)
                 .map(h -> (Holder<Enchantment>) h)
@@ -693,9 +964,10 @@ public final class LootTableSimulator {
             int max = selected.value().getMaxLevel();
             int level = min;
             if (max > min) level += random.nextInt(max - min + 1);
-            String id = Identifier.withDefaultNamespace(RANDOM_LOOT_ENCHANTMENTS.get(idx)).toString();
+            String id = Identifier.withDefaultNamespace(availableIds.get(idx)).toString();
             return new EnchantmentRoll(id, level);
         }
+        // Historical fallback must not introduce enchantments from later versions.
         // Non-book gear: full enchantment registry.
         // offlineRegistryAccess() supports listElements(); vanillaLookup() throws UnsupportedOperationException.
         List<Holder<Enchantment>> options;
@@ -703,11 +975,12 @@ public final class LootTableSimulator {
             options = WorldgenEngine.offlineRegistryAccess()
                 .lookupOrThrow(Registries.ENCHANTMENT)
                 .listElements()
+                .filter(h -> enchantmentAvailableInProfile(profile, h.key().identifier().getPath()))
                 .map(h -> (Holder<Enchantment>) h)
                 .toList();
         } catch (Throwable ignored) {
             var registry = WorldgenEngine.vanillaLookup().lookupOrThrow(Registries.ENCHANTMENT);
-            options = RANDOM_LOOT_ENCHANTMENTS.stream()
+            options = availableIds.stream()
                 .map(id -> ResourceKey.create(Registries.ENCHANTMENT, Identifier.withDefaultNamespace(id)))
                 .map(registry::getOrThrow)
                 .map(h -> (Holder<Enchantment>) h)
@@ -737,7 +1010,7 @@ public final class LootTableSimulator {
         return new EnchantmentRoll(identifier.toString(), level);
     }
 
-    private static ItemLoot applyLevelsEnchantment(ItemLoot selected, LootRandom random) {
+    private static ItemLoot applyLevelsEnchantment(BundledLootTableLoader.VersionProfile profile, ItemLoot selected, LootRandom random) {
         int min = Math.max(0, selected.enchantMinLevel());
         int max = Math.max(min, selected.enchantMaxLevel());
         int level = min + (max > min ? random.nextInt(max - min + 1) : 0);
@@ -746,7 +1019,15 @@ public final class LootTableSimulator {
             ItemStack stack = new ItemStack(selected.getItem());
             RegistryAccess registryAccess = WorldgenEngine.offlineRegistryAccess();
             Optional<HolderSet<Enchantment>> options;
-            try {
+            if (profile != null && !"26.3".equals(profile.minecraftVersion())) {
+                var enchantments = registryAccess.lookupOrThrow(Registries.ENCHANTMENT);
+                List<Holder<Enchantment>> historical = RANDOM_LOOT_ENCHANTMENTS.stream()
+                    .filter(id -> enchantmentAvailableInProfile(profile, id))
+                    .map(id -> (Holder<Enchantment>) enchantments.getOrThrow(ResourceKey.create(
+                        Registries.ENCHANTMENT, Identifier.withDefaultNamespace(id))))
+                    .toList();
+                options = Optional.of(HolderSet.direct(historical));
+            } else try {
                 options = Optional.of(registryAccess.lookupOrThrow(Registries.ENCHANTMENT)
                     .getOrThrow(EnchantmentTags.ON_RANDOM_LOOT));
             } catch (Throwable ignored) {

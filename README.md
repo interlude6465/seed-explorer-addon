@@ -12,19 +12,38 @@ Remove the old Meteor Seed Explorer addon jar from that instance to avoid duplic
 frontends. A compatible standalone Baritone is optional for automatic navigation;
 mapping, loot, settings and enchanting do not require it.
 
+After building, `install-main-profile.ps1` installs the verified standalone jar into
+the `Fabric 26.3` Modrinth profile by default. Pass `-ProfileName "profile name"` to
+target another profile. The installer refuses to proceed while the legacy Meteor
+addon remains in that profile.
+
 Press **X** in a world to open the map. The gear button opens the native settings
-panel with the original 32 module controls. Open 3D from the map; move with WASD,
+panel with the module controls and a separate seed-cracking section. Open 3D from the map; move with WASD,
 hold right-click and drag to look, and use Space/C vertically. Hold left-click
 to pan the 2D map. Right-click opens a context menu: add a waypoint or view that
 location in 3D; existing waypoints offer edit/delete, and structures offer loot inspection. Search accepts
-structure/biome names, spelling approximations, coordinates, and `loot:`/`item:`
-queries. The Items/books mode supports multiple items and quantities.
+structure/biome names, spelling approximations, coordinates, ordinary chest-item
+names such as `golden apple`, and `loot:`/`item:` queries. Auto and Items/books modes
+show clickable suggestions from supported chest/barrel loot in the selected
+dimensions. The Items/books mode supports multiple items and quantities.
+Queue items such as an Unbreaking III book or an enchanted golden apple, then
+search outward from the original map position. Matching quantities accumulate
+across distinct chests; each contributing result has **Pin** and **3D** actions.
+Search results retain prediction confidence and report incomplete bounded searches.
+Left-click **Structures**, **Version**, or **Dimension** for a selection menu with
+**Reset**. Structure selections persist per dimension through reopening and 3D/back;
+the selected dimension and search options are also saved. Dense Nether fossils
+share counted icons that split as you zoom in. The map preloads a margin of terrain
+and updates while dragging. Camp and village tooltips show
+their generated variants, such as Bamboo Abandoned Camp and Plains Village.
 The **Actions** menu contains recentering, visibility, waypoint management,
 copying coordinates, teleporting, navigation and completion controls.
 In 3D, left-click a structure icon to focus on it; a right-click without dragging
 opens its action menu. Two-finger map zoom respects fractional scroll movement and
 limits large bursts. Every structure type has its own icon, including Bastion and
-End City variants.
+End City variants. Selected structures use a narrow vertical sidebar with chest
+coordinates, previous/next chest controls, **TP to chest**, and **View loot**.
+Teleporting requires permission to use Minecraft teleport commands.
 
 The map includes per-structure visibility, completion markers, editable waypoints,
 copy/teleport/navigation controls, loaded terrain, predicted ores, a minimap, and
@@ -33,6 +52,28 @@ and uploads, and a spiral presentation order. There is no guaranteed chunks-per-
 rate; throughput depends on terrain detail, worldgen, hardware and competing mods.
 Structure markers appear progressively from the center outward while the remaining
 regions are predicted; the progress counter shows completed and total regions.
+While inspecting a structure, detailed terrain starts at that structure and expands
+outward before distant coverage. Existing markers remain visible while panning or
+crossing minimap area boundaries. Completed structure regions and chest predictions
+are saved under `.cache/seed-explorer-standalone-structures/` and
+`.cache/seed-explorer-standalone-loot/`, scoped by seed, version, dimension, and
+predictor revision. Cached results retain their accuracy status.
+
+The 3D chest sidebar displays predicted items even for approximate predictions.
+Location status is separate: **Chest found** means a container is visible
+at those coordinates in the loaded world; it does not certify its contents.
+Opening a remembered predicted chest waits for the server's complete inventory
+response, then reports **Loot match**, **Loot mismatch**, or an incomplete comparison.
+An observed match applies to that inventory, independently of the structure
+family's prediction confidence.
+**Highlight chests** draws gold outlines in the Minecraft world after closing the
+map. It activates only for containers within 299 blocks in the same dimension,
+updates as you move, and clears when you change worlds or dimensions.
+Comparison includes item counts, resolved enchantment IDs/levels, damage, and
+potion contents, plus suspicious-stew effects. Unmodeled non-default item components are reported as unverified
+rather than silently treated as a match. Mismatches are recorded in
+`seed-explorer-reports/loot-mismatches.log` with context, coordinates, loot tables,
+loot seeds, predicted items, and actual stacks.
 
 ## Build and verify
 
@@ -44,7 +85,7 @@ From a clean checkout with Java 25 available:
 
 The jar is written under `standalone/build/libs/`. Press `X` in a world to open
 the map. This Fabric Loom build resolves its own dependencies and needs no Meteor
-checkout or cached Meteor jar. It runs nine headless probes and checks the packaged
+checkout or cached Meteor jar. It runs ten headless probes and checks the packaged
 class closure, mixins, service provider, texture index and absence of Meteor symbols.
 GitHub Actions runs the same build and publishes a downloadable build artifact.
 
@@ -52,12 +93,27 @@ Seeds and prediction versions are scoped per world/server. Visibility and comple
 are also scoped per profile; waypoints are scoped by seed and dimension. Display
 settings are shared. Settings are stored in `config/seed-explorer.properties`.
 
+Seed cracking has a separate settings category and an observation workspace.
+It supports structure/slime evidence, loaded bedrock/noise-biome/End-pillar capture,
+bounded candidate searches, cancellation, and explicit application of a unique
+candidate. See [the cracking workflow and limits](docs/SEED-CRACKING-INTEGRATION.md).
+
 For a development client: `.\gradlew -p standalone runClient`.
 For a live client smoke test: `.\gradlew -p standalone runClientGameTest`.
 The test creates a temporary world, checks transformed hooks, opens the native
 map/settings/3D screens, waits for generated map data and terrain draw calls,
 checks return navigation and saves screenshots. It is separate from the headless
-build checks and requires a working graphics session.
+build checks and requires a working graphics session. It also exercises physical
+map controls, marker retention, chest teleporting, and server inventory match/mismatch
+reporting in its temporary world.
+
+For the separate Minecraft 26.3 generated-world prediction audit:
+`.\gradlew -p standalone runClientGameTest -PpredictionOracle=true`.
+Use `-PpredictionOracleSeeds=1,42,12345` to choose fixed seeds. This longer test
+compares generated structure starts and containers against predictions in both
+directions, with per-variant coverage and explicit unverified cases. It writes
+`build/reports/seed-explorer-prediction-oracle-26.3.txt` relative to the test client's
+working directory. A passing bounded sample is not a guarantee for every seed.
 For manual testing without automatic shutdown, copy a saved world into
 `standalone/run/manualTest/saves/<folder>` and run
 `.\gradlew -p standalone runClient "-PmanualTestWorld=<folder>"`.
@@ -70,6 +126,11 @@ directory. The map falls back to active Minecraft resources and bundled textures
 Pale oak leaves and leaf litter are excluded from the 3D map as requested.
 
 ## Prediction scope
+
+Current validation progress and unresolved cases are recorded in the
+[evidence checkpoint](docs/prediction-evidence/README.md) and
+[per-structure audit matrix](docs/prediction-evidence/AUDIT-MATRIX.md).
+Location, initial layout, container position, and loot checks are tracked separately.
 
 The selector exposes 1.19.4, 1.20.4, 1.21, 1.21.4, 1.21.5, 1.21.11, 26.1.2, 26.2 and
 26.3 profiles. It selects loot data and gates
@@ -286,7 +347,9 @@ src/main/java/me/seedexplorer/addon/
 
 **Validation evidence** lives in `validation/oracles/` (Paper-captured JSON
 oracles pinned by SHA-256) and `validation/runtime/` (Paper server jars and
-LootProbe capture run directories).
+LootProbe capture run directories) for the legacy harness. Current Minecraft
+26.3 Fabric generated-world audit reports are archived in `docs/prediction-evidence/`.
+Local test worlds, logs, and intermediate reports remain build artifacts.
 
 ---
 
@@ -302,9 +365,11 @@ LootProbe capture run directories).
 3. **If the structure has loot chests**, run `VanillaLootStructureSimulator`
    for a known seed/chunk and verify it produces the expected containers.
 
-4. **Capture a Paper oracle** (see below) — this is the only accepted evidence
-   for product promotion. The oracle must include all chest positions,
-   loot-table IDs, and 64-bit loot seeds.
+4. **Capture an independent oracle on the target Minecraft version.** For
+   standalone 26.3, use the Fabric generated-world audit described above. For
+   the historical compatibility harness, use the Paper procedure below.
+   Compare starts in both directions, every container position, loot-table ID,
+   64-bit loot seed, and inventory contents including supported item components.
 
 5. **Add the oracle file** to `validation/oracles/` and pin its SHA-256 in
    `PredictionRegressionSuite.validateOracle()`.
@@ -312,11 +377,14 @@ LootProbe capture run directories).
 6. **Add a biome fallback** in `WorldgenEngine.generateStructureStart()` if
    the structure's biome tag may be unbound in offline lookups.
 
-7. **Add `VALIDATED_STRUCTURES`** entry in `ChestLootPredictor` and add its
-   loot tables to `VALIDATED_LOOT_TABLES`.
+7. **Promote exact predictions only after the target-version oracle passes.**
+   The standalone certification set lives in `StandaloneStructureLootPredictor`;
+   legacy validation sets live in `ChestLootPredictor`. Include generation-order
+   counterexamples and unmodeled item components when deciding accuracy status.
 
-8. **Run `predictionRegressionSuite`** — it must pass with zero differences
-   before any product exposure.
+8. **Run the standalone build and relevant live audit.** Run
+   `predictionRegressionSuite` as well for legacy compatibility changes.
+   Archive bounded coverage and unresolved cases alongside passing evidence.
 
 ---
 
@@ -341,5 +409,6 @@ Workflow:
 
 **Validation evidence must be independently generated.** Simulator output
 regenerated from the same codebase that it is meant to validate is circular
-and is not accepted as an oracle. Every oracle file must trace back to a
-fresh, independently launched Paper server.
+and is not accepted as an oracle. Every oracle file must trace back to actual
+target-version server generation, either a separate Paper server for historical
+checks or the live Fabric integrated server used by the 26.3 audit.

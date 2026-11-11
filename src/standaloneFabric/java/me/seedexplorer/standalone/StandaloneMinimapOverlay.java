@@ -233,7 +233,7 @@ final class StandaloneMinimapOverlay implements HudElement {
         cancelPredictionFuture();
         activePredictionKey = key;
         pendingPredictionKey = null;
-        prediction = PredictionSnapshot.EMPTY;
+        if (!samePredictionContext(key, prediction.key)) prediction = PredictionSnapshot.EMPTY;
         PredictionSnapshot cached;
         synchronized (predictionCache) {
             cached = predictionCache.get(key);
@@ -272,7 +272,8 @@ final class StandaloneMinimapOverlay implements HudElement {
             int maximumChunkZ = Math.floorDiv(maximumZ, 16) + 1;
             List<GeneratedStructure> structures = StandalonePredictionCache.predictDimension(
                 new PredictionContext(key.seed, key.version, key.dimension),
-                minimumChunkX, minimumChunkZ, maximumChunkX, maximumChunkZ, true, true);
+                minimumChunkX, minimumChunkZ, maximumChunkX, maximumChunkZ, true, true,
+                () -> !isCurrent(request, key));
             if (!isCurrent(request, key)) return;
             PredictionSnapshot completed = new PredictionSnapshot(key, minimumX, minimumZ,
                 colors, List.copyOf(structures));
@@ -287,7 +288,6 @@ final class StandaloneMinimapOverlay implements HudElement {
         } catch (RuntimeException | LinkageError failure) {
             if (isCurrent(request, key)) {
                 reportPredictionFailure(failure);
-                prediction = PredictionSnapshot.EMPTY;
                 pendingPredictionKey = null;
                 activePredictionKey = null;
                 predictionFuture = null;
@@ -305,7 +305,8 @@ final class StandaloneMinimapOverlay implements HudElement {
 
     private PredictionSnapshot currentPrediction() {
         PredictionSnapshot current = prediction;
-        return activePredictionKey != null && activePredictionKey.equals(current.key)
+        PredictionKey expected = new PredictionKey(config.seed(), config.predictionVersion(), cachedDimension, 0, 0);
+        return config.hasSeed() && samePredictionContext(expected, current.key)
             ? current : PredictionSnapshot.EMPTY;
     }
 
@@ -329,7 +330,9 @@ final class StandaloneMinimapOverlay implements HudElement {
     private void cancelPredictionFuture() {
         Future<?> current = predictionFuture;
         predictionFuture = null;
-        if (current != null) current.cancel(true);
+        // Interruption during a vanilla template read closes the shared jar's
+        // ZipFS channel and poisons later predictions. Cancel cooperatively.
+        if (current != null) current.cancel(false);
     }
 
     private void reportPredictionFailure(Throwable failure) {
@@ -485,6 +488,11 @@ final class StandaloneMinimapOverlay implements HudElement {
         int hudRadius = GRID_SIZE / 2 * SAMPLE_STEP;
         int maximumCenterDrift = AREA_STRIDE_BLOCKS / 2 + SAMPLE_STEP;
         return PREDICTION_RADIUS_CELLS * SAMPLE_STEP >= hudRadius + maximumCenterDrift;
+    }
+
+    static boolean samePredictionContext(PredictionKey first, PredictionKey second) {
+        return first != null && second != null && first.seed == second.seed
+            && first.dimension == second.dimension && first.version.equals(second.version);
     }
 
     record PredictionKey(long seed, String version, int dimension, int areaX, int areaZ) {

@@ -3,14 +3,30 @@ package me.seedexplorer.addon.loot;
 import java.util.Locale;
 
 /** A normalized item or enchanted-book request used by the map loot search. */
-public record LootSearchTerm(String itemId, String enchantment, int level, String display) {
+public record LootSearchTerm(String itemId, String enchantment, int level, String display,
+                             java.util.List<Property> properties) {
+    public record Property(String enchantment, int level) {
+        public Property { enchantment=enchantment.startsWith("minecraft:")?enchantment:"minecraft:"+enchantment; }
+    }
+    public LootSearchTerm(String itemId,String enchantment,int level,String display) {
+        this(itemId,enchantment,level,display,enchantment==null || enchantment.isBlank()
+            ?java.util.List.of():java.util.List.of(new Property(enchantment,level)));
+    }
+    public LootSearchTerm { properties=properties.stream().sorted(java.util.Comparator.comparing(Property::enchantment)).toList(); }
+    public static LootSearchTerm withProperties(String itemId,String display,java.util.List<Property> properties) {
+        var sorted=properties.stream().sorted(java.util.Comparator.comparing(Property::enchantment)).toList();
+        return new LootSearchTerm(itemId,sorted.isEmpty()?null:sorted.getFirst().enchantment(),
+            sorted.isEmpty()?0:sorted.getFirst().level(),display,sorted);
+    }
     public String signature() {
-        return itemId + "#" + (enchantment == null ? "" : enchantment) + "#" + level;
+        return itemId + "#" + properties;
     }
 
     public boolean matches(ItemLoot item) {
         if (item == null || !itemId.equals(item.itemId())) return false;
-        if (enchantment == null || enchantment.isBlank()) return true;
+        return properties.stream().allMatch(property -> matchesProperty(item,property.enchantment(),property.level()));
+    }
+    private static boolean matchesProperty(ItemLoot item,String enchantment,int level) {
 
         String expected = normalize(enchantment);
         if (item.enchantmentId() != null) {

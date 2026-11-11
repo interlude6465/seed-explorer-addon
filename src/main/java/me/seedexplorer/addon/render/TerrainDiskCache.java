@@ -34,9 +34,8 @@ public final class TerrainDiskCache {
     private static final int VERSION = 3;
     private static final int LEGACY_VERSION = 2;
     private static final int CELL_COUNT = 16 * 16;
-    private static final int MAX_PENDING_WRITES = 4_096;
-    private static final int BULK_WRITER_THREADS = Math.max(2,
-        Math.min(8, Runtime.getRuntime().availableProcessors() / 3));
+    private static final int MAX_PENDING_WRITES = 256;
+    private static final int BULK_WRITER_THREADS = 2;
     private static final int WRITE_LOCK_COUNT = 256;
 
     private final Path root;
@@ -60,15 +59,17 @@ public final class TerrainDiskCache {
                 thread.setPriority(Thread.MIN_PRIORITY);
                 writerThreads.add(thread);
                 return thread;
-            }, new ThreadPoolExecutor.CallerRunsPolicy());
-        writer.execute(this::scanAndEnforceLimit);
+            }, new ThreadPoolExecutor.DiscardPolicy());
+        // The default unlimited cache needs no size inventory. Walking every
+        // saved world at startup can dominate disk activity for a large cache.
+        if (maxBytes != Long.MAX_VALUE) writer.execute(this::scanAndEnforceLimit);
     }
 
     public void setBulkMode(boolean bulk) {
         int threads = bulk ? BULK_WRITER_THREADS : 1;
         writer.setCorePoolSize(threads);
         if (bulk) writer.prestartAllCoreThreads();
-        int priority = bulk ? Thread.NORM_PRIORITY : Thread.MIN_PRIORITY;
+        int priority = Thread.MIN_PRIORITY;
         for (Thread thread : writerThreads) {
             if (!thread.isAlive()) {
                 writerThreads.remove(thread);
@@ -150,6 +151,9 @@ public final class TerrainDiskCache {
     }
 
     public void storeAsync(long seed, int dimension, CachedChunk chunk) {
+        // Persistence is optional: a full queue must never run compression and
+        // filesystem writes on the renderer/generation caller. The in-memory
+        // result remains usable, and a skipped entry can be regenerated later.
         writer.execute(() -> storeNow(seed, dimension, chunk));
     }
 
@@ -238,14 +242,16 @@ public final class TerrainDiskCache {
         return Math.max(0L, knownBytes.get());
     }
 
-    private void scanAndEnforceLimit() {
+    private synchronized void scanAndEnforceLimit() {
         List<CacheFile> files = new ArrayList<>();
         long total = 0L;
         try {
             if (Files.isDirectory(root)) {
                 try (var stream = Files.walk(root)) {
-                    for (Path path : stream.filter(Files::isRegularFile)
-                        .filter(path -> path.getFileName().toString().endsWith(".tdc")).toList()) {
+                    var paths = stream.filter(path -> path.getFileName().toString().endsWith(".tdc"))
+                        .filter(Files::isRegularFile).iterator();
+                    while (paths.hasNext()) {
+                        Path path = paths.next();
                         long size = Files.size(path);
                         total += size;
                         files.add(new CacheFile(path, size, Files.getLastModifiedTime(path).toMillis()));

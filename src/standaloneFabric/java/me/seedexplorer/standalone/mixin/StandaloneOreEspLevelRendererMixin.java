@@ -1,6 +1,8 @@
 package me.seedexplorer.standalone.mixin;
 
 import me.seedexplorer.standalone.StandaloneOreEspRenderer;
+import me.seedexplorer.standalone.StandaloneSeedCrackingOutlineRenderer;
+import me.seedexplorer.standalone.StandaloneChestHighlightRenderer;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.state.level.LevelRenderState;
@@ -22,6 +24,8 @@ public abstract class StandaloneOreEspLevelRendererMixin {
         LevelRenderer renderer = (LevelRenderer) (Object) this;
         try (Gizmos.TemporaryCollection ignored = renderer.collectPerFrameRenderThreadGizmos()) {
             StandaloneOreEspRenderer.renderGizmos();
+            StandaloneSeedCrackingOutlineRenderer.renderGizmos();
+            StandaloneChestHighlightRenderer.renderGizmos();
         }
     }
 }

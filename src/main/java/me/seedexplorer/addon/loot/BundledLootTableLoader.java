@@ -66,7 +66,10 @@ public final class BundledLootTableLoader {
         new VersionProfile("1.21.11", "loot_table", indexOverrides_1_21_11()),
         new VersionProfile("26.1.2", "loot_table", indexOverrides_26_1_2()),
         new VersionProfile("26.2", "loot_table", indexOverrides_26_1_2()),
-        new VersionProfile("26.3", "loot_table", indexOverrides_26_1_2()),
+        // 26.3 added eighteen abandoned-camp structures to SURFACE_STRUCTURES.
+        // Its decoration indices must be derived from the current same-step
+        // structure registry; inheriting 26.1.2 shifts every later loot seed.
+        new VersionProfile("26.3", "loot_table", Map.of()),
     };
 
     static {
@@ -215,6 +218,12 @@ public final class BundledLootTableLoader {
         register(tableDir, "minecraft:chests/bastion_treasure", "Bastion Treasure");
         register(tableDir, "minecraft:chests/buried_treasure", "Buried Treasure");
         register(tableDir, "minecraft:chests/desert_pyramid", "Desert Pyramid");
+        register(tableDir, "minecraft:archaeology/desert_pyramid", "Desert Pyramid Archaeology");
+        register(tableDir, "minecraft:archaeology/desert_well", "Desert Well Archaeology");
+        register(tableDir, "minecraft:archaeology/ocean_ruin_cold", "Cold Ocean Ruin Archaeology");
+        register(tableDir, "minecraft:archaeology/ocean_ruin_warm", "Warm Ocean Ruin Archaeology");
+        register(tableDir, "minecraft:archaeology/trail_ruins_common", "Trail Ruins Common Archaeology");
+        register(tableDir, "minecraft:archaeology/trail_ruins_rare", "Trail Ruins Rare Archaeology");
         register(tableDir, "minecraft:chests/end_city_treasure", "End City Treasure");
         register(tableDir, "minecraft:chests/igloo_chest", "Igloo Chest");
         register(tableDir, "minecraft:chests/jungle_temple", "Jungle Temple");
@@ -415,12 +424,11 @@ public final class BundledLootTableLoader {
         }
         if ("minecraft:loot_table".equals(type)) {
             String refTableId = string(entryObj, "value");
+            if (refTableId == null) refTableId = string(entryObj, "name");
             if (refTableId == null) return null;
-            LootTableDef refTable = VanillaLootTables.get(refTableId);
-            if (refTable == null) {
-                refTable = parseTable(refTableId);
-                if (refTable != null) VanillaLootTables.register(refTable);
-            }
+            if (!refTableId.contains(":")) refTableId = "minecraft:" + refTableId;
+            // Resolve lazily with the simulator's explicit profile. Parsing must never
+            // populate or consult a shared mutable table from another version.
             return ItemLoot.tableReference(refTableId, weight(entryObj));
         }
         if (!"minecraft:item".equals(type)) return null;
@@ -455,7 +463,8 @@ public final class BundledLootTableLoader {
                     maxCount = countRange[1];
                 } else if (isEnchantRandomlyFunction(funcType, profile)) {
                     randomEnchant = true;
-                    String option = enchantOptions(funcObj.get("options"));
+                    String option = enchantOptions(funcObj.has("options")
+                        ? funcObj.get("options") : funcObj.get("enchantments"));
                     if (option != null && !option.startsWith("#")) {
                         randomEnchantOption = option;
                     }

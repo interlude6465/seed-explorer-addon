@@ -32,6 +32,7 @@ import net.minecraft.world.level.levelgen.Heightmap;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -91,6 +92,7 @@ public final class StandaloneSeedExplorerScreen extends Screen {
     private Button structureFilterButton;
     private Button deleteWaypointButton;
     private StructureType structureFilter;
+    private final Set<StructureType> selectedStructureFilters = new LinkedHashSet<>();
     private GeneratedStructure selectedStructure;
     private StandaloneWaypoint selectedWaypoint;
     private volatile List<ChestLootOutput> selectedLoot = List.of();
@@ -107,10 +109,16 @@ public final class StandaloneSeedExplorerScreen extends Screen {
     private double lastMouseY;
     private double pressMouseX, pressMouseY;
     private boolean dragMoved;
-    private double queuedZoom, zoomMouseX, zoomMouseY;
+    private boolean zoomRequestPending;
     private List<MenuAction> contextActions = List.of();
     private int contextX, contextY, contextWidth;
+    private int contextScrollOffset;
+    private static final int CONTEXT_MENU_VISIBLE_ROWS = 12;
     private volatile MapResult result;
+    // One replaceable publication: fast producers cannot queue old cumulative snapshots on the UI.
+    private final java.util.concurrent.atomic.AtomicReference<MapPublication> pendingMap =
+        new java.util.concurrent.atomic.AtomicReference<>();
+    private PredictionContext resultContext;
     private volatile OreResult oreResult;
     private volatile long activeRequest;
     private volatile String error = "";
@@ -118,6 +126,13 @@ public final class StandaloneSeedExplorerScreen extends Screen {
     private int refreshTicks;
     private int structureRegionsDone, structureRegionsTotal;
     private volatile String oreStatus = "";
+    private boolean biomeRequestPending;
+    private long lastMapRequestNanos;
+    private List<GeneratedStructure> markerSource;
+    private int markerCell = -1;
+    private List<StandaloneMapPresentation.Marker> mapMarkers = List.of();
+    private long lastMapDrawNanos;
+    private int lastDrawnMarkers, lastBiomeDrawCalls;
 
     public StandaloneSeedExplorerScreen(Screen parent, StandaloneSeedExplorerConfig config) {
         super(Component.literal("Seed Explorer"));
@@ -129,11 +144,11 @@ public final class StandaloneSeedExplorerScreen extends Screen {
     @Override
     protected void init() {
         dragging = false;
-        queuedZoom = 0.0;
         setDragging(false);
         contextActions = List.of();
         if (!initialPositionSet) {
-            if (minecraft.level != null) dimension = playerDimension();
+            dimension = config.mapDimension(minecraft.level == null ? 0 : playerDimension());
+            restoreStructureFilters();
             centerOnPlayer();
             initialPositionSet = true;
         }
@@ -146,14 +161,14 @@ public final class StandaloneSeedExplorerScreen extends Screen {
         seedField.setValue(Long.toString(effectiveSeed()));
         toolbar(Button.builder(Component.literal("Apply seed"), button -> applySeed())
             .bounds(196, rowY, compact ? 56 : 82, 20).build());
-        dimensionButton = toolbar(Button.builder(dimensionName(), button -> cycleDimension())
+        dimensionButton = toolbar(Button.builder(dimensionName(), button -> openDimensionMenu())
             .bounds(284, rowY, compact ? 70 : 90, 20).build());
-        versionButton = toolbar(Button.builder(versionName(), button -> cycleVersion())
+        versionButton = toolbar(Button.builder(versionName(), button -> openVersionMenu())
             .bounds(462, rowY, compact ? 52 : 72, 20).build());
         toolbar(Button.builder(Component.literal("Back"), button -> onClose())
             .bounds(width - 82, rowY, compact ? 48 : 72, 20).build());
         structureFilterButton = toolbar(Button.builder(structureFilterName(),
-            button -> cycleStructureFilter()).bounds(10, 38, compact ? 160 : 190, 20).build());
+            button -> openStructureMenu()).bounds(10, 38, compact ? 160 : 190, 20).build());
         toolbar(Button.builder(Component.literal("Open 3D"), button -> open3d())
             .bounds(198, 66, compact ? 66 : 82, 20).build());
         toolbar(Button.builder(Component.literal("Search"), button -> openSearch())
@@ -311,9 +326,114 @@ public final class StandaloneSeedExplorerScreen extends Screen {
     }
 
     private Component structureFilterName() {
-        return Component.literal(structureFilter == null
-            ? "Structures: Major"
-            : "Structures: " + structureFilter.displayName);
+        if (selectedStructureFilters.isEmpty()) return Component.literal("Structures: Major");
+        if (selectedStructureFilters.size() == 1) {
+            return Component.literal("Structures: " + selectedStructureFilters.iterator().next().displayName);
+        }
+        return Component.literal("Structures: " + selectedStructureFilters.size() + " selected");
+    }
+
+    private void openStructureMenu() {
+        List<MenuAction> actions = new ArrayList<>();
+        for (StructureType type : availableStructureTypes()) {
+            boolean selected = selectedStructureFilters.contains(type);
+            actions.add(new MenuAction((selected ? "[x] " : "[ ] ") + type.displayName,
+                () -> {
+                    int scroll = contextScrollOffset;
+                    if (!selectedStructureFilters.remove(type)) selectedStructureFilters.add(type);
+                    structureFilter = selectedStructureFilters.size() == 1
+                        ? selectedStructureFilters.iterator().next() : null;
+                    finishFilterChange();
+                    openStructureMenu();
+                    contextScrollOffset = scroll;
+                }));
+        }
+        actions.add(new MenuAction("Reset structures", () -> {
+            selectedStructureFilters.clear();
+            structureFilter = null;
+            finishFilterChange();
+        }));
+        showToolbarMenu(actions, structureFilterButton);
+    }
+
+    private void openVersionMenu() {
+        List<MenuAction> actions = new ArrayList<>();
+        for (String version : StandaloneSeedExplorerConfig.supportedVersions()) {
+            actions.add(new MenuAction((version.equals(config.predictionVersion()) ? "[x] " : "[ ] ") + version,
+                () -> setVersionFromMenu(version)));
+        }
+        actions.add(new MenuAction("Reset version", () -> setVersionFromMenu("26.3")));
+        showToolbarMenu(actions, versionButton);
+    }
+
+    private void setVersionFromMenu(String version) {
+        config.setPredictionVersion(version);
+        config.save();
+        selectedStructureFilters.removeIf(type -> !PredictionVersionPolicy.supportsStructure(version, type));
+        structureFilter = selectedStructureFilters.size() == 1
+            ? selectedStructureFilters.iterator().next() : null;
+        versionButton.setMessage(versionName());
+        finishFilterChange();
+    }
+
+    private void openDimensionMenu() {
+        List<MenuAction> actions = new ArrayList<>();
+        for (int target : new int[] {0, -1, 1}) {
+            String label = switch (target) { case -1 -> "Nether"; case 1 -> "End"; default -> "Overworld"; };
+            actions.add(new MenuAction((target == dimension ? "[x] " : "[ ] ") + label,
+                () -> setDimensionFromMenu(target)));
+        }
+        actions.add(new MenuAction("Reset dimension", () -> setDimensionFromMenu(0)));
+        showToolbarMenu(actions, dimensionButton);
+    }
+
+    private void setDimensionFromMenu(int target) {
+        if (target == dimension) {
+            contextActions = List.of();
+            return;
+        }
+        saveMapOptions();
+        dimension = target;
+        restoreStructureFilters();
+        dimensionButton.setMessage(dimensionName());
+        finishFilterChange();
+    }
+
+    private void finishFilterChange() {
+        saveMapOptions();
+        result = null;
+        selectedStructure = null;
+        selectWaypoint(null);
+        clearSelectedLoot();
+        structureFilterButton.setMessage(structureFilterName());
+        requestMap();
+    }
+
+    private void restoreStructureFilters() {
+        selectedStructureFilters.clear();
+        for (StructureType type : availableStructureTypes())
+            if (config.mapStructureFilters(dimension).contains(type.name())) selectedStructureFilters.add(type);
+        structureFilter = selectedStructureFilters.size() == 1 ? selectedStructureFilters.iterator().next() : null;
+    }
+
+    private void saveMapOptions() {
+        config.setMapDimension(dimension);
+        config.setMapStructureFilters(dimension, selectedStructureFilters.stream()
+            .map(Enum::name).collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new)));
+        config.save();
+    }
+
+    private void showToolbarMenu(List<MenuAction> actions, AbstractWidget anchor) {
+        contextActions = List.copyOf(actions);
+        contextScrollOffset = 0;
+        contextWidth = Math.max(150, actions.stream().mapToInt(action -> font.width(action.label()) + 16).max().orElse(150));
+        contextX = Math.max(2, Math.min(anchor.getX(), width - contextWidth - 2));
+        contextY = Math.min(anchor.getY() + anchor.getHeight() + 2,
+            Math.max(2, height - visibleMenuRows() * 22 - 2));
+    }
+
+    private int visibleMenuRows() {
+        return Math.min(contextActions.size(), Math.max(1, Math.min(CONTEXT_MENU_VISIBLE_ROWS, (height - 4) / 22)));
     }
 
     private void cycleStructureFilter() {
@@ -365,6 +485,7 @@ public final class StandaloneSeedExplorerScreen extends Screen {
     private void cycleDimension() {
         result = null;
         dimension = dimension == 0 ? -1 : dimension == -1 ? 1 : 0;
+        selectedStructureFilters.clear();
         structureFilter = null;
         selectedStructure = null;
         selectWaypoint(null);
@@ -393,12 +514,15 @@ public final class StandaloneSeedExplorerScreen extends Screen {
     void accept3DState(int selectedDimension, double x, double z,
                        GeneratedStructure structure, StandaloneWaypoint waypoint,
                        List<ChestLootOutput> knownLoot) {
-        dimension = selectedDimension;
+        if (dimension != selectedDimension) {
+            saveMapOptions();
+            dimension = selectedDimension;
+            restoreStructureFilters();
+        }
         centerX = x;
         centerZ = z;
         selectedStructure = structure;
         selectedWaypoint = structure == null ? waypoint : null;
-        structureFilter = structure == null ? null : structure.type;
         LOOT_REQUESTS.incrementAndGet();
         lootLoading = false;
         lootError = "";
@@ -411,6 +535,8 @@ public final class StandaloneSeedExplorerScreen extends Screen {
         centerX = found.x(); centerZ = found.z();
         dimensionButton.setMessage(dimensionName());
         selectedStructure = found.structure();
+        selectedStructureFilters.clear();
+        if (selectedStructure != null) selectedStructureFilters.add(selectedStructure.type);
         structureFilter = selectedStructure == null ? null : selectedStructure.type;
         structureFilterButton.setMessage(structureFilterName());
         selectWaypoint(null);
@@ -438,20 +564,27 @@ public final class StandaloneSeedExplorerScreen extends Screen {
         if (width <= 0 || height <= mapTop()) return;
         long request = REQUESTS.incrementAndGet();
         activeRequest = request;
+        zoomRequestPending = false;
+        pendingMap.set(null);
+        biomeRequestPending = true;
+        lastMapRequestNanos = System.nanoTime();
         structureRegionsDone = structureRegionsTotal = 0;
         error = "";
 
-        double requestCenterX = centerX;
-        double requestCenterZ = centerZ;
         int requestDimension = dimension;
 
-        int columns = Math.max(1, (width - 20 + CELL_SIZE - 1) / CELL_SIZE);
-        int rows = Math.max(1, (height - mapTop() - 10 + CELL_SIZE - 1) / CELL_SIZE);
+        int visibleColumns = Math.max(2, (width - 20 + CELL_SIZE - 1) / CELL_SIZE);
+        int visibleRows = Math.max(2, (height - mapTop() - 10 + CELL_SIZE - 1) / CELL_SIZE);
         double step = blocksPerPixel * CELL_SIZE;
+        int extraPadding = Math.min(16, (int) Math.ceil(config.intValue("biome-tile-margin", 2, 0, 16) * 16.0 / step));
+        int columns = ((visibleColumns + 1) / 2) * 2 + 2 * (StandaloneMapPresentation.paddingCells(visibleColumns) + extraPadding);
+        int rows = ((visibleRows + 1) / 2) * 2 + 2 * (StandaloneMapPresentation.paddingCells(visibleRows) + extraPadding);
+        // A stable sample grid makes overlapping windows reuse biome cache entries.
+        double requestCenterX = Math.floor(centerX / step) * step;
+        double requestCenterZ = Math.floor(centerZ / step) * step;
         int minBlockX = (int) Math.floor(requestCenterX - columns * step / 2.0);
         int minBlockZ = (int) Math.floor(requestCenterZ - rows * step / 2.0);
         int generationMargin = config.intValue("generation-margin", 10, 0, 48);
-        int biomeMargin = config.intValue("biome-tile-margin", 2, 0, 16);
         int minChunkX = Math.floorDiv(minBlockX, 16) - generationMargin;
         int minChunkZ = Math.floorDiv(minBlockZ, 16) - generationMargin;
         int maxChunkX = Math.floorDiv((int) Math.ceil(requestCenterX + columns * step / 2.0), 16)
@@ -459,12 +592,16 @@ public final class StandaloneSeedExplorerScreen extends Screen {
         int maxChunkZ = Math.floorDiv((int) Math.ceil(requestCenterZ + rows * step / 2.0), 16)
             + generationMargin;
         long seed = parseSeedOrEffective();
-        StructureType requestFilter = structureFilter;
+        boolean requestTreasure = selectedStructureFilters.contains(StructureType.TREASURE);
+        boolean requestMineshaft = selectedStructureFilters.contains(StructureType.MINESHAFT);
         PredictionContext context = new PredictionContext(seed, config.predictionVersion(), requestDimension);
+        if (!context.equals(resultContext)) result = null;
+        resultContext = context;
         LoadedTerrainOverlay loadedTerrain = captureLoadedTerrain(
             columns, rows, requestCenterX, requestCenterZ, step, requestDimension);
 
         requestOres(request, seed, requestDimension, requestCenterX, requestCenterZ);
+        MapResult previousMap = result;
 
         GENERATOR.execute(() -> {
             try {
@@ -477,36 +614,29 @@ public final class StandaloneSeedExplorerScreen extends Screen {
                         colors[row * columns + col] = biomeColor(seed, requestDimension, x, z);
                     }
                 }
-                if (REQUESTS.get() == request) {
-                    minecraft.execute(() -> {
-                        if (REQUESTS.get() != request) return;
-                        MapResult current = result;
-                        if (current != null && current.request == request
-                            && (current.structuresReady || !current.structures.isEmpty())) return;
-                        LoadedTerrainOverlay currentOverlay = current != null
-                            && current.request == request ? current.loadedTerrain : loadedTerrain;
-                        result = new MapResult(request, columns, rows, colors, List.of(),
-                            requestCenterX, requestCenterZ, step, seed, currentOverlay, false);
-                    });
-                }
+                List<GeneratedStructure> retained = previousMap == null ? List.of()
+                    : StandaloneMapPresentation.retainWindow(previousMap.structures,
+                        minChunkX, minChunkZ, maxChunkX, maxChunkZ);
+                if (REQUESTS.get() == request) publishMap(new MapPublication(
+                    new MapResult(request, columns, rows, colors, retained,
+                        StandaloneMapPresentation.markers(retained, step / CELL_SIZE),
+                        requestCenterX, requestCenterZ, step, seed, loadedTerrain, false), 0, 0));
                 STRUCTURE_GENERATOR.execute(() -> {
                     try {
                         StandalonePredictionCache.predictDimensionProgressive(
                             context, minChunkX, minChunkZ, maxChunkX, maxChunkZ,
-                            requestFilter == StructureType.TREASURE,
-                            requestFilter == StructureType.MINESHAFT,
+                            requestTreasure, requestMineshaft,
                             () -> REQUESTS.get() != request, progress -> {
                                 if (REQUESTS.get() != request) return;
-                                minecraft.execute(() -> {
-                                    if (REQUESTS.get() != request) return;
-                                    MapResult current = result;
-                                    LoadedTerrainOverlay currentOverlay = current != null
-                                        && current.request == request ? current.loadedTerrain : loadedTerrain;
-                                    structureRegionsDone = progress.completedRegions();
-                                    structureRegionsTotal = progress.totalRegions();
-                                    result = new MapResult(request, columns, rows, colors, progress.structures(),
-                                        requestCenterX, requestCenterZ, step, seed, currentOverlay, progress.complete());
-                                });
+                                // Merge only the prior window, not every growing intermediate snapshot.
+                                // All scans/allocations and grouping stay on this worker.
+                                var structures = progress.complete() ? progress.structures()
+                                    : mergeStructures(retained, progress.structures());
+                                var markers = StandaloneMapPresentation.markers(structures, step / CELL_SIZE);
+                                if (REQUESTS.get() == request) publishMap(new MapPublication(
+                                    new MapResult(request, columns, rows, colors, structures, markers,
+                                        requestCenterX, requestCenterZ, step, seed, loadedTerrain, progress.complete()),
+                                    progress.completedRegions(), progress.totalRegions()));
                             });
                     } catch (Throwable failure) {
                         if (REQUESTS.get() == request) {
@@ -515,20 +645,33 @@ public final class StandaloneSeedExplorerScreen extends Screen {
                         }
                     }
                 });
-                int padding = Math.min(16, (int)Math.ceil(biomeMargin * 16.0 / step));
-                for (int row = -padding; row < rows + padding; row++) {
-                    if (REQUESTS.get() != request) return;
-                    for (int col = -padding; col < columns + padding; col++) {
-                        if (row >= 0 && row < rows && col >= 0 && col < columns) continue;
-                        int x = (int)Math.floor(requestCenterX + (col - columns / 2.0 + 0.5) * step);
-                        int z = (int)Math.floor(requestCenterZ + (row - rows / 2.0 + 0.5) * step);
-                        biomeColor(seed, requestDimension, x, z);
-                    }
-                }
             } catch (Throwable failure) {
-                if (REQUESTS.get() == request) error = "Map generation failed: " + failure.getClass().getSimpleName();
+                minecraft.execute(() -> {
+                    if (REQUESTS.get() == request) {
+                        biomeRequestPending = false;
+                        error = "Map generation failed: " + failure.getClass().getSimpleName();
+                    }
+                });
             }
         });
+    }
+
+    private void publishMap(MapPublication publication) {
+        pendingMap.updateAndGet(previous -> previous == null
+            || previous.map.request <= publication.map.request ? publication : previous);
+    }
+
+    private void applyMapPublication() {
+        MapPublication publication = pendingMap.getAndSet(null);
+        if (publication == null || publication.map.request != activeRequest
+            || REQUESTS.get() != activeRequest) return;
+        result = publication.map;
+        biomeRequestPending = false;
+        structureRegionsDone = publication.completed;
+        structureRegionsTotal = publication.total;
+        markerSource = result.structures;
+        markerCell = StandaloneMapPresentation.fossilCellSize(result.step / CELL_SIZE);
+        mapMarkers = result.markers;
     }
 
     private long parseSeedOrEffective() {
@@ -551,6 +694,9 @@ public final class StandaloneSeedExplorerScreen extends Screen {
 
     @Override
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
+        applyMapPublication();
+        long drawStart = System.nanoTime();
+        lastDrawnMarkers = lastBiomeDrawCalls = 0;
         graphics.fill(0, 0, width, height, 0xFF101619);
         if (config.booleanValue("terrain-layer", true)) {
             graphics.fill(0, mapTop() - 1, width, height, 0xFF19221F);
@@ -569,15 +715,24 @@ public final class StandaloneSeedExplorerScreen extends Screen {
             graphics.pose().translate(offsetX, offsetY);
             if (config.booleanValue("biome-layer", true)) {
                 int opacity = config.intValue("biome-opacity", 255, 40, 255);
-                for (int row = 0; row < snapshot.rows; row++) {
-                    int y0 = top + row * CELL_SIZE;
-                    int y1 = Math.min(height - 10, y0 + CELL_SIZE + 1);
-                    for (int col = 0; col < snapshot.columns; col++) {
-                        int x0 = left + col * CELL_SIZE;
-                        int x1 = Math.min(width - 10, x0 + CELL_SIZE + 1);
+                int rasterX = rasterLeft(snapshot), rasterY = rasterTop(snapshot);
+                double cellSize = rasterCellSize(snapshot);
+                int firstRow = Math.max(0, (int) Math.floor((top - offsetY - rasterY) / cellSize));
+                int lastRow = Math.min(snapshot.rows, (int) Math.floor((height - 10 - offsetY - rasterY) / cellSize) + 1);
+                int firstCol = Math.max(0, (int) Math.floor((left - offsetX - rasterX) / cellSize));
+                int lastCol = Math.min(snapshot.columns, (int) Math.floor((width - 10 - offsetX - rasterX) / cellSize) + 1);
+                for (int row = firstRow; row < lastRow; row++) {
+                    int y0 = rasterY + (int) Math.round(row * cellSize);
+                    for (int col = firstCol; col < lastCol;) {
+                        int start = col++;
                         int color = (opacity << 24)
-                            | (snapshot.colors[row * snapshot.columns + col] & 0x00FFFFFF);
-                        graphics.fill(x0, y0, x1, y1, color);
+                            | (snapshot.colors[row * snapshot.columns + start] & 0x00FFFFFF);
+                        while (col < lastCol && snapshot.colors[row * snapshot.columns + col]
+                            == snapshot.colors[row * snapshot.columns + start]) col++;
+                        graphics.fill(rasterX + (int) Math.round(start * cellSize), y0,
+                            rasterX + (int) Math.round(col * cellSize),
+                            rasterY + (int) Math.round((row + 1) * cellSize), color);
+                        lastBiomeDrawCalls++;
                     }
                 }
             }
@@ -608,7 +763,7 @@ public final class StandaloneSeedExplorerScreen extends Screen {
             }
             String footer = "Seed " + snapshot.seed + "  |  "
                 + visibleStructureCount(snapshot) + " structures  |  "
-                + formatScale(snapshot.step / CELL_SIZE) + " blocks/px";
+                + formatScale(blocksPerPixel) + " blocks/px";
             OreResult ores = oreResult;
             if (ores != null && ores.request == snapshot.request && !ores.patches.isEmpty()) {
                 footer += "  |  " + ores.patches.size() + " ore markers";
@@ -624,28 +779,36 @@ public final class StandaloneSeedExplorerScreen extends Screen {
         }
         super.extractRenderState(graphics, mouseX, mouseY, delta);
         drawContextMenu(graphics, mouseX, mouseY);
+        lastMapDrawNanos = System.nanoTime() - drawStart;
     }
 
     private int panOffsetX(MapResult map) {
-        return (int) Math.round((map.centerX - centerX) / (map.step / CELL_SIZE));
+        return (int) Math.round((map.centerX - centerX) / blocksPerPixel);
     }
 
+    private double rasterCellSize(MapResult map) { return map.step / blocksPerPixel; }
+
+    private int rasterLeft(MapResult map) { return (int) Math.round((width - map.columns * rasterCellSize(map)) / 2); }
+    private int rasterTop(MapResult map) { return (int) Math.round(mapTop() + (height - mapTop() - 10 - map.rows * rasterCellSize(map)) / 2); }
+
     private int panOffsetY(MapResult map) {
-        return (int) Math.round((map.centerZ - centerZ) / (map.step / CELL_SIZE));
+        return (int) Math.round((map.centerZ - centerZ) / blocksPerPixel);
     }
 
     private void drawContextMenu(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
         if (contextActions.isEmpty()) return;
         graphics.nextStratum();
+        int visibleRows = visibleMenuRows();
         graphics.fill(contextX - 1, contextY - 1, contextX + contextWidth + 1,
-            contextY + contextActions.size() * 22 + 1, 0xFF658878);
-        for (int i = 0; i < contextActions.size(); i++) {
+            contextY + visibleRows * 22 + 1, 0xFF658878);
+        for (int i = 0; i < visibleRows; i++) {
+            int index = contextScrollOffset + i;
             int y = contextY + i * 22;
             boolean hovered = mouseX >= contextX && mouseX < contextX + contextWidth
                 && mouseY >= y && mouseY < y + 22;
             graphics.fill(contextX, y, contextX + contextWidth, y + 22,
                 hovered ? 0xFF324F43 : 0xFF15251E);
-            graphics.text(font, contextActions.get(i).label(), contextX + 8, y + 7, 0xFFFFFFFF);
+            graphics.text(font, contextActions.get(index).label(), contextX + 8, y + 7, 0xFFFFFFFF);
         }
     }
 
@@ -675,6 +838,7 @@ public final class StandaloneSeedExplorerScreen extends Screen {
             new StandaloneStructureDetailScreen(this, config,
                 new PredictionContext(snapshot.seed, config.predictionVersion(), dimension), structure))));
         contextActions = List.copyOf(actions);
+        contextScrollOffset = 0;
         contextWidth = actions.stream().mapToInt(action -> font.width(action.label()) + 16).max().orElse(130);
         contextX = Math.max(2, Math.min((int) mouseX, width - contextWidth - 2));
         contextY = Math.max(mapTop(), Math.min((int) mouseY, height - actions.size() * 22 - 2));
@@ -721,17 +885,18 @@ public final class StandaloneSeedExplorerScreen extends Screen {
         if (!config.booleanValue("loaded-terrain-on-map", true)) return;
         LoadedTerrainOverlay overlay = map.loadedTerrain;
         if (overlay == null || overlay.colors.length == 0) return;
-        int left = 10;
-        int top = mapTop();
-        int size = CELL_SIZE * overlay.stride;
+        int left = rasterLeft(map);
+        int top = rasterTop(map);
+        double cellSize = rasterCellSize(map);
+        int size = (int) Math.ceil(cellSize * overlay.stride);
         for (int row = 0; row < map.rows; row += overlay.stride) {
             for (int col = 0; col < map.columns; col += overlay.stride) {
                 int color = overlay.colors[row * map.columns + col];
                 if (color == 0) continue;
-                int x0 = left + col * CELL_SIZE;
-                int y0 = top + row * CELL_SIZE;
-                graphics.fill(x0, y0, Math.min(width - 10, x0 + size + 1),
-                    Math.min(height - 10, y0 + size + 1), color);
+                int x0 = left + (int) Math.round(col * cellSize);
+                int y0 = top + (int) Math.round(row * cellSize);
+                if (!visibleWhilePanning(map, x0 + size / 2, y0 + size / 2, size)) continue;
+                graphics.fill(x0, y0, x0 + size, y0 + size, color);
             }
         }
     }
@@ -814,7 +979,7 @@ public final class StandaloneSeedExplorerScreen extends Screen {
     }
 
     private void drawOreOverlay(GuiGraphicsExtractor graphics, MapResult map) {
-        double blocksPerPixel = map.step / CELL_SIZE;
+        double blocksPerPixel = this.blocksPerPixel;
         if (!config.booleanValue("map-ore-overlay", false)) return;
         OreResult ores = oreResult;
         if (ores == null || ores.request != map.request) return;
@@ -843,6 +1008,7 @@ public final class StandaloneSeedExplorerScreen extends Screen {
         int mapWidth = width - 20;
         int mapHeight = height - top - 10;
         GeneratedStructure hovered = null;
+        int hoveredCount = 1;
         Set<Long> waypointPositions = Set.of();
         if (config.booleanValue("dim-waypoint-structures", true)) {
             waypointPositions = new HashSet<>();
@@ -850,12 +1016,14 @@ public final class StandaloneSeedExplorerScreen extends Screen {
                 waypointPositions.add(packedPosition(waypoint.x(), waypoint.z()));
             }
         }
-        for (GeneratedStructure structure : map.structures) {
+        int radius = structureIconRadius();
+        for (StandaloneMapPresentation.Marker marker : markers(map)) {
+            GeneratedStructure structure = marker.structure();
             if (!isStructureVisible(structure)) continue;
-            int x = left + (int) Math.round(mapWidth / 2.0 + (structure.x - map.centerX) / map.step * CELL_SIZE);
-            int y = top + (int) Math.round(mapHeight / 2.0 + (structure.z - map.centerZ) / map.step * CELL_SIZE);
-            if (x < left || x >= width - 10 || y < top || y >= height - 10) continue;
-            int radius = structureIconRadius();
+            int x = left + (int) Math.round(mapWidth / 2.0 + (structure.x - map.centerX) / blocksPerPixel);
+            int y = top + (int) Math.round(mapHeight / 2.0 + (structure.z - map.centerZ) / blocksPerPixel);
+            if (!visibleWhilePanning(map, x, y, radius)) continue;
+            lastDrawnMarkers++;
             boolean dimmed = waypointPositions.contains(packedPosition(structure.x, structure.z))
                 || config.completed(dimension, structure.type.name(), structure.x, structure.z);
             boolean selected = structure.equals(selectedStructure);
@@ -865,18 +1033,38 @@ public final class StandaloneSeedExplorerScreen extends Screen {
                 x - radius, y - radius, x + radius, y + radius,
                 0.0f, 1.0f, 0.0f, 1.0f);
             if (dimmed) graphics.fill(x - radius, y - radius, x + radius, y + radius, 0x800A1110);
+            if (marker.count() > 1) graphics.text(font, Integer.toString(marker.count()),
+                x + radius - 2, y + radius - 4, 0xFFFFFFFF);
             if (Math.abs(mouseX - x) <= radius + 3 && Math.abs(mouseY - y) <= radius + 3) {
                 hovered = structure;
+                hoveredCount = marker.count();
             }
         }
         if (hovered != null && config.booleanValue("structure-tooltips", true)) {
-            String label = hovered.displayName() + "  " + hovered.getCoordsString();
+            String label = hovered.displayName() + (hoveredCount > 1 ? " x" + hoveredCount + " (zoom in)" : "")
+                + "  " + hovered.getCoordsString();
             int labelWidth = font.width(label) + 10;
             int x = Math.min(width - labelWidth - 8, Math.max(8, mouseX + 10));
             int y = Math.max(top + 4, mouseY - 22);
             graphics.fill(x, y, x + labelWidth, y + 18, 0xE8101714);
             graphics.text(font, label, x + 5, y + 5, 0xFFFFFFFF);
         }
+    }
+
+    private List<StandaloneMapPresentation.Marker> markers(MapResult map) {
+        int cell = StandaloneMapPresentation.fossilCellSize(blocksPerPixel);
+        if (markerSource != map.structures || markerCell != cell) {
+            markerSource = map.structures;
+            markerCell = cell;
+            mapMarkers = StandaloneMapPresentation.markers(map.structures, blocksPerPixel);
+        }
+        return mapMarkers;
+    }
+
+    private boolean visibleWhilePanning(MapResult map, int x, int y, int radius) {
+        int actualX = x + panOffsetX(map), actualY = y + panOffsetY(map);
+        return actualX + radius >= 10 && actualX - radius < width - 10
+            && actualY + radius >= mapTop() && actualY - radius < height - 10;
     }
 
     private void drawWaypoints(GuiGraphicsExtractor graphics, MapResult map, int mouseX, int mouseY) {
@@ -886,7 +1074,7 @@ public final class StandaloneSeedExplorerScreen extends Screen {
         for (StandaloneWaypoint waypoint : config.waypoints(map.seed, dimension)) {
             int x = screenX(map, waypoint.x());
             int y = screenY(map, waypoint.z());
-            if (!insideMap(x, y)) continue;
+            if (!visibleWhilePanning(map, x, y, radius)) continue;
             int border = waypoint.equals(selectedWaypoint) ? 0xFFFFFFFF : 0xFF101619;
             graphics.fill(x - 1, y - radius - 1, x + 2, y + radius + 2, border);
             graphics.fill(x - radius - 1, y - 1, x + radius + 2, y + 2, border);
@@ -915,15 +1103,15 @@ public final class StandaloneSeedExplorerScreen extends Screen {
     private int visibleStructureCount(MapResult map) {
         if (!config.booleanValue("structure-layer", true)) return 0;
         int count = 0;
-        for (GeneratedStructure structure : map.structures) {
-            if (isStructureVisible(structure)) count++;
+        for (StandaloneMapPresentation.Marker marker : markers(map)) {
+            if (isStructureVisible(marker.structure())) count += marker.count();
         }
         return count;
     }
 
     private boolean isStructureVisible(GeneratedStructure structure) {
         return config.structureVisible(structure.type.name())
-            && (structureFilter == null || structure.type == structureFilter);
+            && (selectedStructureFilters.isEmpty() || selectedStructureFilters.contains(structure.type));
     }
 
     private GeneratedStructure structureAt(MapResult map, double mouseX, double mouseY) {
@@ -933,12 +1121,13 @@ public final class StandaloneSeedExplorerScreen extends Screen {
         int mapHeight = height - top - 10;
         GeneratedStructure closest = null;
         double closestDistance = Double.MAX_VALUE;
-        for (GeneratedStructure structure : map.structures) {
+        for (StandaloneMapPresentation.Marker marker : markers(map)) {
+            GeneratedStructure structure = marker.structure();
             if (!isStructureVisible(structure)) continue;
             int x = left + (int) Math.round(mapWidth / 2.0
-                + (structure.x - map.centerX) / map.step * CELL_SIZE);
+                + (structure.x - map.centerX) / blocksPerPixel);
             int y = top + (int) Math.round(mapHeight / 2.0
-                + (structure.z - map.centerZ) / map.step * CELL_SIZE);
+                + (structure.z - map.centerZ) / blocksPerPixel);
             double distance = Math.max(Math.abs(mouseX - x), Math.abs(mouseY - y));
             if (distance <= structureIconRadius() + 3.0 && distance < closestDistance) {
                 closest = structure;
@@ -1060,28 +1249,63 @@ public final class StandaloneSeedExplorerScreen extends Screen {
         lootSupported = structure.type == StructureType.DUNGEON
             || StandaloneStructureLootPredictor.structureKey(context, structure) != null;
         if (!lootSupported) return;
+        var saved = StandalonePersistentLootCache.get(context, structure);
+        var observations = SeedExplorerFabricClient.lootObservations(context);
+        if (saved.isPresent() && !StandaloneObservedLootRefinement.canRefine(context, structure, observations)) {
+            selectedLoot = saved.get();
+            StandaloneObservedLootRefinement.remember(context, structure, saved.get(), selectedLoot);
+            return;
+        }
         long request = LOOT_REQUESTS.incrementAndGet();
+        StandaloneLootRequestGuard guard = StandaloneLootRequestGuard.capture(context);
         lootLoading = true;
         LOOT_GENERATOR.execute(() -> {
+            if (LOOT_REQUESTS.get() != request || selectedStructure != structure) return;
             try {
-                List<ChestLootOutput> predicted = StandaloneStructureLootPredictor.predict(
-                    context, structure, 64);
-                if (LOOT_REQUESTS.get() == request) {
+                List<ChestLootOutput> canonical = saved.orElseGet(() ->
+                    StandaloneStructureLootPredictor.predict(context, structure, 64));
+                if (saved.isEmpty()) StandalonePersistentLootCache.put(context, structure, canonical);
+                List<ChestLootOutput> predicted = StandaloneObservedLootRefinement.refine(
+                    context, structure, canonical, observations);
+                minecraft.execute(() -> {
+                    if (LOOT_REQUESTS.get() != request || selectedStructure != structure) return;
+                    if (!guard.isCurrent()) {
+                        lootLoading = false;
+                        lootError = "World or prediction settings changed; select again";
+                        return;
+                    }
                     selectedLoot = predicted;
-                    minecraft.execute(() -> {
-                        if (LOOT_REQUESTS.get() == request && StandaloneAncillaryRuntime.get() != null)
-                            StandaloneAncillaryRuntime.get().rememberLoot(context, predicted);
-                    });
-                }
+                    lootLoading = false;
+                    StandaloneObservedLootRefinement.remember(context, structure, canonical, predicted);
+                });
             } catch (Throwable failure) {
-                if (LOOT_REQUESTS.get() == request) {
+                minecraft.execute(() -> {
+                    if (LOOT_REQUESTS.get() != request || selectedStructure != structure) return;
+                    if (!guard.isCurrent()) {
+                        lootLoading = false;
+                        lootError = "World or prediction settings changed; select again";
+                        return;
+                    }
                     lootError = failure.getClass().getSimpleName();
-                }
-            } finally {
-                if (LOOT_REQUESTS.get() == request) lootLoading = false;
+                    lootLoading = false;
+                });
             }
         });
     }
+
+    private static List<GeneratedStructure> mergeStructures(List<GeneratedStructure> known,
+                                                            List<GeneratedStructure> incoming) {
+        if (known.isEmpty()) return incoming;
+        java.util.Map<StructureKey, GeneratedStructure> merged = new java.util.LinkedHashMap<>();
+        for (var group : List.of(known, incoming)) for (var structure : group) {
+            var key = new StructureKey(structure.type, structure.startChunkX, structure.startChunkZ,
+                structure.x, structure.y, structure.z, structure.variant);
+            merged.put(key, structure);
+        }
+        return List.copyOf(merged.values());
+    }
+
+    private record StructureKey(StructureType type, int startX, int startZ, int x, int y, int z, String variant) { }
 
     private static int markerColor(GeneratedStructure structure) {
         return switch (structure.type.dimension) {
@@ -1104,7 +1328,7 @@ public final class StandaloneSeedExplorerScreen extends Screen {
     }
 
     private void drawChunkBorders(GuiGraphicsExtractor graphics, MapResult map) {
-        double blocksPerPixel = map.step / CELL_SIZE;
+        double blocksPerPixel = this.blocksPerPixel;
         if (!config.booleanValue("chunk-borders-layer", true)) return;
         double pixelsPerChunk = 16.0 / blocksPerPixel;
         if (pixelsPerChunk < 5.0) return;
@@ -1131,7 +1355,7 @@ public final class StandaloneSeedExplorerScreen extends Screen {
     }
 
     private void drawPlayerMarker(GuiGraphicsExtractor graphics, MapResult map) {
-        double blocksPerPixel = map.step / CELL_SIZE;
+        double blocksPerPixel = this.blocksPerPixel;
         if (!config.booleanValue("player-layer", true) || minecraft == null
             || minecraft.player == null || playerDimension() != dimension) return;
         int left = 10;
@@ -1148,7 +1372,7 @@ public final class StandaloneSeedExplorerScreen extends Screen {
     }
 
     private void drawCoordinates(GuiGraphicsExtractor graphics, MapResult map, int mouseX, int mouseY) {
-        double blocksPerPixel = map.step / CELL_SIZE;
+        double blocksPerPixel = this.blocksPerPixel;
         if (!config.booleanValue("coordinates-layer", true)) return;
         int left = 10;
         int top = mapTop();
@@ -1171,9 +1395,10 @@ public final class StandaloneSeedExplorerScreen extends Screen {
     public boolean mouseClicked(MouseButtonEvent click, boolean doubled) {
         if (!contextActions.isEmpty()) {
             int row = (int) ((click.y() - contextY) / 22);
+            int visibleRows = visibleMenuRows();
             if (click.button() == InputConstants.MOUSE_BUTTON_LEFT && click.x() >= contextX && click.x() < contextX + contextWidth
-                && click.y() >= contextY && row >= 0 && row < contextActions.size()) {
-                Runnable action = contextActions.get(row).action();
+                && click.y() >= contextY && row >= 0 && row < visibleRows) {
+                Runnable action = contextActions.get(contextScrollOffset + row).action();
                 contextActions = List.of();
                 action.run();
                 return true;
@@ -1184,7 +1409,6 @@ public final class StandaloneSeedExplorerScreen extends Screen {
         }
         if ((click.button() == InputConstants.MOUSE_BUTTON_LEFT || click.button() == InputConstants.MOUSE_BUTTON_RIGHT) && insideMap((int) click.x(), (int) click.y())) {
             setFocused(null);
-            queuedZoom = 0.0;
             MapResult snapshot = result;
             if (click.button() == InputConstants.MOUSE_BUTTON_RIGHT) {
                 dragging = false;
@@ -1264,21 +1488,21 @@ public final class StandaloneSeedExplorerScreen extends Screen {
 
     private int screenX(MapResult map, int worldX) {
         return 10 + (int) Math.round((width - 20) / 2.0
-            + (worldX - map.centerX) / map.step * CELL_SIZE);
+            + (worldX - map.centerX) / blocksPerPixel);
     }
 
     private int screenY(MapResult map, int worldZ) {
         return mapTop() + (int) Math.round((height - mapTop() - 10) / 2.0
-            + (worldZ - map.centerZ) / map.step * CELL_SIZE);
+            + (worldZ - map.centerZ) / blocksPerPixel);
     }
 
     private int worldX(MapResult map, double screenX) {
-        double blocksPerPixel = map.step / CELL_SIZE;
+        double blocksPerPixel = this.blocksPerPixel;
         return (int) Math.floor(centerX + (screenX - width / 2.0) * blocksPerPixel);
     }
 
     private int worldZ(MapResult map, double screenY) {
-        double blocksPerPixel = map.step / CELL_SIZE;
+        double blocksPerPixel = this.blocksPerPixel;
         double centerScreenY = mapTop() + (height - mapTop() - 10) / 2.0;
         return (int) Math.floor(centerZ + (screenY - centerScreenY) * blocksPerPixel);
     }
@@ -1300,7 +1524,7 @@ public final class StandaloneSeedExplorerScreen extends Screen {
         if (click.button() == InputConstants.MOUSE_BUTTON_LEFT && dragging) {
             dragging = false;
             setDragging(false);
-            if (dragMoved) requestMap();
+            if (dragMoved) requestPanIfNeeded();
             return true;
         }
         return super.mouseReleased(click);
@@ -1310,7 +1534,7 @@ public final class StandaloneSeedExplorerScreen extends Screen {
     public boolean mouseDragged(MouseButtonEvent click, double deltaX, double deltaY) {
         if (!dragging || click.button() != InputConstants.MOUSE_BUTTON_LEFT) return super.mouseDragged(click, deltaX, deltaY);
         if (!dragMoved && Math.hypot(click.x() - pressMouseX, click.y() - pressMouseY) < 3.0) return true;
-        double scale = result == null ? blocksPerPixel : result.step / CELL_SIZE;
+        double scale = blocksPerPixel;
         double moveX = dragMoved ? deltaX : click.x() - pressMouseX;
         double moveY = dragMoved ? deltaY : click.y() - pressMouseY;
         dragMoved = true;
@@ -1318,51 +1542,63 @@ public final class StandaloneSeedExplorerScreen extends Screen {
         centerZ -= moveY * scale;
         lastMouseX = click.x();
         lastMouseY = click.y();
+        requestPanIfNeeded();
         return true;
+    }
+
+    private void requestPanIfNeeded() {
+        MapResult map = result;
+        if (map == null || biomeRequestPending || System.nanoTime() - lastMapRequestNanos < 150_000_000L) return;
+        double marginX = (map.columns * rasterCellSize(map) - (width - 20)) / 2.0;
+        double marginY = (map.rows * rasterCellSize(map) - (height - mapTop() - 10)) / 2.0;
+        if (Math.abs(panOffsetX(map)) > marginX / 2 || Math.abs(panOffsetY(map)) > marginY / 2)
+            requestMap();
     }
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+        if (!contextActions.isEmpty()) {
+            if (mouseX >= contextX && mouseX < contextX + contextWidth
+                && mouseY >= contextY && mouseY < contextY + visibleMenuRows() * 22) {
+                int maximum = Math.max(0, contextActions.size() - visibleMenuRows());
+                contextScrollOffset = Math.max(0, Math.min(maximum,
+                    contextScrollOffset + (verticalAmount < 0 ? 1 : -1)));
+            }
+            return true;
+        }
         if (!insideMap((int) mouseX, (int) mouseY)) {
             return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
         }
         if (!Double.isFinite(verticalAmount) || verticalAmount == 0.0) return true;
         contextActions = List.of();
-        // SDL touchpads emit many fractional events. Preserve their magnitude instead of
-        // treating every event as a wheel notch, and bound burst/backlog size.
-        queuedZoom = Math.max(-3.0, Math.min(3.0, queuedZoom + verticalAmount));
-        zoomMouseX = mouseX;
-        zoomMouseY = mouseY;
-        return true;
-    }
-
-    private void applyQueuedZoom() {
-        if (dragging || Math.abs(queuedZoom) < 1.0e-6) return;
-        double amount = Math.max(-0.25, Math.min(0.25, queuedZoom));
-        queuedZoom -= amount;
+        // Apply the full fractional event immediately. There is no animation queue to
+        // continue moving the map after the user's wheel stops.
         double oldScale = blocksPerPixel;
         double zoomStep = config.doubleValue("zoom-step", 1.2, 1.01, 2.0);
-        blocksPerPixel = clampScale(oldScale * Math.pow(zoomStep, -amount));
-        if (blocksPerPixel == oldScale) { queuedZoom = 0.0; return; }
+        blocksPerPixel = clampScale(oldScale * Math.pow(zoomStep, -verticalAmount));
+        if (blocksPerPixel == oldScale) return true;
         double top = mapTop();
-        double anchorX = (zoomMouseX - width / 2.0) * oldScale;
-        double anchorZ = (zoomMouseY - (top + (height - top - 10) / 2.0)) * oldScale;
-        centerX += anchorX * (1.0 - blocksPerPixel / oldScale);
-        centerZ += anchorZ * (1.0 - blocksPerPixel / oldScale);
-        requestMap();
+        centerX += (mouseX - width / 2.0) * (oldScale - blocksPerPixel);
+        centerZ += (mouseY - (top + (height - top - 10) / 2.0)) * (oldScale - blocksPerPixel);
+        // Render the existing raster at the new scale now; coalesce regeneration to
+        // one request per client tick when a touchpad emits many events per frame.
+        zoomRequestPending = true;
+        return true;
     }
 
     @Override
     public void tick() {
         super.tick();
-        applyQueuedZoom();
+        applyMapPublication();
+        if (zoomRequestPending) requestMap();
+        requestPanIfNeeded();
         MapResult snapshot = result;
         if (++refreshTicks >= 20 && snapshot != null && snapshot.request == activeRequest && !dragging) {
             refreshTicks = 0;
             LoadedTerrainOverlay overlay = captureLoadedTerrain(snapshot.columns, snapshot.rows,
                 snapshot.centerX, snapshot.centerZ, snapshot.step, dimension);
             result = new MapResult(snapshot.request, snapshot.columns, snapshot.rows, snapshot.colors,
-                snapshot.structures, snapshot.centerX, snapshot.centerZ, snapshot.step, snapshot.seed,
+                snapshot.structures, snapshot.markers, snapshot.centerX, snapshot.centerZ, snapshot.step, snapshot.seed,
                 overlay, snapshot.structuresReady);
         }
         if (dragging || !contextActions.isEmpty() || !config.booleanValue("auto-center-player", false) || minecraft == null
@@ -1410,6 +1646,8 @@ public final class StandaloneSeedExplorerScreen extends Screen {
 
     @Override
     public void removed() {
+        saveMapOptions();
+        pendingMap.set(null);
         REQUESTS.compareAndSet(activeRequest, activeRequest + 1);
         LOOT_REQUESTS.incrementAndGet();
         ORE_REQUESTS.incrementAndGet();
@@ -1422,10 +1660,12 @@ public final class StandaloneSeedExplorerScreen extends Screen {
     }
 
     private record MapResult(long request, int columns, int rows, int[] colors,
-                             List<GeneratedStructure> structures, double centerX,
+                             List<GeneratedStructure> structures, List<StandaloneMapPresentation.Marker> markers, double centerX,
                              double centerZ, double step, long seed,
                              LoadedTerrainOverlay loadedTerrain, boolean structuresReady) {
     }
+
+    private record MapPublication(MapResult map, int completed, int total) { }
 
     private record LoadedTerrainOverlay(int stride, int[] colors) {
         private static final LoadedTerrainOverlay EMPTY = new LoadedTerrainOverlay(1, new int[0]);

@@ -7,7 +7,7 @@ import me.seedexplorer.addon.structures.StructureType;
 import me.seedexplorer.addon.worldgen.PredictionContext;
 
 import java.util.List;
-import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -15,12 +15,12 @@ import java.util.concurrent.atomic.AtomicLong;
 /** Request-safe selection and loot state for the standalone 3D map. */
 final class Standalone3DSelectionController {
     private static final ThreadPoolExecutor LOOT_EXECUTOR = new ThreadPoolExecutor(1, 1,
-        30, TimeUnit.SECONDS, new ArrayBlockingQueue<>(1), runnable -> {
+        30, TimeUnit.SECONDS, new LinkedBlockingQueue<>(), runnable -> {
             Thread thread = new Thread(runnable, "Seed Explorer 3D loot");
             thread.setDaemon(true);
             thread.setPriority(Thread.MIN_PRIORITY);
             return thread;
-        }, new ThreadPoolExecutor.DiscardOldestPolicy());
+        });
 
     private final long seed;
     private final int dimension;
@@ -52,27 +52,56 @@ final class Standalone3DSelectionController {
             return;
         }
         PredictionContext context = context();
+        StandaloneLootRequestGuard guard = StandaloneLootRequestGuard.capture(context);
         supported = selected.type == StructureType.DUNGEON
             || StandaloneStructureLootPredictor.structureKey(context, selected) != null;
-        loading = supported;
+        loading = false;
         if (!supported) return;
+        var cached = StandalonePersistentLootCache.get(context, selected);
+        var observations = SeedExplorerFabricClient.lootObservations(context);
+        if (cached.isPresent() && !StandaloneObservedLootRefinement.canRefine(context, selected, observations)) {
+            chests = cached.get();
+            chest = chests.isEmpty() ? null : chests.getFirst();
+            loading = false;
+            StandaloneObservedLootRefinement.remember(context, selected, chests, chests);
+            return;
+        }
+        loading = true;
         LOOT_EXECUTOR.execute(() -> {
+            if (requests.get() != request) return;
             try {
-                List<ChestLootOutput> predicted = StandaloneStructureLootPredictor.predict(
-                    context, selected, 64);
-                if (requests.get() == request && structure == selected) {
+                List<ChestLootOutput> canonical = cached.orElseGet(() ->
+                    StandaloneStructureLootPredictor.predict(context, selected, 64));
+                if (cached.isEmpty()) StandalonePersistentLootCache.put(context, selected, canonical);
+                List<ChestLootOutput> predicted = StandaloneObservedLootRefinement.refine(
+                    context, selected, canonical, observations);
+                net.minecraft.client.Minecraft.getInstance().execute(() -> {
+                    if (requests.get() != request || structure != selected) return;
+                    if (!guard.isCurrent()) {
+                        loading = false;
+                        error = "World or prediction settings changed; select again";
+                        return;
+                    }
                     chests = predicted;
                     chest = predicted.isEmpty() ? null : predicted.getFirst();
-                    StandaloneAncillaryRuntime runtime = StandaloneAncillaryRuntime.get();
-                    if (runtime != null) runtime.rememberLoot(context, predicted);
-                }
+                    loading = false;
+                    StandaloneObservedLootRefinement.remember(context, selected, canonical, predicted);
+                });
             } catch (Throwable failure) {
-                if (requests.get() == request && structure == selected) {
+                com.mojang.logging.LogUtils.getLogger().error(
+                    "3D loot prediction failed for {} at {},{} ({})",
+                    selected.type, selected.startChunkX, selected.startChunkZ, context, failure);
+                net.minecraft.client.Minecraft.getInstance().execute(() -> {
+                    if (requests.get() != request || structure != selected) return;
+                    if (!guard.isCurrent()) {
+                        loading = false;
+                        error = "World or prediction settings changed; select again";
+                        return;
+                    }
                     error = failure.getClass().getSimpleName()
                         + (failure.getMessage() == null ? "" : ": " + failure.getMessage());
-                }
-            } finally {
-                if (requests.get() == request && structure == selected) loading = false;
+                    loading = false;
+                });
             }
         });
     }
@@ -90,7 +119,14 @@ final class Standalone3DSelectionController {
         supported = selected != null && (selected.type == StructureType.DUNGEON
             || StandaloneStructureLootPredictor.structureKey(context, selected) != null);
         StandaloneAncillaryRuntime runtime = StandaloneAncillaryRuntime.get();
-        if (runtime != null) runtime.rememberLoot(context, chests);
+        if (runtime != null && selected != null) {
+            List<ChestLootOutput> canonical = StandalonePersistentLootCache.get(context, selected)
+                .orElse(chests);
+            runtime.rememberStructureLoot(context,
+                StandaloneObservedLootRefinement.structureKey(selected), canonical, chests);
+        }
+        if (selected != null && !StandaloneObservedLootRefinement.historySensitive(selected))
+            StandalonePersistentLootCache.put(context, selected, chests);
     }
 
     void selectChest(ChestLootOutput selected) {
@@ -137,4 +173,5 @@ final class Standalone3DSelectionController {
         requests.incrementAndGet();
         loading = false;
     }
+
 }

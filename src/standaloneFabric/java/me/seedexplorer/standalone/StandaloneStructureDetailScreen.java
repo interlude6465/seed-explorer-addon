@@ -21,7 +21,7 @@ import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -29,12 +29,12 @@ import java.util.concurrent.atomic.AtomicLong;
 /** Native all-container inspector shared by the standalone 2D and 3D maps. */
 public final class StandaloneStructureDetailScreen extends Screen {
     private static final ThreadPoolExecutor LOOT_EXECUTOR = new ThreadPoolExecutor(1, 1,
-        30, TimeUnit.SECONDS, new ArrayBlockingQueue<>(2), runnable -> {
+        30, TimeUnit.SECONDS, new LinkedBlockingQueue<>(), runnable -> {
             Thread thread = new Thread(runnable, "Seed Explorer structure details");
             thread.setDaemon(true);
             thread.setPriority(Thread.MIN_PRIORITY);
             return thread;
-        }, new ThreadPoolExecutor.DiscardOldestPolicy());
+        });
     private static final DateTimeFormatter FILE_TIME = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
     private static final int SIDEBAR_WIDTH = 220;
     private static final int ROW_HEIGHT = 38;
@@ -57,6 +57,7 @@ public final class StandaloneStructureDetailScreen extends Screen {
     private Button teleportButton;
     private Button completedButton;
     private Button navigateButton;
+    private Button highlightButton;
     private String notice = "";
     private long noticeUntil;
 
@@ -77,36 +78,72 @@ public final class StandaloneStructureDetailScreen extends Screen {
         this.chests = knownChests == null ? List.of() : List.copyOf(knownChests);
         this.selectedChest = Math.max(0, Math.min(this.chests.size() - 1, selectedChest));
         if (knownChests == null) loadLoot();
+        else {
+            if (!StandaloneObservedLootRefinement.historySensitive(structure))
+                StandalonePersistentLootCache.put(this.context, structure, this.chests);
+            List<ChestLootOutput> canonical = StandalonePersistentLootCache.get(this.context, structure)
+                .orElse(this.chests);
+            StandaloneObservedLootRefinement.remember(this.context, structure, canonical, this.chests);
+            if (StandaloneObservedLootRefinement.historySensitive(structure)) loadLoot();
+        }
     }
 
     private void loadLoot() {
+        var cached = StandalonePersistentLootCache.get(context, structure);
+        var observations = SeedExplorerFabricClient.lootObservations(context);
+        if (cached.isPresent() && !StandaloneObservedLootRefinement.canRefine(context, structure, observations)) {
+            chests = cached.get();
+            selectedChest = 0;
+            loading = false;
+            StandaloneObservedLootRefinement.remember(context, structure, chests, chests);
+            return;
+        }
         long expected = requests.incrementAndGet();
+        StandaloneLootRequestGuard guard = StandaloneLootRequestGuard.capture(context);
         loading = true;
         error = "";
         LOOT_EXECUTOR.execute(() -> {
+            if (requests.get() != expected) return;
             try {
-                List<ChestLootOutput> result = StandaloneStructureLootPredictor.predict(
-                    context, structure, 64);
-                if (requests.get() == expected) {
+                List<ChestLootOutput> canonical = cached.orElseGet(() ->
+                    StandaloneStructureLootPredictor.predict(context, structure, 64));
+                if (cached.isEmpty()) StandalonePersistentLootCache.put(context, structure, canonical);
+                List<ChestLootOutput> result = StandaloneObservedLootRefinement.refine(
+                    context, structure, canonical, observations);
+                net.minecraft.client.Minecraft.getInstance().execute(() -> {
+                    if (requests.get() != expected) return;
+                    if (!guard.isCurrent()) {
+                        loading = false;
+                        error = "World or prediction settings changed; reopen details";
+                        return;
+                    }
                     chests = result;
                     selectedChest = 0;
-                    StandaloneAncillaryRuntime runtime = StandaloneAncillaryRuntime.get();
-                    if (runtime != null) runtime.rememberLoot(context, result);
-                }
+                    loading = false;
+                    StandaloneObservedLootRefinement.remember(context, structure, canonical, result);
+                });
             } catch (Throwable failure) {
-                if (requests.get() == expected) {
+                com.mojang.logging.LogUtils.getLogger().error(
+                    "Loot details failed for {} at {},{} ({})",
+                    structure.type, structure.startChunkX, structure.startChunkZ, context, failure);
+                net.minecraft.client.Minecraft.getInstance().execute(() -> {
+                    if (requests.get() != expected) return;
+                    if (!guard.isCurrent()) {
+                        loading = false;
+                        error = "World or prediction settings changed; reopen details";
+                        return;
+                    }
                     error = failure.getClass().getSimpleName()
                         + (failure.getMessage() == null ? "" : ": " + failure.getMessage());
-                }
-            } finally {
-                if (requests.get() == expected) loading = false;
+                    loading = false;
+                });
             }
         });
     }
 
     @Override
     protected void init() {
-        boolean compact = width < 700;
+        boolean compact = width < 780;
         addRenderableWidget(Button.builder(Component.literal("Back"), button -> onClose())
             .bounds(10, 10, 62, 20).build());
         previousButton = addRenderableWidget(Button.builder(Component.literal("<"), button ->
@@ -128,6 +165,12 @@ public final class StandaloneStructureDetailScreen extends Screen {
         }).bounds(compact ? 140 : 470, 10, 78, 20).build());
         navigateButton = addRenderableWidget(Button.builder(Component.literal("Navigate"), button ->
             navigateToSelection()).bounds(compact ? 10 : 554, compact ? 66 : 10, 74, 20).build());
+        highlightButton = addRenderableWidget(Button.builder(Component.literal("Highlight chests"), button -> {
+            boolean enabled = StandaloneChestHighlightRenderer.toggle(config, context, chests);
+            notice = enabled ? "Predicted chests highlighted within 299 blocks"
+                : "Highlights off; activation requires a chest within 299 blocks in this dimension";
+            noticeUntil = System.currentTimeMillis() + 5000;
+        }).bounds(compact ? 90 : 634, compact ? 66 : 10, 126, 20).build());
         updateButtons();
     }
 
@@ -137,21 +180,24 @@ public final class StandaloneStructureDetailScreen extends Screen {
     }
 
     private int headerHeight() {
-        return width < 700 ? 122 : 66;
+        return width < 780 ? 122 : 66;
     }
 
     @Override
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
+        highlightButton.active = !loading && !chests.isEmpty();
+        highlightButton.setMessage(Component.literal(StandaloneChestHighlightRenderer.selected(context, chests)
+            ? "Highlights: On" : "Highlight chests"));
         graphics.fill(0, 0, width, height, 0xFF0B1117);
         int headerHeight = headerHeight();
         graphics.fill(0, 0, width, headerHeight, 0xF2101820);
         graphics.fill(0, headerHeight - 1, width, headerHeight, 0xFF2C3B48);
         graphics.text(font, ellipsize(structure.displayName(), Math.max(40, width - 490)),
-            10, width < 700 ? 94 : 39, 0xFFE7EDF3);
+            10, width < 780 ? 94 : 39, 0xFFE7EDF3);
         String meta = structure.getCoordsString() + "  |  Seed " + context.worldSeed()
             + "  |  " + context.minecraftVersion();
         graphics.text(font, ellipsize(meta, Math.max(40, width - 20)), 10,
-            width < 700 ? 108 : 52, 0xFF8D9AA6);
+            width < 780 ? 108 : 52, 0xFF8D9AA6);
 
         int sidebar = Math.min(SIDEBAR_WIDTH, Math.max(120, width / 3));
         graphics.fill(0, headerHeight, sidebar, height, 0xFF0D141B);
@@ -174,7 +220,7 @@ public final class StandaloneStructureDetailScreen extends Screen {
         int headerHeight = headerHeight();
         graphics.text(font, "Containers (" + chests.size() + ")", 10, headerHeight + 9, 0xFFE7EDF3);
         if (loading) {
-            graphics.text(font, "Predicting exact loot...", 10, headerHeight + 28, 0xFFE2B64C);
+            graphics.text(font, "Predicting loot...", 10, headerHeight + 28, 0xFFE2B64C);
             return;
         }
         if (!error.isBlank()) {
@@ -219,8 +265,16 @@ public final class StandaloneStructureDetailScreen extends Screen {
         graphics.text(font, "Container " + (selectedChest + 1) + " / " + chests.size(),
             x, y, 0xFFE7EDF3);
         y += 16;
+        if (chest.lootTableId().isBlank()) {
+            graphics.text(font, ellipsize(chest.blockX() + ", " + chest.blockY() + ", " + chest.blockZ()
+                + "  |  Location observed", contentWidth), x, y, 0xFFD8B45A);
+            graphics.text(font, "No reliable loot prediction.", x, y + 20, 0xFF8D9AA6);
+            return;
+        }
         graphics.text(font, ellipsize(chest.blockX() + ", " + chest.blockY() + ", " + chest.blockZ()
-            + "  |  " + (chest.exact() ? "Exact" : "Approximate"), contentWidth), x, y,
+            + "  |  " + (StandaloneChestPredictionStatus.locationObserved(chest, context.dimension())
+                ? "Location confirmed" : "Location predicted")
+            + "  |  " + StandaloneChestPredictionStatus.lootLabel(chest), contentWidth), x, y,
             chest.exact() ? 0xFF7ED88A : 0xFFD8B45A);
         y += 14;
         graphics.text(font, ellipsize(chest.lootTableId(), contentWidth), x, y, 0xFF6FAEC0);

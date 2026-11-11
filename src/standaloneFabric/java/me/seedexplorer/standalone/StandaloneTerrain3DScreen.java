@@ -44,12 +44,12 @@ public final class StandaloneTerrain3DScreen extends Screen {
     private static final int COMPACT_LAYOUT_WIDTH = 760;
     private static final int NARROW_LAYOUT_WIDTH = 400;
     private static final ThreadPoolExecutor STRUCTURE_GENERATOR = new ThreadPoolExecutor(1, 1,
-        30, TimeUnit.SECONDS, new ArrayBlockingQueue<>(1), runnable -> {
+        30, TimeUnit.SECONDS, new java.util.concurrent.LinkedBlockingQueue<>(), runnable -> {
             Thread thread = new Thread(runnable, "Seed Explorer 3D structures");
             thread.setDaemon(true);
             thread.setPriority(Thread.MIN_PRIORITY);
             return thread;
-        }, new ThreadPoolExecutor.DiscardOldestPolicy());
+        }, new ThreadPoolExecutor.AbortPolicy());
     private static final AtomicLong STRUCTURE_REQUESTS = new AtomicLong();
     private static final int KEY_W = InputConstants.KEYCODE_W;
     private static final int KEY_S = 's';
@@ -78,6 +78,8 @@ public final class StandaloneTerrain3DScreen extends Screen {
     private Standalone3DSelectionController selection;
     private final StandaloneNavigationCapability navigation = new ReflectiveBaritoneNavigation();
     private final boolean navigationAvailable;
+    private Button chestTeleportButton, chestPreviousButton, chestNextButton, chestDetailsButton;
+    private Button highlightChestsButton;
     private Button undergroundButton;
     private Button dimensionButton;
     private Button bulkButton;
@@ -113,6 +115,7 @@ public final class StandaloneTerrain3DScreen extends Screen {
     private String searchQuery = "";
     private boolean focusActive;
     private GeneratedStructure focusedStructure;
+    private TerrainFocusTarget resolvedFocusTarget;
     private StandaloneWaypoint focusedWaypoint;
     private double orbitYawDegrees;
     private CameraState returnCamera;
@@ -129,6 +132,7 @@ public final class StandaloneTerrain3DScreen extends Screen {
     private List<ChestLootOutput> initialChests;
     private int initialChestIndex;
     private String notice = "";
+    private boolean highlightChests;
     private long noticeUntil;
 
     public StandaloneTerrain3DScreen(Screen parent, StandaloneSeedExplorerConfig config,
@@ -139,6 +143,7 @@ public final class StandaloneTerrain3DScreen extends Screen {
         this.config = config;
         this.seed = seed;
         this.dimension = dimension;
+        this.underground = dimension == -1;
         this.structures = structures == null ? List.of() : List.copyOf(structures);
         this.selection = new Standalone3DSelectionController(seed, dimension, config);
         this.navigationAvailable = navigation.available();
@@ -177,6 +182,7 @@ public final class StandaloneTerrain3DScreen extends Screen {
                     }
                     if (initialChests == null) selection.select(initialStructure);
                     else selection.selectKnown(initialStructure, initialChests, initialChestIndex);
+                    focusOn(initialStructure);
                 } else if (initialWaypoint != null) {
                     selectWaypoint(initialWaypoint, false);
                 }
@@ -222,6 +228,20 @@ public final class StandaloneTerrain3DScreen extends Screen {
             navigateMatch(1)).bounds(matchX + 30, 38, 24, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Actions"), button -> openActions())
             .bounds(narrow ? 106 : 322, narrow ? 66 : 38, 68, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("Search"), button -> openSearch())
+            .bounds(narrow ? 180 : 394, narrow ? 66 : 38, 62, 20).build());
+        chestPreviousButton = addRenderableWidget(Button.builder(Component.literal("<"), button -> cycleChest(-1)).bounds(0, 0, 24, 18).build());
+        chestNextButton = addRenderableWidget(Button.builder(Component.literal(">"), button -> cycleChest(1)).bounds(0, 0, 24, 18).build());
+        chestTeleportButton = addRenderableWidget(Button.builder(Component.literal("TP to chest"), button -> teleportSelection()).bounds(0, 0, 100, 18).build());
+        chestDetailsButton = addRenderableWidget(Button.builder(Component.literal("View loot"), button -> openDetails()).bounds(0, 0, 100, 18).build());
+        highlightChestsButton = addRenderableWidget(Button.builder(Component.literal("Highlight chests: Off"), button -> {
+            highlightChests = StandaloneChestHighlightRenderer.toggle(config, selection.context(), selection.chests());
+            updateHighlightButton();
+            if (!highlightChests && !withinChestHighlightRange()) {
+                showNotice("Chest highlighting requires you within 299 blocks in this dimension");
+            }
+        }).bounds(0, 0, 100, 18).build());
+        layoutSelectionButtons();
         updateActionButtons();
         if (pendingSearchResult != null) {
             StandaloneSearch.Result pending = pendingSearchResult;
@@ -334,7 +354,9 @@ public final class StandaloneTerrain3DScreen extends Screen {
                 hovered != null ? hovered : selection.structure(), emphasizedWaypoint,
                 underground, false, false,
                 focusActive ? focusedStructure : null, seed);
-            renderer.renderChestMarkers(camera, selection.chests(), selection.chest(), null,
+            java.util.Set<ChestLootOutput> highlighted = highlightChests && withinChestHighlightRange()
+                ? java.util.Set.copyOf(selection.chests()) : java.util.Set.of();
+            renderer.renderChestMarkers(camera, selection.chests(), selection.chest(), highlighted,
                 framebufferWidth / 2.0, framebufferHeight / 2.0, minecraft);
             renderError = "";
         } catch (RuntimeException | LinkageError failure) {
@@ -407,44 +429,107 @@ public final class StandaloneTerrain3DScreen extends Screen {
         }
     }
 
+    private int selectionPanelWidth() { return Math.max(100, Math.min(168, width / 4)); }
+    private int selectionPanelX() { return width - selectionPanelWidth() - 8; }
+    private int selectionPanelY() { return contentTop() + 8; }
+    private int selectionPanelHeight() { return Math.min(280, height - selectionPanelY() - 8); }
+
+    private boolean withinChestHighlightRange() {
+        return minecraft != null && minecraft.player != null && minecraft.level != null
+            && !StandaloneChestHighlightRenderer.eligible(selection.chests(), dimension,
+                playerDimension(), minecraft.player.position()).isEmpty();
+    }
+
+    private void updateHighlightButton() {
+        highlightChests = StandaloneChestHighlightRenderer.selected(selection.context(), selection.chests());
+        if (highlightChestsButton != null) highlightChestsButton.setMessage(Component.literal(
+            "Highlight chests: " + (highlightChests ? "On" : "Off")));
+    }
+
+    private void cycleChest(int delta) {
+        if (selection.chests().isEmpty()) return;
+        selection.selectChest(Math.floorMod(selection.selectedChestIndex() + delta, selection.chests().size()));
+    }
+
+    private void layoutSelectionButtons() {
+        if (chestTeleportButton == null) return;
+        boolean hasChest = selection.chest() != null && !selection.loading();
+        int x = selectionPanelX() + 8, y = selectionPanelY();
+        int innerWidth = selectionPanelWidth() - 16;
+        chestPreviousButton.setPosition(x, y + 66);
+        chestNextButton.setPosition(x + innerWidth - 24, y + 66);
+        chestTeleportButton.setPosition(x, y + 88);
+        chestTeleportButton.setWidth(innerWidth);
+        highlightChestsButton.setPosition(x, y + 110);
+        highlightChestsButton.setWidth(innerWidth);
+        chestDetailsButton.setPosition(x, y + selectionPanelHeight() - 24);
+        chestDetailsButton.setWidth(innerWidth);
+        chestPreviousButton.visible = chestNextButton.visible = chestTeleportButton.visible = hasChest;
+        highlightChestsButton.visible = selection.structure() != null && !selection.loading()
+            && !selection.chests().isEmpty() && selectionPanelHeight() >= 155;
+        chestPreviousButton.active = chestNextButton.active = selection.chests().size() > 1;
+        chestTeleportButton.active = minecraft != null && minecraft.player != null;
+        chestDetailsButton.visible = selection.structure() != null && !selection.loading()
+            && selection.supported() && selectionPanelHeight() >= 155;
+    }
+
     private void drawSelectionPanel(GuiGraphicsExtractor graphics) {
+        layoutSelectionButtons();
         GeneratedStructure selected = selection.structure();
         StandaloneWaypoint waypoint = selectedWaypoint;
         if (selected == null && waypoint == null) return;
-        int panelWidth = Math.min(330, Math.max(190, width - 32));
-        int panelHeight = selected == null ? 58 : selection.loading() ? 58 : 76;
-        int x = width - panelWidth - 12;
-        int y = contentTop() + 10;
-        graphics.fill(x, y, x + panelWidth, y + panelHeight, 0xE8101714);
-        graphics.fill(x, y, x + 3, y + panelHeight, 0xFF45B6A6);
+        int panelWidth = selectionPanelWidth();
+        int panelHeight = selectionPanelHeight();
+        int x = selectionPanelX(), y = selectionPanelY(), innerWidth = panelWidth - 16;
+        graphics.fill(x, y, x + panelWidth, y + panelHeight, 0xEE101714);
+        graphics.fill(x, y, x + 2, y + panelHeight, 0xFF45B6A6);
         String title = selected != null ? selected.displayName() : waypoint.name();
-        String coordinates = selected != null ? selected.getCoordsString()
-            : waypoint.x() + ", " + waypoint.z();
-        graphics.text(font, ellipsize(title, panelWidth - 18),
-            x + 9, y + 8, 0xFFFFFFFF);
-        graphics.text(font, ellipsize(coordinates, panelWidth - 18),
-            x + 9, y + 22, 0xFF9AA8A0);
-        if (selected == null) {
-            graphics.text(font, "Waypoint  |  " + dimensionName(), x + 9, y + 36,
-                0xFFE2B64C);
+        String coordinates = selected != null ? selected.getCoordsString() : waypoint.x() + ", " + waypoint.z();
+        graphics.text(font, ellipsize(title, innerWidth), x + 8, y + 8, 0xFFFFFFFF);
+        graphics.text(font, ellipsize(coordinates, innerWidth), x + 8, y + 22, 0xFF9AA8A0);
+        if (focusActive && focusedStructure != null && resolvedFocusTarget == null) {
+            String status = renderer.structureFocusUnavailable(focusedStructure, seed, dimension)
+                ? "Structure height unavailable" : "Locating structure...";
+            graphics.text(font, ellipsize(status, innerWidth), x + 8, y + 38, 0xFFE2B64C);
             return;
         }
-        String loot;
-        if (selection.loading()) loot = "Predicting containers...";
-        else if (!selection.error().isBlank()) loot = "Loot error: " + selection.error();
-        else if (!selection.supported()) loot = "Loot prediction unavailable";
-        else loot = selection.chests().size() + " predicted container"
-            + (selection.chests().size() == 1 ? "" : "s");
-        graphics.text(font, ellipsize(loot, panelWidth - 18), x + 9, y + 36,
-            selection.error().isBlank() ? 0xFFE2B64C : 0xFFFF9388);
-        ChestLootOutput chest = selection.chest();
-        if (!selection.loading() && chest != null) {
-            int index = selection.selectedChestIndex();
-            String chestLine = "Selected " + (index + 1) + "/" + selection.chests().size()
-                + ": " + chest.summary();
-            graphics.text(font, ellipsize(chestLine, panelWidth - 18),
-                x + 9, y + 52, 0xFFE7EDF3);
+        if (selected == null) {
+            graphics.text(font, "Waypoint", x + 8, y + 38, 0xFFE2B64C);
+            return;
         }
+        ChestLootOutput chest = selection.chest();
+        boolean observed = chest != null && StandaloneChestPredictionStatus.locationObserved(chest, dimension);
+        String loot = selection.loading() ? "Predicting containers..."
+            : !selection.error().isBlank() ? "Loot error: " + selection.error()
+            : !selection.supported() ? "Loot unavailable"
+            : chest != null ? (chest.lootTableId().startsWith("minecraft:archaeology/")
+                ? (observed ? "Loot block found" : "Loot block predicted")
+                : (observed ? "Chest found" : "Chest predicted"))
+            : selection.chests().size() + " containers";
+        graphics.text(font, ellipsize(loot, innerWidth), x + 8, y + 38,
+            !selection.error().isBlank() ? 0xFFFF9388 : observed ? 0xFF7ED88A : 0xFFE2B64C);
+        if (selection.loading() || chest == null) return;
+        graphics.text(font, ellipsize(chest.blockX() + ", " + chest.blockY() + ", " + chest.blockZ(), innerWidth),
+            x + 8, y + 54, 0xFF9AA8A0);
+        graphics.centeredText(font, Component.literal((selection.selectedChestIndex() + 1) + "/" + selection.chests().size()),
+            x + panelWidth / 2, y + 71, 0xFFFFFFFF);
+        int lineY = y + 110, bottom = y + panelHeight - 27;
+        if (lineY + 9 > bottom) return;
+        graphics.text(font, ellipsize(StandaloneChestPredictionStatus.lootLabel(chest), innerWidth),
+            x + 8, lineY, chest.exact() ? 0xFF7ED88A : 0xFFE2B64C);
+        lineY += 10;
+        if (chest.lootTableId().isBlank()) return;
+        for (var item : chest.predictedItems()) {
+            if (lineY + 9 > bottom) break;
+            graphics.text(font, ellipsize(item.displayName() + " x" + item.maxCount(), innerWidth), x + 8, lineY, 0xFFE7EDF3);
+            lineY += 10;
+        }
+    }
+
+    private boolean inSelectionPanel(double x, double y) {
+        return (selection.structure() != null || selectedWaypoint != null)
+            && x >= selectionPanelX() && x < selectionPanelX() + selectionPanelWidth()
+            && y >= selectionPanelY() && y < selectionPanelY() + selectionPanelHeight();
     }
 
     private void drawBulkStatus(GuiGraphicsExtractor graphics) {
@@ -494,6 +579,8 @@ public final class StandaloneTerrain3DScreen extends Screen {
         selection.close();
         selection = new Standalone3DSelectionController(seed, target, config);
         dimension = target;
+        underground = target == -1;
+        if (undergroundButton != null) undergroundButton.setMessage(undergroundLabel());
         structures = List.of();
         selectedWaypoint = null;
         hoveredWaypoint = null;
@@ -524,6 +611,12 @@ public final class StandaloneTerrain3DScreen extends Screen {
         minecraft.gui.setScreen(new StandaloneSearchScreen(this, config, selection.context(),
             (int) Math.floor(camera.targetX()), (int) Math.floor(camera.targetZ()),
             this::acceptSearchResult));
+    }
+
+    void addSearchWaypoint(String name, int x, int z, int targetDimension) {
+        config.addWaypoint(seed, targetDimension, x, z, name, null);
+        config.save();
+        showNotice("Loot waypoint added at " + x + ", " + z + " in " + dimensionName(targetDimension));
     }
 
     private void openActions() {
@@ -678,25 +771,31 @@ public final class StandaloneTerrain3DScreen extends Screen {
 
     private void focusOn(GeneratedStructure structure) {
         if (structure == null) return;
+        renderer.prioritizeStructureTerrain(structure);
         if (!focusActive) {
             returnCamera = new CameraState(camera.targetX(), camera.targetY(), camera.targetZ(),
                 camera.distance(), Math.toDegrees(camera.pitch()), Math.toDegrees(camera.yaw()));
         }
-        TerrainFocusTarget target = renderer.structureFocusTarget(structure);
-        if (target == null) {
-            double y = structure.y == GeneratedStructure.UNKNOWN_Y ? 68.0 : structure.y + 2.0;
-            target = new TerrainFocusTarget(structure.x + 0.5, y, structure.z + 0.5, 28.0);
-        }
+        camera.cancelAnimation();
+        resolvedFocusTarget = null;
         focusedStructure = structure;
         focusedWaypoint = null;
         focusActive = true;
         orbitYawDegrees = Math.toDegrees(camera.yaw());
-        camera.animateViewOf(target.x(), target.y(), target.z(), target.distance(),
-            55.0, Math.toDegrees(camera.yaw()), 34);
+        startStructureFocusWhenReady();
         updateActionButtons();
     }
 
+    private void startStructureFocusWhenReady() {
+        TerrainFocusTarget target = renderer.structureFocusTarget(focusedStructure, seed, dimension);
+        if (target == null) return;
+        resolvedFocusTarget = target;
+        camera.animateViewOf(target.x(), target.y(), target.z(), target.distance(),
+            55.0, orbitYawDegrees, 34);
+    }
+
     private void focusOn(StandaloneWaypoint waypoint) {
+        renderer.clearStructureTerrainPriority();
         if (waypoint == null) return;
         if (!focusActive) {
             returnCamera = new CameraState(camera.targetX(), camera.targetY(), camera.targetZ(),
@@ -713,6 +812,7 @@ public final class StandaloneTerrain3DScreen extends Screen {
     }
 
     private void returnFromFocus() {
+        renderer.clearStructureTerrainPriority();
         CameraState previous = returnCamera;
         focusActive = false;
         focusedStructure = null;
@@ -725,6 +825,7 @@ public final class StandaloneTerrain3DScreen extends Screen {
     }
 
     private void releaseFocusForManualControl() {
+        renderer.clearStructureTerrainPriority();
         if (!focusActive) return;
         focusActive = false;
         focusedStructure = null;
@@ -884,6 +985,7 @@ public final class StandaloneTerrain3DScreen extends Screen {
     }
 
     private void updateActionButtons() {
+        updateHighlightButton();
         GeneratedStructure structure = selection.structure();
         boolean hasStructure = structure != null;
         boolean hasWaypoint = selectedWaypoint != null;
@@ -934,6 +1036,7 @@ public final class StandaloneTerrain3DScreen extends Screen {
         activeStructureRequest = request;
         PredictionContext prediction = new PredictionContext(seed, config.predictionVersion(), dimension);
         STRUCTURE_GENERATOR.execute(() -> {
+            if (activeStructureRequest != request || STRUCTURE_REQUESTS.get() != request) return;
             try {
                 List<GeneratedStructure> generated = StandalonePredictionCache.predictDimension(
                     prediction, chunkX - radius, chunkZ - radius, chunkX + radius,
@@ -1083,6 +1186,7 @@ public final class StandaloneTerrain3DScreen extends Screen {
     public boolean mouseClicked(MouseButtonEvent click, boolean doubled) {
         if (handleContextMenuClick(click)) return true;
         if (super.mouseClicked(click, doubled)) return true;
+        if (inSelectionPanel(click.x(), click.y())) return true;
         if ((click.button() == InputConstants.MOUSE_BUTTON_LEFT
             || click.button() == InputConstants.MOUSE_BUTTON_RIGHT)
             && click.y() > contentTop()) {
@@ -1092,18 +1196,6 @@ public final class StandaloneTerrain3DScreen extends Screen {
                 rightDragDistance = 0.0;
                 rightPressX = click.x();
                 rightPressY = click.y();
-                return true;
-            }
-            if ((selection.structure() != null || selectedWaypoint != null)
-                && click.x() >= width - 350
-                && click.x() <= width - 12 && click.y() >= contentTop() + 10
-                && click.y() < contentTop() + 96) {
-                if (click.button() == InputConstants.MOUSE_BUTTON_LEFT
-                    && !selection.chests().isEmpty()) {
-                    int selectedIndex = selection.selectedChestIndex();
-                    selection.selectChest(selectedIndex < 0 ? 0
-                        : Math.floorMod(selectedIndex + 1, selection.chests().size()));
-                }
                 return true;
             }
             TerrainPick picked = pickAt(click.x(), click.y());
@@ -1234,10 +1326,13 @@ public final class StandaloneTerrain3DScreen extends Screen {
     @Override
     public void tick() {
         super.tick();
+        if (focusActive && focusedStructure != null && resolvedFocusTarget == null) {
+            startStructureFocusWhenReady();
+        }
         camera.tick();
         if (focusActive && !camera.isAnimating()) {
             TerrainFocusTarget target = focusedStructure != null
-                ? renderer.structureFocusTarget(focusedStructure)
+                ? resolvedFocusTarget
                 : focusedWaypoint != null
                     ? renderer.waypointFocusTarget(renderedWaypoint(focusedWaypoint)) : null;
             if (target != null) {
@@ -1250,6 +1345,7 @@ public final class StandaloneTerrain3DScreen extends Screen {
 
     @Override
     public void onClose() {
+        renderer.clearStructureTerrainPriority();
         heldMovementKeys.clear();
         dragButton = -1;
         contextActions = List.of();
@@ -1268,6 +1364,7 @@ public final class StandaloneTerrain3DScreen extends Screen {
 
     @Override
     public void removed() {
+        renderer.clearStructureTerrainPriority();
         heldMovementKeys.clear();
         dragButton = -1;
         contextActions = List.of();

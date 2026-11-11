@@ -486,12 +486,20 @@ public final class BroadStructureAudit {
             ItemLoot prior = merged.get(i);
             if (!prior.itemId().equals(item.itemId())
                 || !java.util.Objects.equals(prior.enchantmentSummary(),
-                    item.enchantmentSummary())) continue;
+                    item.enchantmentSummary())
+                || !java.util.Objects.equals(prior.damage(), item.damage())
+                || !java.util.Objects.equals(prior.potionContents(), item.potionContents())
+                || !java.util.Objects.equals(prior.mapDecorations(), item.mapDecorations())
+                || !java.util.Objects.equals(prior.suspiciousStewEffects(), item.suspiciousStewEffects())
+                || prior.hasUnrepresentedComponents()
+                    != item.hasUnrepresentedComponents()) continue;
             int count = prior.minCount() + item.minCount();
             merged.set(i, new ItemLoot(prior.itemId(), count, count, 0,
                 prior.displayName(), prior.randomEnchantment(), prior.enchantmentId(),
                 prior.enchantmentLevel(), null, false, 0, 0,
-                prior.enchantmentSummary(), false));
+                prior.enchantmentSummary(), false, prior.damage(),
+                prior.potionContents(), prior.hasUnrepresentedComponents(), prior.mapDecorations(),
+                prior.suspiciousStewEffects()));
             return;
         }
         merged.add(item);

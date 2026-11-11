@@ -14,6 +14,7 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.flag.FeatureFlags;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.StructureManager;
 import net.minecraft.world.level.WorldGenLevel;
 import net.minecraft.world.RandomizableContainer;
 import net.minecraft.world.attribute.EnvironmentAttributeReader;
@@ -55,6 +56,7 @@ import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
@@ -73,6 +75,7 @@ import java.util.Set;
  * world captures every chest and the loot seed assigned by createChest().</p>
  */
 public final class VanillaLootStructureSimulator {
+    private static final int MAX_PLACEMENT_HISTORY_CANDIDATES = 16;
     private static final ThreadLocal<List<SimulatedMinecart>> LAST_MINECARTS =
         ThreadLocal.withInitial(List::of);
     /** When true, logs every WorldGenLevel method the proxy answers with its default fallback. */
@@ -158,31 +161,166 @@ public final class VanillaLootStructureSimulator {
             seed, dimension, structureKey, startChunk);
         if (!start.isValid()) return List.of();
 
+        return simulateGeneratedStart(seed, dimension, structureKey, start,
+            canonicalPlacementChunks(start, startChunk), explicitIndex);
+    }
+
+    /** Research hook for proving whether a mutable start depends on chunk decoration order. */
+    public static List<SimulatedContainer> simulateInChunkOrderForProbe(
+        long seed, int dimension, ResourceKey<Structure> structureKey,
+        int chunkX, int chunkZ, List<ChunkPos> placementOrder, int explicitIndex) {
+        ChunkPos startChunk = new ChunkPos(chunkX, chunkZ);
+        StructureStart start = WorldgenEngine.generateSelectedStructureStart(
+            seed, dimension, structureKey, startChunk);
+        if (!start.isValid()) return List.of();
+
+        List<ChunkPos> expected = canonicalPlacementChunks(start, startChunk);
+        if (placementOrder.size() != expected.size()
+            || !new java.util.HashSet<>(placementOrder).equals(new java.util.HashSet<>(expected))) {
+            throw new IllegalArgumentException("Placement order must contain every intersecting chunk exactly once");
+        }
+        return simulateGeneratedStart(seed, dimension, structureKey, start,
+            List.copyOf(placementOrder), explicitIndex);
+    }
+
+    /**
+     * Enumerates the bounded first-placement histories that can change a beached
+     * shipwreck's persistent height and placement RNG. This is intended for
+     * reconciliation with already-observed world data, not seed-only caching.
+     */
+    public static List<PlacementHistoryCandidate> simulateBeachedShipwreckCandidates(
+        PredictionContext context, int startChunkX, int startChunkZ) {
+        return simulateScatteredPlacementCandidates(context, BuiltinStructures.SHIPWRECK_BEACHED,
+            startChunkX, startChunkZ);
+    }
+
+    /** Bounded first-chunk alternatives for structures whose placement locks a
+     * terrain-relative height. These are hypotheses, not exhaustive generation
+     * histories: later terrain edits and other decoration orders can still differ. */
+    public static List<PlacementHistoryCandidate> simulateScatteredPlacementCandidates(
+        PredictionContext context, ResourceKey<Structure> structureKey,
+        int startChunkX, int startChunkZ) {
+        if (context == null || context.dimension() != 0) return List.of();
+        if (!BuiltinStructures.SHIPWRECK_BEACHED.equals(structureKey)
+            && !BuiltinStructures.DESERT_PYRAMID.equals(structureKey)) {
+            throw new IllegalArgumentException("No validated first-chunk model for " + structureKey);
+        }
+        ChunkPos startChunk = new ChunkPos(startChunkX, startChunkZ);
+        StructureStart initial = WorldgenEngine.generateSelectedStructureStart(
+            context.worldSeed(), context.dimension(), structureKey, startChunk);
+        if (!initial.isValid()) return List.of();
+
+        List<ChunkPos> chunks = canonicalPlacementChunks(initial, startChunk);
+        if (chunks.isEmpty() || chunks.size() > MAX_PLACEMENT_HISTORY_CANDIDATES) {
+            return List.of();
+        }
+        int structureIndex = decorationIndex(structureKey, context);
+        List<PlacementHistoryCandidate> candidates = new ArrayList<>(chunks.size());
+        for (ChunkPos firstChunk : chunks) {
+            StructureStart fresh = WorldgenEngine.generateSelectedStructureStart(
+                context.worldSeed(), context.dimension(), structureKey, startChunk);
+            if (!fresh.isValid()) return List.of();
+            List<ChunkPos> order = new ArrayList<>(chunks.size());
+            order.add(firstChunk);
+            for (ChunkPos chunk : chunks) {
+                if (!chunk.equals(firstChunk)) order.add(chunk);
+            }
+            List<SimulatedContainer> containers = simulateGeneratedStart(
+                context.worldSeed(), context.dimension(), structureKey, fresh,
+                List.copyOf(order), structureIndex);
+            candidates.add(new PlacementHistoryCandidate(firstChunk, containers));
+        }
+        return List.copyOf(candidates);
+    }
+
+    /**
+     * Selects one distinct full history from complete observed container columns.
+     * Unobserved columns provide no negative evidence; empty or ambiguous evidence
+     * deliberately leaves the seed-only approximation unchanged.
+     */
+    public static Optional<List<SimulatedContainer>> selectUniqueContainerCandidate(
+        List<PlacementHistoryCandidate> candidates,
+        Collection<ObservedContainerPosition> observed) {
+        if (candidates == null || candidates.isEmpty()
+            || observed == null || observed.isEmpty()) return Optional.empty();
+
+        Set<ObservedContainerPosition> observedPositions = Set.copyOf(observed);
+        Set<Long> observedColumns = new HashSet<>();
+        for (ObservedContainerPosition position : observedPositions) {
+            observedColumns.add(containerColumn(position.x(), position.z()));
+        }
+
+        List<List<SimulatedContainer>> matchingOutputs = new ArrayList<>();
+        for (PlacementHistoryCandidate candidate : candidates) {
+            Set<ObservedContainerPosition> candidatePositions = new HashSet<>();
+            for (SimulatedContainer container : candidate.containers()) {
+                if (observedColumns.contains(containerColumn(container.x(), container.z()))) {
+                    candidatePositions.add(new ObservedContainerPosition(
+                        container.x(), container.y(), container.z()));
+                }
+            }
+            if (!candidatePositions.equals(observedPositions)) continue;
+            List<SimulatedContainer> output = canonicalContainerOutput(candidate.containers());
+            if (!matchingOutputs.contains(output)) matchingOutputs.add(output);
+        }
+        return matchingOutputs.size() == 1
+            ? Optional.of(matchingOutputs.getFirst()) : Optional.empty();
+    }
+
+    private static List<ChunkPos> canonicalPlacementChunks(StructureStart start,
+                                                            ChunkPos startChunk) {
+        return start.getPieces().stream()
+            .flatMap(piece -> piece.getBoundingBox().intersectingChunks())
+            .distinct()
+            // A structure start is mutable world state. Scattered pieces, for
+            // example, lock their terrain-relative Y the first time they are
+            // placed and retain it while later chunks are decorated. Replay the
+            // start chunk first as the canonical seed-only order, then keep the
+            // remainder stable for reproducible offline predictions.
+            .sorted(Comparator
+                .comparingInt((ChunkPos chunk) -> chunk.equals(startChunk) ? 0 : 1)
+                .thenComparingInt(ChunkPos::z)
+                .thenComparingInt(ChunkPos::x))
+            .toList();
+    }
+
+    private static List<SimulatedContainer> simulateGeneratedStart(
+        long seed, int dimension, ResourceKey<Structure> structureKey,
+        StructureStart start, List<ChunkPos> chunks, int explicitIndex) {
+
         Structure structure = start.getStructure();
         int step = structure.step().ordinal();
         int idx = explicitIndex;
-        CaptureWorld capture = new CaptureWorld(seed, dimension, terrainStartsFor(start));
+        // Village features read terrain outside template writes. Include the
+        // village in Beardifier so those reads see its adapted ground, rather
+        // than the unadapted hill that can incorrectly block a tree.
+        boolean village = isVillage(structureKey);
+        CaptureWorld capture = new CaptureWorld(seed, dimension,
+            village ? List.of(start) : terrainStartsFor(start), village);
         WorldGenLevel level = capture.proxy();
-
-        List<ChunkPos> chunks = start.getPieces().stream()
-            .flatMap(piece -> piece.getBoundingBox().intersectingChunks())
-            .distinct()
-            .sorted(Comparator.comparingInt(ChunkPos::z).thenComparingInt(ChunkPos::x))
-            .toList();
+        Map<Long, StructureStart> sharedStarts = overlappingMineshaftStarts(seed, dimension, structureKey, start, chunks);
         boolean needsTerrain = needsTerrainPrefill(structureKey);
+        boolean needsCompleteTerrain = needsCompleteTerrainPrefill(structureKey);
+        if (needsCompleteTerrain) {
+            // These pieces inspect columns across their complete template during
+            // the first postProcess call. Fill every intersecting chunk before
+            // mutating the shared start so unseen columns cannot read as air.
+            for (ChunkPos chunk : chunks) {
+                capture.prepareDecorationBefore(step, chunk, false);
+            }
+            for (ChunkPos chunk : chunks) capture.prefillTerrain(chunk, 0);
+        }
         for (ChunkPos chunk : chunks) {
-            StructureStart chunkStart = WorldgenEngine.generateSelectedStructureStart(
-                seed, dimension, structureKey, startChunk);
-            if (!chunkStart.isValid()) continue;
             // Earlier features matter only when the piece reads generated terrain.
             // Replaying unrelated ores for rigid templates can also re-enter locked
             // ProtoChunk sections in the offline world. Desert pyramids are the one
             // height-only exception because earlier surface features can move them.
-            if (needsTerrain || structureKey.equals(BuiltinStructures.DESERT_PYRAMID)) {
+            if (!needsCompleteTerrain
+                && (needsTerrain || structureKey.equals(BuiltinStructures.DESERT_PYRAMID))) {
                 capture.prepareDecorationBefore(step, chunk,
                     structureKey.equals(BuiltinStructures.DESERT_PYRAMID));
             }
-            if (needsTerrain) {
+            if (needsTerrain && !needsCompleteTerrain) {
                 capture.prefillTerrain(chunk, 0);
             }
 
@@ -199,7 +337,14 @@ public final class VanillaLootStructureSimulator {
                 chunk.getMinBlockX(), minY, chunk.getMinBlockZ(),
                 chunk.getMaxBlockX(), maxY, chunk.getMaxBlockZ());
             try {
-                chunkStart.placeInChunk(level, null, WorldgenEngine.chunkGenerator(seed, dimension), random, writableArea, chunk);
+                List<StructureStart> orderedStarts = structure.type() == StructureType.MINESHAFT
+                    ? startsInReferenceOrder(sharedStarts, chunk) : List.of(start);
+                for (StructureStart referenced : orderedStarts) {
+                    capture.captureContainerEntities = referenced == start;
+                    referenced.placeInChunk(level, null, WorldgenEngine.chunkGenerator(seed, dimension), random,
+                        writableArea, chunk);
+                }
+                capture.captureContainerEntities = true;
             } catch (IllegalStateException e) {
                 if (e.getMessage() != null && e.getMessage().contains("Tags not bound")) {
                     continue;
@@ -211,6 +356,48 @@ public final class VanillaLootStructureSimulator {
         List<SimulatedContainer> result = capture.containers();
         LAST_MINECARTS.set(capture.minecarts());
         return result;
+    }
+
+    /** Vanilla seeds RNG once per structure registry ID, not once per start.
+     * Nearby mineshafts sharing a placement chunk must consume the same stream. */
+    private static Map<Long, StructureStart> overlappingMineshaftStarts(
+        long seed, int dimension, ResourceKey<Structure> key, StructureStart selected,
+        List<ChunkPos> chunks) {
+        Map<Long, StructureStart> starts = new HashMap<>();
+        starts.put(selected.getChunkPos().pack(), selected);
+        if (selected.getStructure().type() != StructureType.MINESHAFT || chunks.isEmpty()) return starts;
+        int minX = chunks.stream().mapToInt(ChunkPos::x).min().orElseThrow() - 8;
+        int maxX = chunks.stream().mapToInt(ChunkPos::x).max().orElseThrow() + 8;
+        int minZ = chunks.stream().mapToInt(ChunkPos::z).min().orElseThrow() - 8;
+        int maxZ = chunks.stream().mapToInt(ChunkPos::z).max().orElseThrow() + 8;
+        for (GeneratedStructure marker : VanillaStructurePredictor.predictStructure(
+                seed, dimension, key.identifier().toString(), minX, minZ, maxX, maxZ)) {
+            ChunkPos pos = new ChunkPos(marker.startChunkX, marker.startChunkZ);
+            if (starts.containsKey(pos.pack())) continue;
+            StructureStart other = WorldgenEngine.generateSelectedStructureStart(seed, dimension, key, pos);
+            if (other.isValid() && chunks.stream().anyMatch(chunk ->
+                    Math.abs(chunk.x() - pos.x()) <= 8 && Math.abs(chunk.z() - pos.z()) <= 8
+                    && other.getBoundingBox().intersects(chunk.getMinBlockX(), chunk.getMinBlockZ(),
+                        chunk.getMaxBlockX(), chunk.getMaxBlockZ()))) starts.put(pos.pack(), other);
+        }
+        return starts;
+    }
+
+    private static List<StructureStart> startsInReferenceOrder(Map<Long, StructureStart> starts, ChunkPos chunk) {
+        // ChunkGenerator.createReferences inserts X-major/Z-minor into the default
+        // LongOpenHashSet; StructureManager subsequently iterates that hash set.
+        var references = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+        for (int x = chunk.x() - 8; x <= chunk.x() + 8; x++) {
+            for (int z = chunk.z() - 8; z <= chunk.z() + 8; z++) {
+                long position = ChunkPos.pack(x, z);
+                StructureStart start = starts.get(position);
+                if (start != null && start.getBoundingBox().intersects(chunk.getMinBlockX(), chunk.getMinBlockZ(),
+                        chunk.getMaxBlockX(), chunk.getMaxBlockZ())) references.add(position);
+            }
+        }
+        List<StructureStart> ordered = new ArrayList<>();
+        for (long position : references) ordered.add(starts.get(position));
+        return ordered;
     }
 
     /**
@@ -519,9 +706,17 @@ public final class VanillaLootStructureSimulator {
      * dungeon capture so mineshaft cave-spider spawners are never reported as rooms. */
     private static void placeDungeonTerrainStructures(CaptureWorld capture, long seed,
                                                        ChunkPos chunkPos, ChunkGenerator generator) {
-        List<GeneratedStructure> nearby = VanillaStructurePredictor.predictDimension(seed, 0,
-            chunkPos.x() - 10, chunkPos.z() - 10, chunkPos.x() + 10, chunkPos.z() + 10,
-            false, true);
+        int chunkMinX = chunkPos.x() - 10;
+        int chunkMinZ = chunkPos.z() - 10;
+        int chunkMaxX = chunkPos.x() + 10;
+        int chunkMaxZ = chunkPos.z() + 10;
+        List<GeneratedStructure> nearby = new ArrayList<>();
+        nearby.addAll(VanillaStructurePredictor.predictStructure(seed, 0, "minecraft:mineshaft",
+            chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ));
+        nearby.addAll(VanillaStructurePredictor.predictStructure(seed, 0, "minecraft:mineshaft_mesa",
+            chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ));
+        nearby.addAll(VanillaStructurePredictor.predictStructure(seed, 0, "minecraft:stronghold",
+            chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ));
         BoundingBox writableArea = new BoundingBox(chunkPos.getMinBlockX(), capture.minBuildY,
             chunkPos.getMinBlockZ(), chunkPos.getMaxBlockX(), capture.maxBuildY, chunkPos.getMaxBlockZ());
 
@@ -583,6 +778,10 @@ public final class VanillaLootStructureSimulator {
     }
 
     public static int decorationIndex(ResourceKey<Structure> key, BundledLootTableLoader.VersionProfile profile) {
+        if (BundledLootTableLoader.compareVersions(profile.minecraftVersion(), "26.3") >= 0) {
+            return currentStructureDecorationIndex(key);
+        }
+
         // Check version profile for overrides first (handles per-version
         // differences in the runtime STRUCTURE registry index mapping).
         String keyStr = key.identifier().toString();
@@ -594,25 +793,8 @@ public final class VanillaLootStructureSimulator {
         // structures whose Paper index differs are pinned explicitly there.
         var lookup = WorldgenEngine.vanillaLookup().lookupOrThrow(Registries.STRUCTURE);
         Structure target = lookup.getOrThrow(key).value();
-        if (key.equals(BuiltinStructures.MINESHAFT) || key.equals(BuiltinStructures.MINESHAFT_MESA)
-            || keyStr.startsWith("minecraft:abandoned_camp_")) {
-            // ChunkGenerator.applyBiomeDecoration groups the STRUCTURE registry by
-            // decoration step, then increments the feature index once per structure.
-            // Sort dynamic-registry keys so the headless datagen lookup mirrors the
-            // loaded registry's stable order instead of its JVM-dependent encounter
-            // order. A STRUCTURE_TYPE index cannot reproduce that stream: normal and
-            // mesa mineshafts share StructureType.MINESHAFT but occupy separate slots.
-            int structureIndex = 0;
-            List<Holder.Reference<Structure>> stepStructures = lookup.listElements()
-                .filter(holder -> holder.value().step() == target.step())
-                .sorted(Comparator.comparing(holder -> holder.key().identifier().toString()))
-                .toList();
-            for (Holder<Structure> holder : stepStructures) {
-                Structure candidate = holder.value();
-                if (candidate == target) return structureIndex;
-                structureIndex++;
-            }
-            throw new IllegalStateException("Structure not found in decoration step: " + key);
+        if (key.equals(BuiltinStructures.MINESHAFT) || key.equals(BuiltinStructures.MINESHAFT_MESA)) {
+            return structureDecorationIndex(lookup, target, key);
         }
         var typeLookup = WorldgenEngine.vanillaLookup().lookupOrThrow(Registries.STRUCTURE_TYPE);
         StructureType<?> targetType = target.type();
@@ -622,6 +804,32 @@ public final class VanillaLootStructureSimulator {
             typeIndex++;
         }
         throw new IllegalStateException("Structure type not found: " + targetType);
+    }
+
+    private static int currentStructureDecorationIndex(ResourceKey<Structure> key) {
+        var lookup = WorldgenEngine.vanillaLookup().lookupOrThrow(Registries.STRUCTURE);
+        Structure target = lookup.getOrThrow(key).value();
+        return structureDecorationIndex(lookup, target, key);
+    }
+
+    private static int structureDecorationIndex(
+        net.minecraft.core.HolderLookup.RegistryLookup<Structure> lookup,
+        Structure target, ResourceKey<Structure> key) {
+        // ChunkGenerator.applyBiomeDecoration groups every STRUCTURE registry
+        // entry by decoration step and increments the feature index once per
+        // structure. Datapack registry resources load in stable key order, so
+        // sorting the offline lookup reproduces the live 26.3 server stream.
+        // This deliberately counts distinct keys that share one StructureType.
+        int structureIndex = 0;
+        List<Holder.Reference<Structure>> stepStructures = lookup.listElements()
+            .filter(holder -> holder.value().step() == target.step())
+            .sorted(Comparator.comparing(holder -> holder.key().identifier().toString()))
+            .toList();
+        for (Holder<Structure> holder : stepStructures) {
+            if (holder.value() == target) return structureIndex;
+            structureIndex++;
+        }
+        throw new IllegalStateException("Structure not found in decoration step: " + key);
     }
 
     private static BundledLootTableLoader.VersionProfile versionProfile(PredictionContext context) {
@@ -639,6 +847,10 @@ public final class VanillaLootStructureSimulator {
         return start.getStructure().type() == StructureType.STRONGHOLD
             ? List.of(start)
             : List.of();
+    }
+
+    private static boolean isVillage(ResourceKey<Structure> structureKey) {
+        return structureKey.identifier().toString().startsWith("minecraft:village_");
     }
 
     /**
@@ -675,10 +887,53 @@ public final class VanillaLootStructureSimulator {
             || structureKey.equals(BuiltinStructures.RUINED_PORTAL_NETHER);
     }
 
+    private static boolean needsCompleteTerrainPrefill(ResourceKey<Structure> structureKey) {
+        String id = structureKey.identifier().toString();
+        return id.startsWith("minecraft:abandoned_camp_")
+            || structureKey.equals(BuiltinStructures.IGLOO)
+            || structureKey.equals(BuiltinStructures.OCEAN_RUIN_COLD)
+            || structureKey.equals(BuiltinStructures.OCEAN_RUIN_WARM)
+            || structureKey.equals(BuiltinStructures.RUINED_PORTAL_STANDARD)
+            || structureKey.equals(BuiltinStructures.RUINED_PORTAL_DESERT)
+            || structureKey.equals(BuiltinStructures.RUINED_PORTAL_JUNGLE)
+            || structureKey.equals(BuiltinStructures.RUINED_PORTAL_SWAMP)
+            || structureKey.equals(BuiltinStructures.RUINED_PORTAL_MOUNTAIN)
+            || structureKey.equals(BuiltinStructures.RUINED_PORTAL_OCEAN)
+            || structureKey.equals(BuiltinStructures.RUINED_PORTAL_NETHER);
+    }
+
     private static boolean needsTerrainPrefillByType(StructureType<?> type) {
         return type == StructureType.STRONGHOLD
             || type == StructureType.BURIED_TREASURE
             || type == StructureType.MINESHAFT;
+    }
+
+    private static long containerColumn(int x, int z) {
+        return (long) x << 32 ^ z & 0xFFFFFFFFL;
+    }
+
+    private static List<SimulatedContainer> canonicalContainerOutput(
+        Collection<SimulatedContainer> containers) {
+        if (containers == null || containers.isEmpty()) return List.of();
+        return containers.stream()
+            .sorted(Comparator.comparingInt(SimulatedContainer::x)
+                .thenComparingInt(SimulatedContainer::y)
+                .thenComparingInt(SimulatedContainer::z)
+                .thenComparing(SimulatedContainer::lootTableId)
+                .thenComparingLong(SimulatedContainer::lootSeed)
+                .thenComparing(SimulatedContainer::pairedChest))
+            .toList();
+    }
+
+    public record PlacementHistoryCandidate(ChunkPos firstChunk,
+                                            List<SimulatedContainer> containers) {
+        public PlacementHistoryCandidate {
+            if (firstChunk == null) throw new IllegalArgumentException("firstChunk is required");
+            containers = canonicalContainerOutput(containers);
+        }
+    }
+
+    public record ObservedContainerPosition(int x, int y, int z) {
     }
 
     public record SimulatedContainer(int x, int y, int z, String lootTableId, long lootSeed,
@@ -715,6 +970,7 @@ public final class VanillaLootStructureSimulator {
         private final boolean terrainFallback;
         private final Map<BlockPos, BlockState> blocks = new HashMap<>();
         private final Map<BlockPos, BlockEntity> blockEntities = new HashMap<>();
+        private boolean captureContainerEntities = true;
         private final List<SimulatedContainer> capturedEntities = new ArrayList<>();
         private final List<SimulatedMinecart> capturedMinecarts = new ArrayList<>();
         private final Map<Heightmap.Types, Map<Long, Integer>> heights =
@@ -784,11 +1040,19 @@ public final class VanillaLootStructureSimulator {
                     if (table == null) continue;
                     BlockPos pos = entry.getKey();
                     BlockState state = blocks.get(pos);
+                    traceBlock("final-container", pos, state);
                     boolean pairedChest = state != null && state.hasProperty(ChestBlock.TYPE)
                         && state.getValue(ChestBlock.TYPE) != ChestType.SINGLE;
                     result.add(new SimulatedContainer(
                         pos.getX(), pos.getY(), pos.getZ(), table.identifier().toString(),
                         container.getLootTableSeed(), pairedChest));
+                } else if (entry.getValue() instanceof net.minecraft.world.level.block.entity.BrushableBlockEntity brushable) {
+                    var tag = brushable.saveWithoutMetadata(WorldgenEngine.offlineRegistryAccess());
+                    String table = tag.getStringOr("LootTable", "");
+                    if (table.isBlank()) continue;
+                    BlockPos pos = entry.getKey();
+                    result.add(new SimulatedContainer(pos.getX(), pos.getY(), pos.getZ(), table,
+                        tag.getLongOr("LootTableSeed", 0L)));
                 }
             }
             result.addAll(capturedEntities);
@@ -918,8 +1182,24 @@ public final class VanillaLootStructureSimulator {
             if (name.equals("isEmptyBlock")) {
                 return stateAt(immutable((BlockPos) args[0])).isAir();
             }
+            // Tree placement uses LevelSimulatedReader predicates for collision
+            // checks. Returning the proxy's default false aborts valid trees and
+            // skips their RNG draws before subsequent village containers.
+            if (name.equals("isStateAtPosition")) {
+                @SuppressWarnings("unchecked")
+                var predicate = (java.util.function.Predicate<BlockState>) args[1];
+                return predicate.test(stateAt(immutable((BlockPos) args[0])));
+            }
+            if (name.equals("isFluidAtPosition")) {
+                @SuppressWarnings("unchecked")
+                var predicate = (java.util.function.Predicate<net.minecraft.world.level.material.FluidState>) args[1];
+                return predicate.test(stateAt(immutable((BlockPos) args[0])).getFluidState());
+            }
             if (name.equals("getBlockState")) {
-                return stateAt(immutable((BlockPos) args[0]));
+                BlockPos pos = immutable((BlockPos) args[0]);
+                BlockState state = stateAt(pos);
+                traceBlock("getBlockState", pos, state);
+                return state;
             }
             if (name.equals("getFluidState")) {
                 BlockPos pos = immutable((BlockPos) args[0]);
@@ -928,6 +1208,7 @@ public final class VanillaLootStructureSimulator {
             if (name.equals("setBlock")) {
                 BlockPos pos = immutable((BlockPos) args[0]);
                 BlockState state = (BlockState) args[1];
+                traceBlock("setBlock", pos, state);
                 blocks.put(pos, state);
                 BlockEntity entity = blockEntityFor(pos, state);
                 if (entity != null) {
@@ -944,7 +1225,7 @@ public final class VanillaLootStructureSimulator {
             }
             if (name.equals("addFreshEntity") || name.equals("addEntity")) {
                 Entity entity = (Entity) args[0];
-                if (entity instanceof ContainerEntity container) {
+                if (captureContainerEntities && entity instanceof ContainerEntity container) {
                     ResourceKey<LootTable> table = container.getContainerLootTable();
                     if (table != null) {
                         BlockPos pos = entity.blockPosition();
@@ -962,11 +1243,14 @@ public final class VanillaLootStructureSimulator {
                 return true;
             }
             if (name.equals("getLevel")) {
-                return fakeServerLevel(seed, generator);
+                return fakeServerLevel(seed, generator, proxy());
             }
             if (name.equals("removeBlock") || name.equals("destroyBlock")) {
                 BlockPos pos = immutable((BlockPos) args[0]);
-                blocks.remove(pos);
+                traceBlock(name, pos, Blocks.AIR.defaultBlockState());
+                // Keep an explicit air override so terrain fallback cannot
+                // resurrect the removed block on the next read.
+                blocks.put(pos, Blocks.AIR.defaultBlockState());
                 blockEntities.remove(pos);
                 return true;
             }
@@ -1014,6 +1298,25 @@ public final class VanillaLootStructureSimulator {
                 System.out.println("[proxy-default] " + sig);
             }
             return defaultValue(method.getReturnType());
+        }
+
+        private static void traceBlock(String operation, BlockPos pos, BlockState state) {
+            String target = System.getProperty("seedexplorer.traceBlock", "");
+            if (target.isBlank()) return;
+            String coordinate = pos.getX() + "," + pos.getY() + "," + pos.getZ();
+            if (!target.equals("*") && !target.equals(coordinate)) return;
+            StringBuilder trace = new StringBuilder("[structure-trace] ")
+                .append(operation).append(' ').append(coordinate)
+                .append(" state=").append(state);
+            StackWalker.getInstance().forEach(frame -> {
+                if (frame.getClassName().startsWith("me.seedexplorer")
+                    || frame.getClassName().startsWith("net.minecraft")) {
+                    trace.append("\n  at ").append(frame.getClassName()).append('.')
+                        .append(frame.getMethodName()).append('(').append(frame.getFileName())
+                        .append(':').append(frame.getLineNumber()).append(')');
+                }
+            });
+            probe(trace.toString());
         }
 
         private int height(Heightmap.Types type, int x, int z) {
@@ -1082,17 +1385,25 @@ public final class VanillaLootStructureSimulator {
         private static volatile Object fakeServerLevel;
         private static volatile long fakeServerLevelSeed = Long.MIN_VALUE;
         private static volatile ChunkGenerator fakeServerLevelGenerator;
+        private static volatile WorldGenLevel fakeServerLevelWorld;
         private static Object fakeServerLevel(long seed) {
             return fakeServerLevel(seed, null);
         }
 
         private static Object fakeServerLevel(long seed, ChunkGenerator generator) {
+            return fakeServerLevel(seed, generator, null);
+        }
+
+        private static Object fakeServerLevel(long seed, ChunkGenerator generator,
+                                              WorldGenLevel world) {
             Object cached = fakeServerLevel;
             if (cached != null && fakeServerLevelSeed == seed
-                && (generator == null || fakeServerLevelGenerator == generator)) return cached;
+                && (generator == null || fakeServerLevelGenerator == generator)
+                && (world == null || fakeServerLevelWorld == world)) return cached;
             synchronized (VanillaLootStructureSimulator.class) {
                 if (fakeServerLevel != null && fakeServerLevelSeed == seed
-                    && (generator == null || fakeServerLevelGenerator == generator)) {
+                    && (generator == null || fakeServerLevelGenerator == generator)
+                    && (world == null || fakeServerLevelWorld == world)) {
                     return fakeServerLevel;
                 }
                 try {
@@ -1149,6 +1460,12 @@ public final class VanillaLootStructureSimulator {
 
                     Object level = unsafe.allocateInstance(serverLevelClass);
                     setField(unsafe, level, serverLevelClass, minecraftServerClass, server);
+                    if (world != null) {
+                        StructureManager structureManager = new StructureManager(
+                            world, worldOptions, null);
+                        setField(unsafe, level, serverLevelClass,
+                            StructureManager.class, structureManager);
+                    }
 
                     Class<?> serverLevelDataClass = Class.forName(
                         "net.minecraft.world.level.storage.ServerLevelData");
@@ -1291,6 +1608,7 @@ public final class VanillaLootStructureSimulator {
                     fakeServerLevel = level;
                     fakeServerLevelSeed = seed;
                     fakeServerLevelGenerator = generator;
+                    fakeServerLevelWorld = world;
                     return level;
                 } catch (Throwable t) {
                     probe("[fakeServerLevel] failed: " + t);
@@ -1377,6 +1695,9 @@ public final class VanillaLootStructureSimulator {
             if (block == Blocks.DROPPER) return new DropperBlockEntity(pos, state);
             if (block == Blocks.HOPPER) return new HopperBlockEntity(pos, state);
             if (block == Blocks.SPAWNER) return new SpawnerBlockEntity(pos, state);
+            if (block == Blocks.SUSPICIOUS_SAND || block == Blocks.SUSPICIOUS_GRAVEL) {
+                return new net.minecraft.world.level.block.entity.BrushableBlockEntity(pos, state);
+            }
             if (isShulkerBox(block)) return new ShulkerBoxBlockEntity(pos, state);
             return null;
         }

@@ -374,12 +374,14 @@ public final class VanillaStructurePredictor {
         String structureId = structureId(entry.structure());
         StructureType type = typeFor(structureId);
         if (type == null) return false;
+        if (requiresStrictStartValidation(structureId)) {
+            return hasValidStart(seed, dimension, structureId, chunk);
+        }
         if (!structureId.equals("minecraft:stronghold")
             && !isValidStructureCandidate(seed, dimension, chunk, entry.structure(), structureId)) {
             return false;
         }
-        return !requiresStrictStartValidation(structureId)
-            || hasValidSelectedStart(seed, dimension, structureId, chunk);
+        return true;
     }
 
     /**
@@ -391,11 +393,14 @@ public final class VanillaStructurePredictor {
         return exactStructureKey(structureId) != null;
     }
 
-    private static boolean hasValidSelectedStart(long seed, int dimension, String structureId, ChunkPos chunk) {
+    private static boolean hasValidStart(long seed, int dimension, String structureId, ChunkPos chunk) {
         ResourceKey<Structure> key = exactStructureKey(structureId);
         if (key == null) return true;
         try {
-            StructureStart start = WorldgenEngine.generateSelectedStructureStart(seed, dimension, key, chunk);
+            // Let vanilla evaluate the actual generation point, biome column,
+            // terrain constraints, and structure-specific rejection rules. A
+            // fixed Y sample is not equivalent for single-piece or jigsaw starts.
+            StructureStart start = WorldgenEngine.generateStructureStart(seed, dimension, key, chunk);
             return start != null && start.isValid();
         } catch (Throwable ignored) {
             return false;
@@ -590,11 +595,23 @@ public final class VanillaStructurePredictor {
 
     private static boolean isAllowedByPlacement(long seed, ResourceKey<StructureSet> key, RandomSpreadStructurePlacement placement, ChunkPos chunk) {
         if (!placement.applyAdditionalChunkRestrictions(chunk.x(), chunk.z(), seed)) return false;
-        if (key == BuiltinStructureSets.PILLAGER_OUTPOSTS && hasVillageNear(seed, chunk, 10)) return false;
+        if (key == BuiltinStructureSets.PILLAGER_OUTPOSTS) {
+            try {
+                var state = WorldgenEngine.structureState(seed, 0);
+                if (state != null) {
+                    if (!placement.applyInteractionsWithOtherStructures(
+                        state, chunk.x(), chunk.z())) return false;
+                }
+            } catch (Throwable ignored) {
+            }
+            // Vanilla's exclusion zone checks village placement chunks, not
+            // whether the chosen village variant passes its biome/start test.
+            if (hasVillagePlacementNear(seed, chunk, 10)) return false;
+        }
         return true;
     }
 
-    private static boolean hasVillageNear(long seed, ChunkPos center, int chunkRadius) {
+    private static boolean hasVillagePlacementNear(long seed, ChunkPos center, int chunkRadius) {
         try {
             Holder<StructureSet> holder = WorldgenEngine.vanillaLookup()
                 .lookupOrThrow(Registries.STRUCTURE_SET)
@@ -612,7 +629,8 @@ public final class VanillaStructurePredictor {
                 for (int rx = regionMinX; rx <= regionMaxX; rx++) {
                     ChunkPos villageChunk = placement.getPotentialStructureChunk(seed, rx * spacing, rz * spacing);
                     if (Math.abs(villageChunk.x() - center.x()) > chunkRadius || Math.abs(villageChunk.z() - center.z()) > chunkRadius) continue;
-                    if (createIfViable(seed, 0, set, placement, villageChunk, null) != null) return true;
+                    if (placement.applyAdditionalChunkRestrictions(
+                        villageChunk.x(), villageChunk.z(), seed)) return true;
                 }
             }
         } catch (Throwable ignored) {
@@ -862,7 +880,7 @@ public final class VanillaStructurePredictor {
     private static boolean isValidBiome(Holder<Structure> structure, Holder<Biome> biome, String structureId, String biomeId) {
         if (structure != null && biome != null) {
             try {
-                return structure.value().biomes().contains(biome);
+                return WorldgenEngine.biomeSetContains(structure.value().biomes(), biome);
             } catch (Throwable ignored) {
             }
         }

@@ -1,0 +1,7 @@
+build/
+*.class
+.idea/
+*.iml
+
+# Locally downloaded vanilla reference binaries; metadata and audit notes are kept.
+/references/**/*.jar

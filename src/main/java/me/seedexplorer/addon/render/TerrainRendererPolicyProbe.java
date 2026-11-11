@@ -27,6 +27,8 @@ public final class TerrainRendererPolicyProbe {
         verifyMaterials();
         verifyNaturalDecorationTintPolicy();
         verifyNaturalDecorationSchedulingPolicy();
+        verifyStructureFocusPriorityPolicy();
+        verifyDirectUndergroundFocus();
         verifyDiskCache();
         verifyStreamPersistence();
         verifyStructurePersistence();
@@ -72,9 +74,70 @@ public final class TerrainRendererPolicyProbe {
             "natural decoration escaped the bounded camera inspection window on Z");
     }
 
+    private static void verifyStructureFocusPriorityPolicy() {
+        int radius = Terrain3DRenderer.focusExactRadiusChunks();
+        require(radius > 0 && radius < 12,
+            "structure focus exact radius is unbounded or too small");
+        List<TerrainStreamingCursor.Coordinate> coordinates =
+            Terrain3DRenderer.focusPriorityCoordinates(73, -41);
+        int side = radius * 2 + 1;
+        require(coordinates.size() == side * side,
+            "structure focus did not cover its complete bounded exact square");
+        require(coordinates.getFirst().equals(
+                new TerrainStreamingCursor.Coordinate(73, -41, 0)),
+            "structure focus spiral did not begin at the selected start chunk");
+        Set<Long> unique = new HashSet<>();
+        int previousRing = -1;
+        for (TerrainStreamingCursor.Coordinate coordinate : coordinates) {
+            require(coordinate.ring() >= previousRing && coordinate.ring() <= radius,
+                "structure focus admitted outside work before exact inner terrain");
+            previousRing = coordinate.ring();
+            long packed = ((long) coordinate.chunkX() << 32)
+                ^ (coordinate.chunkZ() & 0xFFFFFFFFL);
+            require(unique.add(packed), "structure focus spiral emitted duplicate work");
+        }
+        require(Terrain3DRenderer.focusPriorityBlocksNormalWork(1),
+            "coarse camera work can overtake unfinished structure focus terrain");
+        require(!Terrain3DRenderer.focusPriorityBlocksNormalWork(0),
+            "ordinary camera streaming remained blocked after focus terrain completed");
+        TerrainPresentationFrontier ordinary = new TerrainPresentationFrontier();
+        ordinary.sequenceFor(1L);
+        TerrainPresentationFrontier focused = new TerrainPresentationFrontier();
+        focused.sequenceFor(2L);
+        focused.markReady(2L);
+        require(!ordinary.isRevealed(1L) && focused.pollNewlyRevealed() == 2L,
+            "an older missing camera tile blocked the independent focus reveal frontier");
+    }
+
     private static void verifySharedRendererInitialization() {
         require(Terrain3DRenderer.shared() != null,
             "shared terrain renderer failed to initialize");
+    }
+
+    private static void verifyDirectUndergroundFocus() {
+        var structure = new GeneratedStructure(120, -80, StructureType.STRONGHOLD);
+        require(Terrain3DRenderer.resolvedStructureFocusTarget(structure, null) == null,
+            "unresolved underground focus invented a surface target");
+        var empty = new me.seedexplorer.addon.preview.StructurePreviewModel(List.of(),0,0,0,0,0,0,false);
+        require(Terrain3DRenderer.resolvedStructureFocusTarget(structure, empty) == null,
+            "failed underground preview invented a surface target");
+        var blocks = List.of(new me.seedexplorer.addon.preview.StructurePreviewModel.PreviewBlock(120,-40,-80,null));
+        var bounds = new me.seedexplorer.addon.preview.StructurePreviewModel(blocks,110,-48,-90,130,-32,-70,false);
+        var target = Terrain3DRenderer.resolvedStructureFocusTarget(structure, bounds);
+        require(target.x()==120.5 && target.y()==-39.5 && target.z()==-79.5,
+            "underground focus did not use preview bounds");
+        FreeCamera3D camera = new FreeCamera3D();
+        camera.position(0,140,0);
+        camera.animateViewOf(target.x(),target.y(),target.z(),target.distance(),55,0,34);
+        for(int tick=0;tick<34;tick++) {
+            double previousY=camera.eyeY();camera.tick();
+            require(camera.eyeY()<previousY,"underground focus paused or reversed toward surface");
+        }
+        require(!camera.isAnimating() && camera.eyeY()<0,"underground focus did not finish underground");
+        camera.animateTo(0,200,0,25,55,0,10);camera.cancelAnimation();
+        double heldY=camera.eyeY();camera.tick();
+        require(camera.eyeY()==heldY&&!camera.isAnimating(),"pending focus kept moving to previous selection");
+        System.out.println("Direct underground focus: PASS (unresolved/failed preview, underground bounds, single descent, cancellation)");
     }
 
     private static void verifyCameraZoom() {
@@ -174,8 +237,8 @@ public final class TerrainRendererPolicyProbe {
         }
         require(!TerrainLodPolicy.shouldBakeUndergroundGeometry(false, 0, 8),
             "surface-only bake unexpectedly generated underground geometry");
-        require(!TerrainLodPolicy.shouldBakeUndergroundGeometry(true, 1, 1),
-            "End terrain unexpectedly requested an underground cave shell");
+        require(TerrainLodPolicy.shouldBakeUndergroundGeometry(true, 1, 1),
+            "End spectator view lost its island boundary mesh");
         require(TerrainLodPolicy.shouldPrebakeUndergroundGeometry(0, 8, 8, true),
             "nearby exact Overworld terrain did not pre-bake its cave shell");
         require(TerrainLodPolicy.shouldPrebakeUndergroundGeometry(-1, 0, 8, true),
@@ -184,8 +247,8 @@ public final class TerrainRendererPolicyProbe {
             "terrain outside the cave window unexpectedly pre-baked cave geometry");
         require(!TerrainLodPolicy.shouldPrebakeUndergroundGeometry(0, 4, 8, false),
             "coarse surface terrain unexpectedly pre-baked cave geometry");
-        require(!TerrainLodPolicy.shouldPrebakeUndergroundGeometry(1, 0, 8, true),
-            "End terrain unexpectedly pre-baked cave geometry");
+        require(TerrainLodPolicy.shouldPrebakeUndergroundGeometry(1, 0, 8, true),
+            "End terrain did not pre-bake spectator boundary geometry");
         require(TerrainLodPolicy.protectsPrebakedUndergroundGeometry(
                 10, -10, 18, -2, 8, true),
             "active cave-window geometry was not protected from cache compaction");
@@ -436,8 +499,22 @@ public final class TerrainRendererPolicyProbe {
             "leaf preview must not create opaque white quads");
         require(!TerrainMaterialPolicy.validPredictedSurface(1, "minecraft:bedrock"),
             "End bedrock roof artifact must be rejected");
-        require(!TerrainMaterialPolicy.includeCaveSample(-1, 124, "minecraft:netherrack"),
-            "Nether roof band must be filtered");
+        var snapshot = me.seedexplorer.addon.live.LiveChunkSnapshot.captureBuilder(-1,0,0,0,128).build();
+        require(Terrain3DRenderer.isCaveFluidBoundary(Terrain3DRenderer.snapshotBlock(snapshot,0,32,0)),
+            "sparse observed air suppressed a cave lava face");
+        require(!Terrain3DRenderer.isCaveFluidBoundary(Terrain3DRenderer.snapshotBlock(snapshot,0,128,0)),
+            "unknown space outside an observed snapshot was treated as air");
+        require(Terrain3DRenderer.isCaveFluidBoundary(net.minecraft.world.level.block.Blocks.AIR.defaultBlockState()),
+            "exposed cave lava surface was discarded");
+        require(!Terrain3DRenderer.isCaveFluidBoundary(net.minecraft.world.level.block.Blocks.LAVA.defaultBlockState())
+                && !Terrain3DRenderer.isCaveFluidBoundary(net.minecraft.world.level.block.Blocks.NETHERRACK.defaultBlockState()),
+            "cave lava generated internal or buried faces");
+        require(TerrainMaterialPolicy.NETHER_SURFACE_SCAN_MAX_Y < 120,
+            "surface overview selected the solid Nether roof instead of the terrain below");
+        require(TerrainMaterialPolicy.includeCaveSample(-1, 124, "minecraft:netherrack"),
+            "Nether roof underside must be present");
+        require(!TerrainMaterialPolicy.includeCaveSample(-1, 128, "minecraft:netherrack"),
+            "Nether space above the bedrock roof must remain excluded");
         require(TerrainMaterialPolicy.includeCaveSample(-1, 80, "minecraft:netherrack"),
             "Nether caves below the roof must remain visible");
         require(!TerrainMaterialPolicy.renderAtlasMaterial(true),
@@ -484,6 +561,7 @@ public final class TerrainRendererPolicyProbe {
     private static void verifyDiskCache() throws Exception {
         Path root = Files.createTempDirectory("seed-explorer-terrain-cache-probe-");
         try {
+            verifyDiskCacheBackpressure(root.resolve("backpressure"));
             TerrainDiskCache cache = new TerrainDiskCache(root, 1024L);
             cache.awaitIdle();
             long seed = 42L;
@@ -545,6 +623,40 @@ public final class TerrainRendererPolicyProbe {
                 }
             }
         }
+    }
+
+    private static void verifyDiskCacheBackpressure(Path root) throws Exception {
+        TerrainDiskCache cache = new TerrainDiskCache(root, Long.MAX_VALUE);
+        cache.awaitIdle();
+        var sizeField = TerrainDiskCache.class.getDeclaredField("knownBytes");
+        sizeField.setAccessible(true);
+        require(((java.util.concurrent.atomic.AtomicLong) sizeField.get(cache)).get() == -1L,
+            "unlimited cache unnecessarily scanned the entire saved terrain tree");
+        var writerField = TerrainDiskCache.class.getDeclaredField("writer");
+        writerField.setAccessible(true);
+        var writer = (java.util.concurrent.ThreadPoolExecutor) writerField.get(cache);
+        cache.setBulkMode(true);
+        var blocked = new java.util.concurrent.CountDownLatch(writer.getMaximumPoolSize());
+        var release = new java.util.concurrent.CountDownLatch(1);
+        for (int i = 0; i < writer.getMaximumPoolSize(); i++) writer.execute(() -> {
+            blocked.countDown();
+            try { release.await(10, java.util.concurrent.TimeUnit.SECONDS); }
+            catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
+        });
+        try {
+            require(blocked.await(10, java.util.concurrent.TimeUnit.SECONDS), "cache writers did not start");
+            String[] states = new String[256];
+            states[0] = "minecraft:stone";
+            var chunk = new TerrainDiskCache.CachedChunk(0, 0, 1,
+                new int[256], states, new int[256], new String[256]);
+            for (int i = 0; i < 4100; i++) cache.storeAsync(1L, 0, chunk);
+            require(!Files.exists(root), "saturated cache wrote synchronously on the submitting thread");
+            require(cache.pendingWrites() <= 258, "cache retained an excessive write backlog");
+        } finally {
+            release.countDown();
+            cache.awaitIdle();
+        }
+        require(cache.load(1L, 0, 0, 0, 1).isPresent(), "accepted queued cache write was lost");
     }
 
     private static void verifyStreamPersistence() throws Exception {

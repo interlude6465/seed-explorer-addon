@@ -1,0 +1,13 @@
+Seed Explorer 26.3 prediction oracle
+created=2026-11-10T10:22:38.163007900Z
+locateRadiusChunks=384 windowRadiusChunks=96 queryAttempts=2 predictedSamples=2
+
+SEED 1
+RUNTIME requestedSeed=1 actualSeed=1 serverVersion=26.3 requestedPreset=minecraft:normal requestedStructures=true
+DIMENSION 0
+PROGRESS seed=1 id=minecraft:buried_treasure actual=2 predicted=4 missed=0 extra=0 actualChests=4 predictedChests=4 lootMismatch=0
+  minecraft:buried_treasure actual=2 predicted=4 missed=0 extra=0 actualChests=4 predictedChests=4 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=4
+
+FAILURES 0
+
+UNVERIFIED 0

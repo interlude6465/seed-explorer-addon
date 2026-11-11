@@ -21,7 +21,26 @@ public final class LootSearchParser {
 
     public static LootSearchTerm parseTerm(String raw) {
         if (raw == null || raw.isBlank()) return null;
-        String text = raw.trim().toLowerCase(Locale.ROOT).replace('-', ' ');
+        String text = raw.trim().toLowerCase(Locale.ROOT);
+        int bracket=text.indexOf('[');
+        if(bracket>=0 && text.endsWith("]")) {
+            LootSearchTerm base=parseTerm(text.substring(0,bracket));
+            if(base==null)return null;
+            var properties=new ArrayList<LootSearchTerm.Property>();
+            for(String part:text.substring(bracket+1,text.length()-1).split(",")) {
+                String[] pair=part.trim().split("=",2);
+                try {properties.add(new LootSearchTerm.Property(pair[0].trim().replace(' ','_'),pair.length==1?0:Integer.parseInt(pair[1].trim())));}
+                catch(NumberFormatException invalid){return null;}
+            }
+            return LootSearchTerm.withProperties(base.itemId(),base.display()+" ["+properties.stream()
+                .map(p->p.enchantment().replace("minecraft:","")+"="+p.level()).collect(Collectors.joining(", "))+"]",properties);
+        }
+        text=text.replace('-', ' ');
+        if (text.startsWith("minecraft:")) {
+            Identifier id = Identifier.tryParse(text);
+            if (id == null || BuiltInRegistries.ITEM.getOptional(id).isEmpty()) return null;
+            return termForItem(id.toString());
+        }
         if (text.contains("book")) {
             int level = parseLevel(text);
             String enchantment = text.replaceAll("\\b(enchanted|books?|level|lvl)\\b", " ")
@@ -40,16 +59,28 @@ public final class LootSearchParser {
 
     /** Returns ranked, clickable item-name suggestions for the search editor. */
     public static List<LootSearchTerm> suggest(String raw, int limit) {
+        return suggest(raw, limit, null);
+    }
+
+    /** Limit suggestions before ranking, so unavailable items cannot displace loot items. */
+    public static List<LootSearchTerm> suggest(String raw, int limit, java.util.Set<String> allowedItems) {
         if (raw == null || raw.isBlank() || limit <= 0) return List.of();
         String query = raw.trim().toLowerCase(Locale.ROOT).replace('-', ' ');
         String normalized = normalize(query);
         String sortedQuery = sortedTokens(query);
         if (normalized.isBlank()) return List.of();
 
+        if (query.contains("book")) {
+            LootSearchTerm book = parseTerm(query);
+            if (book != null && book.enchantment() != null
+                && (allowedItems == null || allowedItems.contains(book.itemId()))) return List.of(book);
+        }
+
         List<ItemSuggestion> suggestions = new ArrayList<>();
         for (var item : BuiltInRegistries.ITEM) {
             String id = BuiltInRegistries.ITEM.getKey(item).toString();
             if (id.endsWith(":air")) continue;
+            if (allowedItems != null && !allowedItems.contains(id)) continue;
             String path = id.substring(id.indexOf(':') + 1).replace('_', ' ');
             String display = item.getName(item.getDefaultInstance()).getString();
             int score = Math.max(matchScore(normalized, sortedQuery, path),
@@ -112,7 +143,10 @@ public final class LootSearchParser {
 
     private static int parseLevel(String text) {
         Matcher number = LEVEL_NUMBER.matcher(text);
-        if (number.find()) return Integer.parseInt(number.group(1));
+        if (number.find()) {
+            try { return Integer.parseInt(number.group(1)); }
+            catch (NumberFormatException tooLarge) { return Integer.MAX_VALUE; }
+        }
         for (String token : text.split("[^a-z]+")) {
             int level = switch (token) {
                 case "i" -> 1;

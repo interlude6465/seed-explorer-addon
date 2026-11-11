@@ -99,6 +99,14 @@ public final class StandaloneLiveChunkCapture implements TerrainWorldDataSource 
         }
     }
 
+    /** Copies references to complete immutable captures; callers never read a live chunk. */
+    List<LiveChunkSnapshot> snapshots(ClientLevel expectedLevel, int requestedDimension) {
+        if (expectedLevel == null || level != expectedLevel || requestedDimension != dimension) return List.of();
+        synchronized (snapshots) {
+            return List.copyOf(snapshots.values());
+        }
+    }
+
     public void clear() {
         synchronized (snapshots) {
             snapshots.clear();

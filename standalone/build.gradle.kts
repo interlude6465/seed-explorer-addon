@@ -36,14 +36,91 @@ tasks.named<JavaCompile>("compileGametestJava") {
 }
 
 tasks.named<ProcessResources>("processGametestResources") {
+    val rendererVisualAudit = providers.gradleProperty("rendererVisualAudit").orNull == "true"
+    val spectatorVisualAudit = providers.gradleProperty("spectatorVisualAudit").orNull == "true"
+    val terrainMovingAudit = providers.gradleProperty("terrainMovingAudit").orNull == "true"
+    inputs.property("spectatorVisualAudit", spectatorVisualAudit)
+    inputs.property("rendererVisualAudit", rendererVisualAudit)
+    inputs.property("terrainMovingAudit", terrainMovingAudit)
     inputs.properties(mapOf("version" to project.version, "jdk_version" to "25",
         "minecraft_version" to "26.3", "loader_version" to "0.19.5"))
     filesMatching("fabric.mod.json") { expand(inputs.properties) }
+    doLast {
+        if (rendererVisualAudit || spectatorVisualAudit || terrainMovingAudit) {
+            val descriptor = destinationDir.resolve("fabric.mod.json")
+            descriptor.writeText(descriptor.readText().replace(
+                Regex("\"fabric-client-gametest\"\\s*:\\s*\\[[\\s\\S]*?\\]"),
+                "\"fabric-client-gametest\": [\"me.seedexplorer.standalone.test.StandaloneTerrainVisualGameTest\"]"))
+            if (spectatorVisualAudit) descriptor.writeText(descriptor.readText().replace(
+                "StandaloneTerrainVisualGameTest", "StandaloneSpectatorVisualGameTest"))
+        }
+    }
 }
 
 loom.runs.named("clientGameTest") {
     vmArgs("-Doshi.util.wmi.timeout=1000")
+    if (providers.gradleProperty("terrainMovingAudit").orNull?.toBoolean() == true) {
+        val auditSeconds = providers.gradleProperty("terrainMovingAuditSeconds").getOrElse("120")
+        vmArgs("-Dseedexplorer.terrainMovingAudit=true", "-Dseedexplorer.terrainMovingAuditSeconds=$auditSeconds", "-Xmx6G")
+    }
+    if (providers.gradleProperty("searchWorkflowAudit").orNull?.toBoolean() == true) {
+        vmArgs("-Dseedexplorer.searchWorkflowAudit=true", "-Xmx3G")
+    }
+    if (providers.gradleProperty("mapFollowupAudit").orNull?.toBoolean() == true) {
+        vmArgs("-Dseedexplorer.mapFollowupAudit=true", "-Xmx3G")
+    }
     runDir = "run/clientGameTest"
+    if (providers.gradleProperty("seedCrackingAudit").orNull?.toBoolean() == true) {
+        vmArgs("-Dseedexplorer.runSeedCrackingAudit=true", "-Xmx6G")
+    }
+    if (providers.gradleProperty("predictionOracle").orNull?.toBoolean() == true) {
+        val oracleHeap = providers.gradleProperty("predictionOracleHeap").getOrElse("6G")
+        vmArgs("-Xmx$oracleHeap")
+        vmArgs("-Dseedexplorer.runPredictionOracle=true")
+        providers.gradleProperty("predictionOracleSeeds").orNull?.let { seeds ->
+            vmArgs("-Dseedexplorer.oracleSeeds=$seeds")
+        }
+        providers.gradleProperty("predictionOracleTypes").orNull?.let { types ->
+            vmArgs("-Dseedexplorer.oracleTypes=$types")
+        }
+        providers.gradleProperty("predictionOracleOmitTypes").orNull?.let { types ->
+            vmArgs("-Dseedexplorer.oracleOmitTypes=$types")
+        }
+        mapOf(
+            "predictionOracleLocateRadius" to "seedexplorer.oracleLocateRadius",
+            "predictionOracleWindowRadius" to "seedexplorer.oracleWindowRadius",
+            "predictionOracleQueryAttempts" to "seedexplorer.oracleQueryAttempts",
+            "predictionOraclePredictedSamples" to "seedexplorer.oraclePredictedSamples",
+            "predictionOracleDungeonRadius" to "seedexplorer.oracleDungeonRadius",
+            "predictionOracleCaseTimeoutTicks" to "seedexplorer.oracleCaseTimeoutTicks",
+            "predictionOracleDimensions" to "seedexplorer.oracleDimensions",
+            "predictionOracleStarts" to "seedexplorer.oracleStarts",
+            "predictionOracleFirstChunk" to "seedexplorer.oracleFirstChunk",
+            "predictionOracleSkipLoot" to "seedexplorer.oracleSkipLoot"
+        ).forEach { (gradleProperty, systemProperty) ->
+            providers.gradleProperty(gradleProperty).orNull?.let { value ->
+                vmArgs("-D$systemProperty=$value")
+            }
+        }
+        if (providers.gradleProperty("campPlacementTrace").orNull?.toBoolean() == true) {
+            vmArgs("-Dseedexplorer.campPlacementTrace=true")
+            providers.gradleProperty("campPlacementTracePath").orNull?.let { path ->
+                vmArgs("-Dseedexplorer.campPlacementTracePath=$path")
+            }
+        }
+        if (providers.gradleProperty("villageRngTrace").orNull?.toBoolean() == true) {
+            vmArgs("-Dseedexplorer.villageRngTrace=true")
+            providers.gradleProperty("villageRngTracePath").orNull?.let { path ->
+                vmArgs("-Dseedexplorer.villageRngTraceFile=$path")
+            }
+        }
+        if (providers.gradleProperty("mineshaftTrace").orNull?.toBoolean() == true) {
+            vmArgs("-Dseedexplorer.mineshaftTrace=true")
+        }
+        if (providers.gradleProperty("predictionOracleDebugScans").orNull?.toBoolean() == true) {
+            vmArgs("-Dseedexplorer.oracleDebugScans=true")
+        }
+    }
 }
 
 // Optional interactive smoke session: normal client lifecycle, no test-driven shutdown.
@@ -61,7 +138,7 @@ val sharedIncludes = Regex("java\\.include\\(\"([^\"]+)\"\\)")
     .findAll(file("../build.gradle.kts").readText())
     .map { it.groupValues[1] }.toList()
 sourceSets.main {
-    java.setSrcDirs(listOf("../src/standaloneFabric/java", "../src/main/java", "../src/coreModel/java"))
+    java.setSrcDirs(listOf("../src/standaloneFabric/java", "../src/main/java", "../src/coreModel/java", "../seed-cracking/src/main/java"))
     java.setIncludes(sharedIncludes + listOf(
         "me/seedexplorer/addon/structures/GeneratedStructure.java",
         "me/seedexplorer/addon/structures/StructureType.java",
@@ -133,7 +210,7 @@ val verifyStandalone by tasks.registering {
 }
 tasks.check { dependsOn(verifyStandalone) }
 
-val probeNames = listOf("Engine", "Renderer", "Loot", "Waypoint", "Minimap", "Ore", "Settings", "Ancillary", "Search")
+val probeNames = listOf("Engine", "Renderer", "Loot", "Waypoint", "Minimap", "Ore", "Settings", "Ancillary", "Search", "SeedCracking")
 probeNames.forEach { probe ->
     val verification = tasks.register<JavaExec>("standalone${probe}Probe") {
         group = "verification"
@@ -143,4 +220,39 @@ probeNames.forEach { probe ->
         maxHeapSize = "2G"
     }
     tasks.check { dependsOn(verification) }
+}
+
+// Research replay is deliberately separate from independent generated-world validation.
+tasks.register<JavaExec>("standaloneSearchOracleProbe") {
+    group = "verification"
+    dependsOn(tasks.jar)
+    mainClass.set("me.seedexplorer.standalone.StandaloneSearchProbe")
+    classpath = files(tasks.jar.flatMap { it.archiveFile }) + configurations.runtimeClasspath.get()
+    maxHeapSize = "2G"
+    args("oracle")
+}
+
+val versionedLootIsolationProbe = tasks.register<JavaExec>("standaloneVersionedLootIsolationProbe") {
+    group = "verification"
+    dependsOn(tasks.jar)
+    mainClass.set("me.seedexplorer.addon.tools.VersionedLootIsolationProbe")
+    classpath = files(tasks.jar.flatMap { it.archiveFile }) + configurations.runtimeClasspath.get()
+    maxHeapSize = "2G"
+}
+tasks.check { dependsOn(versionedLootIsolationProbe) }
+
+tasks.register<JavaExec>("standalonePlacementHistoryProbe") {
+    group = "verification"
+    dependsOn(tasks.jar)
+    mainClass.set("me.seedexplorer.standalone.StandalonePlacementHistoryProbe")
+    classpath = files(tasks.jar.flatMap { it.archiveFile }) + configurations.runtimeClasspath.get()
+    maxHeapSize = "2G"
+    args(providers.gradleProperty("historySeed").getOrElse("1"),
+        providers.gradleProperty("historyStructure").getOrElse("minecraft:desert_pyramid"),
+        providers.gradleProperty("historyChunkX").getOrElse("-700"),
+        providers.gradleProperty("historyChunkZ").getOrElse("-126"))
+    providers.gradleProperty("historyRegion").orNull?.let { args(file(it).absolutePath) }
+    providers.gradleProperty("historyTrace").orNull?.let {
+        systemProperty("seedexplorer.historyTrace", file(it).absolutePath)
+    }
 }

@@ -47,7 +47,13 @@ import java.util.Set;
 final class OfflineWorldgenResources {
     private static final Object LOCK = new Object();
     private static volatile RegistryAccess registryAccess;
-    private static volatile StructureTemplateManager structureTemplateManager;
+    // Vanilla templates lazily mutate Palette.cache (a HashMap) during jigsaw
+    // lookup and placement. Sharing them between preview/loot/map workers races
+    // even though StructureTemplateManager's own template lookup is concurrent.
+    // Keep each worker's templates private; immutable resources/registries and
+    // the read-only storage location can still be shared.
+    private static final ThreadLocal<StructureTemplateManager> STRUCTURE_TEMPLATES =
+        ThreadLocal.withInitial(OfflineWorldgenResources::createStructureTemplateManager);
     private static volatile MultiPackResourceManager resourceManager;
     private static volatile LevelStorageSource.LevelStorageAccess levelStorageAccess;
 
@@ -65,27 +71,24 @@ final class OfflineWorldgenResources {
     }
 
     static StructureTemplateManager structureTemplateManager() {
-        StructureTemplateManager current = structureTemplateManager;
-        if (current != null) return current;
+        return STRUCTURE_TEMPLATES.get();
+    }
 
+    private static StructureTemplateManager createStructureTemplateManager() {
         synchronized (LOCK) {
-            if (structureTemplateManager == null) {
+            if (levelStorageAccess == null) {
                 try {
                     Path storageRoot = Path.of(
                         System.getProperty("java.io.tmpdir"),
                         "seed-explorer-worldgen-" + ProcessHandle.current().pid());
                     LevelStorageSource storage = LevelStorageSource.createDefault(storageRoot);
                     levelStorageAccess = storage.createAccess("templates");
-                    structureTemplateManager = new StructureTemplateManager(
-                        resourceManager(),
-                        levelStorageAccess,
-                        DataFixers.getDataFixer(),
-                        registryAccess().lookupOrThrow(Registries.BLOCK));
                 } catch (IOException exception) {
                     throw new IllegalStateException("Unable to initialize vanilla structure templates", exception);
                 }
             }
-            return structureTemplateManager;
+            return new StructureTemplateManager(resourceManager(), levelStorageAccess,
+                DataFixers.getDataFixer(), registryAccess().lookupOrThrow(Registries.BLOCK));
         }
     }
 

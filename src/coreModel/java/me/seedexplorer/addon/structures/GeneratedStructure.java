@@ -55,6 +55,22 @@ public class GeneratedStructure {
 
     public String displayName() {
         if (type == StructureType.END_CITY && hasShip) return type.displayName + " (Ship)";
+        if (type == StructureType.VILLAGE || type == StructureType.ABANDONED_CAMP) {
+            String prefix = type == StructureType.VILLAGE
+                ? "minecraft:village_" : "minecraft:abandoned_camp_";
+            if (variant.startsWith(prefix) && variant.length() > prefix.length()) {
+                String biome = variant.substring(prefix.length());
+                if (biome.equals("bamboo_jungle")) biome = "bamboo";
+                StringBuilder label = new StringBuilder();
+                for (String word : biome.split("_")) {
+                    if (!word.isEmpty()) {
+                        if (!label.isEmpty()) label.append(' ');
+                        label.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));
+                    }
+                }
+                return label + " " + type.displayName;
+            }
+        }
         if (type == StructureType.DUNGEON && variant.startsWith("minecraft:")) {
             String mob = variant.substring("minecraft:".length()).replace('_', ' ');
             return type.displayName + " (" + Character.toUpperCase(mob.charAt(0)) + mob.substring(1) + " Spawner)";

@@ -6,7 +6,8 @@
   "environment": "client",
   "entrypoints": {
     "fabric-client-gametest": [
-      "me.seedexplorer.standalone.test.StandaloneClientSmokeTest"
+      "me.seedexplorer.standalone.test.StandaloneClientSmokeTest",
+      "me.seedexplorer.standalone.test.StandalonePredictionOracleGameTest"
     ]
   },
   "depends": {

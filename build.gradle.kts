@@ -29,6 +29,8 @@ sourceSets {
     }
     named("standaloneFabric") {
         java.srcDir("src/main/java")
+        java.srcDir("seed-cracking/src/main/java")
+        java.include("me/seedexplorer/seedcracking/**/*.java")
         java.include("me/seedexplorer/standalone/**/*.java")
         java.include("me/seedexplorer/addon/enchant/EnchantingTablePredictor.java")
         java.include("me/seedexplorer/addon/enchant/EnchantingTargetPlanner.java")
@@ -62,6 +64,8 @@ sourceSets {
         java.include("me/seedexplorer/addon/render/TerrainGenerationMode.java")
         java.include("me/seedexplorer/addon/render/TerrainLodPolicy.java")
         java.include("me/seedexplorer/addon/render/TerrainMaterialPolicy.java")
+        java.include("me/seedexplorer/addon/render/TerrainRendererPolicyProbe.java")
+        java.include("me/seedexplorer/addon/structures/StructurePredictionStore.java")
         java.include("me/seedexplorer/addon/render/TerrainOverlayRenderer.java")
         java.include("me/seedexplorer/addon/render/TerrainOverlayRenderers.java")
         java.include("me/seedexplorer/addon/render/TerrainPresentationFrontier.java")
@@ -82,6 +86,7 @@ sourceSets {
         java.include("me/seedexplorer/addon/loot/StandaloneStructureLootPredictor.java")
         java.include("me/seedexplorer/addon/loot/VanillaLootStructureSimulator.java")
         java.include("me/seedexplorer/addon/loot/VanillaLootTables.java")
+        java.include("me/seedexplorer/addon/tools/VersionedLootIsolationProbe.java")
         compileClasspath += coreModel.output
         runtimeClasspath += coreModel.output
     }
@@ -728,6 +733,12 @@ tasks {
             providers.gradleProperty("chunkX").orElse("0").get(),
             providers.gradleProperty("chunkZ").orElse("0").get()
         )
+        providers.gradleProperty("inspectPosition").orNull?.let {
+            systemProperty("seedexplorer.inspectPosition", it)
+        }
+        providers.gradleProperty("villageStart").orNull?.let {
+            systemProperty("seedexplorer.villageStart", it)
+        }
     }
 
     register<JavaExec>("predictionRegressionSuite") {
@@ -966,6 +977,19 @@ tasks {
         if (providers.gradleProperty("probeLog").isPresent) {
             systemProperty("seedexplorer.probeLog", providers.gradleProperty("probeLog").get())
         }
+        if (providers.gradleProperty("traceBlock").isPresent) {
+            systemProperty("seedexplorer.traceBlock", providers.gradleProperty("traceBlock").get())
+        }
+    }
+
+    register<JavaExec>("structurePlacementOrderProbe") {
+        group = "verification"
+        description = "Checks canonical mutable StructureStart replay across decoration chunks."
+        dependsOn(classes)
+        mainClass.set("me.seedexplorer.addon.tools.StructurePlacementOrderProbe")
+        classpath = sourceSets.main.get().runtimeClasspath + sourceSets.main.get().compileClasspath
+        jvmArgs("--add-opens", "java.base/jdk.internal.misc=ALL-UNNAMED",
+            "--add-opens", "java.base/java.lang=ALL-UNNAMED")
     }
 
     register<JavaExec>("structureLootIndexSearch") {

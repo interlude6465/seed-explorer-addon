@@ -68,6 +68,9 @@ public final class SavedChunkNbtReport {
                 OUT.println("entity=" + entity);
             }
             OUT.println("root_keys=" + root.keySet());
+            OUT.println("status=" + root.getStringOr("Status", "<missing>"));
+            OUT.println("last_update=" + root.getLongOr("LastUpdate", Long.MIN_VALUE));
+            OUT.println("inhabited_time=" + root.getLongOr("InhabitedTime", Long.MIN_VALUE));
             OUT.println("structure_keys=" + structures.keySet());
             OUT.println("start_keys=" + starts.keySet());
             OUT.println("reference_keys=" + references.keySet());

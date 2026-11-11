@@ -1,0 +1,111 @@
+Seed Explorer 26.3 prediction oracle
+created=2026-11-10T11:06:39.206920300Z
+requestedSeeds=1 requestedDimensions=0 includeTypes=monster_room,abandoned_camp_old_growth_spruce_taiga,ancient_city omitTypes=<none>
+locateRadiusChunks=384 windowRadiusChunks=96 queryAttempts=2 predictedSamples=2 dungeonRadiusChunks=1 caseTimeoutTicks=1200
+
+SEED 1
+RUNTIME requestedSeed=1 actualSeed=1 serverVersion=26.3 requestedPreset=minecraft:normal requestedStructures=true
+DIMENSION 0
+PROGRESS seed=1 id=minecraft:abandoned_camp_old_growth_spruce_taiga actual=2 predicted=2 missed=0 extra=0 actualChests=4 predictedChests=5 lootMismatch=0
+PROGRESS seed=1 id=minecraft:ancient_city actual=2 predicted=3 missed=0 extra=0 actualChests=81 predictedChests=81 lootMismatch=0
+  minecraft:abandoned_camp_old_growth_spruce_taiga actual=2 predicted=2 missed=0 extra=0 actualChests=4 predictedChests=5 missedChests=0 extraChests=1 lootMismatch=0 exactLootMatch=0
+  minecraft:ancient_city actual=2 predicted=3 missed=0 extra=0 actualChests=81 predictedChests=81 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0
+
+PROGRESS seed=1 type=DUNGEON actual=4 predicted=4
+STATUS COMPLETE
+FAILURES 1
+  extra chest seed=1 structure=minecraft:abandoned_camp_old_growth_spruce_taiga predicted=-11211,101,10430 table=minecraft:barrels/abandoned_camp_barrel groundTruth={state=Block{minecraft:cave_air},blockEntity=none,table=none,containerEntities=[],insideCached=true,insidePieceFootprint=true,startChunk=[-701, 652],cachedBox=BoundingBox{minX=-11229, minY=88, minZ=10413, maxX=-11196, maxY=119, maxZ=10454},pieceBox=BoundingBox{minX=-11217, minY=100, minZ=10425, maxX=-11208, maxY=107, maxZ=10442}}
+
+UNVERIFIED 92
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:abandoned_camp_old_growth_spruce_taiga chest=[BlockPos{x=-11212, y=101, z=10439}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:abandoned_camp_old_growth_spruce_taiga chest=[BlockPos{x=4395, y=74, z=646}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:abandoned_camp_old_growth_spruce_taiga chest=[BlockPos{x=4396, y=75, z=642}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:abandoned_camp_old_growth_spruce_taiga chest=[BlockPos{x=4403, y=75, z=642}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=13027, y=-48, z=-8774}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=13042, y=-44, z=-8813}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=13056, y=-50, z=-8875}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=13058, y=-49, z=-8777}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=13074, y=-50, z=-8809}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=13076, y=-49, z=-8777}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=13080, y=-47, z=-8885}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=13080, y=-47, z=-8877}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=13081, y=-50, z=-8724}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=13092, y=-50, z=-8875}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=13109, y=-49, z=-8719}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=13109, y=-49, z=-8682}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=13133, y=-49, z=-8717}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=13134, y=-50, z=-8757}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=13137, y=-50, z=-8679}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=13141, y=-44, z=-8685}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=13145, y=-48, z=-8837}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=13150, y=-37, z=-8882}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=13163, y=-49, z=-8776}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=13168, y=-49, z=-8874}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=13175, y=-44, z=-8713}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=13178, y=-49, z=-8749}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=13186, y=-37, z=-8882}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=13224, y=-48, z=-8773}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15827, y=-48, z=-13451}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15823, y=-50, z=-13423}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15820, y=-50, z=-13388}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15812, y=-50, z=-13384}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15811, y=-50, z=-13375}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15807, y=-49, z=-13424}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15787, y=-50, z=-13449}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15780, y=-47, z=-13387}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15780, y=-47, z=-13379}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15762, y=-50, z=-13539}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15757, y=-49, z=-13522}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15733, y=-49, z=-13538}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15730, y=-48, z=-13507}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15730, y=-48, z=-13490}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15721, y=-44, z=-13520}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15712, y=-48, z=-13347}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15711, y=-48, z=-13387}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15705, y=-47, z=-13387}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15705, y=-47, z=-13379}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15683, y=-50, z=-13422}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15681, y=-50, z=-13386}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15676, y=-47, z=-13458}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15676, y=-47, z=-13450}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15675, y=-44, z=-13382}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15666, y=-49, z=-13423}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15658, y=-47, z=-13458}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15658, y=-47, z=-13450}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15645, y=-49, z=-13447}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15272, y=-48, z=-13844}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15264, y=-48, z=-13814}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15237, y=-49, z=-13865}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15231, y=-50, z=-13813}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15225, y=-44, z=-13809}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15225, y=-44, z=-13790}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15217, y=-50, z=-13886}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15216, y=-48, z=-13844}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15214, y=-37, z=-13809}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15211, y=-44, z=-13882}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15197, y=-35, z=-13921}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15190, y=-47, z=-13732}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15187, y=-37, z=-13781}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15184, y=-50, z=-13761}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15182, y=-47, z=-13732}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15155, y=-49, z=-13742}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15154, y=-50, z=-13797}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15154, y=-50, z=-13725}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15152, y=-47, z=-13772}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15144, y=-47, z=-13772}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15140, y=-49, z=-13890}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15137, y=-37, z=-13922}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15105, y=-44, z=-13852}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15104, y=-50, z=-13889}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15101, y=-50, z=-13919}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15087, y=-49, z=-13840}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15084, y=-48, z=-13813}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15071, y=-50, z=-13815}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ancient_city chest=[BlockPos{x=-15069, y=-37, z=-13848}]
+  dungeon loot matched but remains approximate seed=1 spawner=BlockPos{x=6787, y=-16, z=-8417}
+  dungeon loot matched but remains approximate seed=1 spawner=BlockPos{x=6787, y=-16, z=-8417}
+  dungeon loot matched but remains approximate seed=1 spawner=BlockPos{x=-907, y=-28, z=-492}
+  dungeon loot matched but remains approximate seed=1 spawner=BlockPos{x=-907, y=-28, z=-492}
+  dungeon loot matched but remains approximate seed=1 spawner=BlockPos{x=-933, y=30, z=-474}
+  dungeon loot matched but remains approximate seed=1 spawner=BlockPos{x=-933, y=30, z=-474}
+  dungeon loot matched but remains approximate seed=1 spawner=BlockPos{x=-917, y=27, z=-456}

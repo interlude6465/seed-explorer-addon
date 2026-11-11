@@ -14,6 +14,7 @@ import java.util.Objects;
 
 /** Standalone Fabric entrypoint; contains no Meteor runtime dependency. */
 public final class SeedExplorerFabricClient implements ClientModInitializer {
+    private static SeedExplorerFabricClient instance;
     private static StandaloneMapScreenFactory screenFactory;
     private StandaloneSeedExplorerConfig config;
     private final StandaloneWorldContext worldContext = new StandaloneWorldContext();
@@ -22,7 +23,9 @@ public final class SeedExplorerFabricClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         config = StandaloneSeedExplorerConfig.load();
+        instance = this;
         StandaloneAncillaryRuntime ancillary = StandaloneAncillaryRuntime.initialize(config);
+        StandaloneSeedCrackingRuntime cracking = StandaloneSeedCrackingRuntime.initialize(config);
         StandaloneOreEspRenderer.install(config);
         Terrain3DRenderer.shared().setWorldDataSource(liveCapture);
         KeyMapping.Category category = KeyMapping.Category.register(
@@ -36,6 +39,8 @@ public final class SeedExplorerFabricClient implements ClientModInitializer {
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             worldContext.tick(client, config);
+            StandaloneSearchRuntime.tick(client, config);
+            cracking.tick(client);
             ancillary.tick(client);
             liveCapture.tick(client);
             StandaloneOreEspRenderer.tick(client);
@@ -51,5 +56,17 @@ public final class SeedExplorerFabricClient implements ClientModInitializer {
 
     public static void installScreenFactory(StandaloneMapScreenFactory factory) {
         screenFactory = Objects.requireNonNull(factory, "factory");
+    }
+
+    /** Client-thread snapshot handoff, scoped to the currently configured world. */
+    static java.util.List<me.seedexplorer.addon.live.LiveChunkSnapshot> lootObservations(
+            me.seedexplorer.addon.worldgen.PredictionContext context) {
+        var client = net.minecraft.client.Minecraft.getInstance();
+        SeedExplorerFabricClient current = instance;
+        if (current == null || client == null || !client.isSameThread()
+            || client.level == null || !current.config.hasSeed()
+            || current.config.seed() != context.worldSeed()
+            || !current.config.predictionVersion().equals(context.minecraftVersion())) return java.util.List.of();
+        return current.liveCapture.snapshots(client.level, context.dimension());
     }
 }

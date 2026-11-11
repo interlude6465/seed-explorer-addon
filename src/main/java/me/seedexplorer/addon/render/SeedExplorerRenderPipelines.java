@@ -24,6 +24,20 @@ final class SeedExplorerRenderPipelines {
         .withCull(false)
         .build();
 
+    /** Outward-wound cave boundaries are visible only from their air-facing side. */
+    static final RenderPipeline CAVE_TEXTURED = RenderPipeline.builder(MESH_UNIFORMS)
+        .withLocation(id("pipeline/seed_explorer_cave_textured"))
+        .withVertexBinding(0, DefaultVertexFormat.POSITION_TEX_COLOR).withPrimitiveTopology(PrimitiveTopology.TRIANGLES)
+        .withVertexShader(id("seed_explorer_world_pos_tex_color"))
+        .withFragmentShader(id("pos_tex_color"))
+        .withBindGroupLayout(BindGroupLayout.builder()
+            .withUniform("u_Texture", UniformType.COMBINED_IMAGE_SAMPLER)
+            .build())
+        .withDepthStencilState(new DepthStencilState(CompareOp.LESS_THAN_OR_EQUAL, true))
+        .withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
+        .withCull(true)
+        .build();
+
     static final RenderPipeline WORLD_TEXTURED_TRANSLUCENT = RenderPipeline.builder(MESH_UNIFORMS)
         .withLocation(id("pipeline/seed_explorer_world_textured_translucent"))
         .withVertexBinding(0, DefaultVertexFormat.POSITION_TEX_COLOR).withPrimitiveTopology(PrimitiveTopology.TRIANGLES)

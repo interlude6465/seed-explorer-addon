@@ -11,7 +11,18 @@
     "StandaloneEnchantmentMenuMixin",
     "StandaloneContainerOverlayMixin",
     "StandaloneEnchantmentRequestMixin",
-    "StandaloneEnchantmentLayoutMixin"
+    "StandaloneEnchantmentLayoutMixin",
+    "StandaloneCampPlacementTraceMixin$Start",
+    "StandaloneCampPlacementTraceMixin$Region",
+    "StandaloneCampPlacementTraceMixin$Manager",
+    "StandaloneVillageRngTraceMixin",
+    "StandaloneStructurePieceRngTraceMixin",
+    "StandaloneTemplateRngTraceMixin",
+    "StandaloneFeaturePredicateTraceMixin",
+    "StandaloneBlockPileTraceMixin",
+    "StandaloneMineshaftTraceMixin$Start",
+    "StandaloneMineshaftTraceMixin$Piece",
+    "StandaloneMineshaftTraceMixin$Corridor"
   ],
   "injectors": {
     "defaultRequire": 1

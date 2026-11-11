@@ -1,11 +1,24 @@
 package me.seedexplorer.addon.loot;
 
-import java.util.HashMap;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.List;
 import java.util.Map;
 
 public class VanillaLootTables {
-    private static final Map<String, LootTableDef> TABLES = new HashMap<>();
+    private static final Map<String, LootTableDef> TABLES = new ConcurrentHashMap<>();
+
+    private record ProfileTable(String version, String pathPrefix, String id) {}
+    private static final Map<ProfileTable, Optional<LootTableDef>> PROFILE_TABLES = new ConcurrentHashMap<>();
+
+    /** Resolves only the selected profile's bundled data; missing historical tables stay missing. */
+    public static LootTableDef get(BundledLootTableLoader.VersionProfile profile, String id) {
+        if (profile == null || id == null || !id.startsWith("minecraft:")) return null;
+        return PROFILE_TABLES.computeIfAbsent(
+            new ProfileTable(profile.minecraftVersion(), profile.lootTablePathPrefix(), id),
+            ignored -> Optional.ofNullable(BundledLootTableLoader.parseFromBundled(profile, id, id)))
+            .orElse(null);
+    }
 
     static {
         register("minecraft:chests/simple_dungeon",
@@ -218,7 +231,8 @@ public class VanillaLootTables {
     }
 
     public static LootTableDef get(String id) {
-        return TABLES.get(id);
+        LootTableDef table = TABLES.get(id);
+        return table != null ? table : get(BundledLootTableLoader.runtimeProfile(), id);
     }
 
     public static boolean has(String id) {
@@ -236,5 +250,6 @@ public class VanillaLootTables {
     /** Clears all registered tables (for cross-version test isolation). */
     public static void resetForTest() {
         TABLES.clear();
+        PROFILE_TABLES.clear();
     }
 }

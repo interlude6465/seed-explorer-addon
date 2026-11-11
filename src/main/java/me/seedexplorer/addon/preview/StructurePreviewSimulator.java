@@ -108,7 +108,12 @@ public final class StructurePreviewSimulator {
         long decorationSeed = random.setDecorationSeed(seed, structure.x, structure.z);
         random.setFeatureSeed(decorationSeed, 0, start.getStructure().step().ordinal());
 
-        BoundingBox box = start.getBoundingBox();
+        BoundingBox bounds = start.getBoundingBox();
+        // Procedural pieces (notably jungle temples) find their ground height
+        // during placement. Their initial Y bounds are not the writable volume:
+        // clipping to those bounds discards the raised structure's block writes.
+        BoundingBox box = new BoundingBox(bounds.minX(), world.minBuildY, bounds.minZ(),
+            bounds.maxX(), world.maxBuildY, bounds.maxZ());
         try {
             start.placeInChunk(level, null, WorldgenEngine.chunkGenerator(seed, structure.type.dimension),
                 random, box, new ChunkPos(structure.startChunkX, structure.startChunkZ));

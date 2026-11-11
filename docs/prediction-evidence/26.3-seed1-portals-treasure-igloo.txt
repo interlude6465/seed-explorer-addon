@@ -1,0 +1,49 @@
+Seed Explorer 26.3 prediction oracle
+created=2026-11-10T10:03:27.971884400Z
+locateRadiusChunks=384 windowRadiusChunks=96 queryAttempts=2 predictedSamples=2
+
+SEED 1
+PROGRESS seed=1 id=minecraft:buried_treasure actual=2 predicted=4 missed=0 extra=0 actualChests=4 predictedChests=4 lootMismatch=0
+PROGRESS seed=1 id=minecraft:igloo actual=2 predicted=4 missed=0 extra=0 actualChests=2 predictedChests=2 lootMismatch=0
+PROGRESS seed=1 id=minecraft:ruined_portal actual=2 predicted=5 missed=0 extra=0 actualChests=5 predictedChests=5 lootMismatch=0
+PROGRESS seed=1 id=minecraft:ruined_portal_desert actual=2 predicted=2 missed=0 extra=0 actualChests=2 predictedChests=2 lootMismatch=0
+PROGRESS seed=1 id=minecraft:ruined_portal_jungle actual=2 predicted=2 missed=0 extra=0 actualChests=2 predictedChests=2 lootMismatch=0
+PROGRESS seed=1 id=minecraft:ruined_portal_mountain actual=2 predicted=2 missed=0 extra=0 actualChests=2 predictedChests=2 lootMismatch=0
+PROGRESS seed=1 id=minecraft:ruined_portal_ocean actual=2 predicted=5 missed=0 extra=0 actualChests=5 predictedChests=5 lootMismatch=0
+PROGRESS seed=1 id=minecraft:ruined_portal_swamp actual=2 predicted=2 missed=0 extra=0 actualChests=2 predictedChests=2 lootMismatch=0
+  minecraft:buried_treasure actual=2 predicted=4 missed=0 extra=0 actualChests=4 predictedChests=4 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0
+  minecraft:igloo actual=2 predicted=4 missed=0 extra=0 actualChests=2 predictedChests=2 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0
+  minecraft:ruined_portal actual=2 predicted=5 missed=0 extra=0 actualChests=5 predictedChests=5 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0
+  minecraft:ruined_portal_desert actual=2 predicted=2 missed=0 extra=0 actualChests=2 predictedChests=2 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0
+  minecraft:ruined_portal_jungle actual=2 predicted=2 missed=0 extra=0 actualChests=2 predictedChests=2 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0
+  minecraft:ruined_portal_mountain actual=2 predicted=2 missed=0 extra=0 actualChests=2 predictedChests=2 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0
+  minecraft:ruined_portal_ocean actual=2 predicted=5 missed=0 extra=0 actualChests=5 predictedChests=5 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0
+  minecraft:ruined_portal_swamp actual=2 predicted=2 missed=0 extra=0 actualChests=2 predictedChests=2 missedChests=0 extraChests=0 lootMismatch=0 exactLootMatch=0
+
+FAILURES 0
+
+UNVERIFIED 24
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:buried_treasure chest=[BlockPos{x=8473, y=60, z=-4311}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:buried_treasure chest=[BlockPos{x=-12231, y=61, z=-13063}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:buried_treasure chest=[BlockPos{x=8521, y=65, z=-4743}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:buried_treasure chest=[BlockPos{x=-12743, y=59, z=-13783}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:igloo chest=[BlockPos{x=132, y=37, z=-12669}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:igloo chest=[BlockPos{x=324, y=38, z=-12093}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ruined_portal chest=[BlockPos{x=-7584, y=105, z=-12622}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ruined_portal chest=[BlockPos{x=14873, y=-1, z=307}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ruined_portal chest=[BlockPos{x=-6664, y=72, z=-12743}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ruined_portal chest=[BlockPos{x=-6090, y=71, z=-13134}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ruined_portal chest=[BlockPos{x=15755, y=67, z=22}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ruined_portal_desert chest=[BlockPos{x=-5476, y=60, z=12498}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ruined_portal_desert chest=[BlockPos{x=-3640, y=71, z=-10826}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ruined_portal_jungle chest=[BlockPos{x=13508, y=66, z=-15316}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ruined_portal_jungle chest=[BlockPos{x=14902, y=64, z=-2544}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ruined_portal_mountain chest=[BlockPos{x=2722, y=76, z=3880}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ruined_portal_mountain chest=[BlockPos{x=12512, y=97, z=-6030}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ruined_portal_ocean chest=[BlockPos{x=15531, y=38, z=5954}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ruined_portal_ocean chest=[BlockPos{x=-4928, y=53, z=-430}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ruined_portal_ocean chest=[BlockPos{x=16308, y=58, z=5962}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ruined_portal_ocean chest=[BlockPos{x=-1036, y=40, z=2}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ruined_portal_ocean chest=[BlockPos{x=-2236, y=50, z=1460}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ruined_portal_swamp chest=[BlockPos{x=-9995, y=64, z=3878}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:ruined_portal_swamp chest=[BlockPos{x=-6186, y=64, z=6749}]

@@ -2,7 +2,9 @@ package me.seedexplorer.addon.render;
 
 /** Renderer-only material filtering that does not depend on client graphics state. */
 public final class TerrainMaterialPolicy {
-    public static final int NETHER_ROOF_CUTOFF_Y = 120;
+    public static final int NETHER_ROOF_CUTOFF_Y = 128;
+    /** Optional surface overview excludes the roof; cave volume retains it. */
+    public static final int NETHER_SURFACE_SCAN_MAX_Y = 119;
 
     private TerrainMaterialPolicy() {
     }

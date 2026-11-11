@@ -129,7 +129,9 @@ public final class Terrain3DRenderer {
     private static final long TERRAIN_FRAME_SUMMARY_NANOS = 2_000_000_000L;
     private static final int STREAM_ANCHOR_REGION_SIZE = 64;
     private static final int CAMERA_PRIORITY_RADIUS = 32;
-    private static final int MAX_IN_FLIGHT_CHUNKS = 32;
+    /** Exact square prepared before normal camera expansion while inspecting a structure. */
+    private static final int FOCUS_EXACT_RADIUS_CHUNKS = 6;
+    private static final int MAX_IN_FLIGHT_CHUNKS = 8;
     private static final int BULK_TERRAIN_THREADS = Math.max(2,
         Math.min(32, Runtime.getRuntime().availableProcessors() - 1));
     private static final int BULK_MAX_IN_FLIGHT_CHUNKS = Math.max(96,
@@ -160,31 +162,19 @@ public final class Terrain3DRenderer {
     private static final int MAX_TERRAIN_VERTICES_PER_FRAME = 8_000_000;
     private static final int MIN_DETAILED_TERRAIN_VERTICES_PER_FRAME = 6_500_000;
     /** Stable GPU regions prevent the complete terrain mesh being uploaded every frame. */
-    private static final int GPU_BATCH_SIZE_CHUNKS = 16;
+    private static final int GPU_BATCH_SIZE_CHUNKS = 4;
     /** Cave shells are much denser than heightfield terrain. Smaller regions keep one
      * completed cave chunk from starving every neighbour in a surface-sized batch. */
     private static final int CAVE_GPU_BATCH_SIZE_CHUNKS = 2;
     /** Underground is a first-person inspection view: keep a complete exact shell
      * around the free camera instead of filling the wider horizon with coarse slabs. */
     private static final int CAVE_RENDER_RADIUS_CHUNKS = 8;
-    /**
-     * Omit the closest cave shell rather than drawing it translucently. This gives
-     * the inspection camera an actually empty viewing space, with solid cave walls
-     * remaining beyond it and no faint block outlines.
-     */
-    private static final int CAVE_CUTAWAY_RADIUS_BLOCKS = 48;
-    /** Camera movement inside this cell keeps the previous cave bake drawable. */
-    private static final int CAVE_CUTAWAY_BUCKET_BLOCKS = 16;
-    /** Focus mode updates its sightline more often so cave shells never hide a structure. */
-    private static final int CAVE_FOCUS_CUTAWAY_BUCKET_BLOCKS = 4;
-    /** Width of the temporary clear tunnel from the focus camera to the structure. */
-    private static final int CAVE_FOCUS_CORRIDOR_RADIUS_BLOCKS = 64;
-    private static final int GPU_BATCH_MAX_VERTICES = 2_250_000;
+    private static final int GPU_BATCH_MAX_VERTICES = 240_000;
     private static final int GPU_CAMERA_REFRESH_RADIUS_CHUNKS = 80;
     private static final long GPU_BUILD_BUDGET_NANOS = 2_500_000L;
     private static final int GPU_BUILD_MIN_CHUNKS_PER_FRAME = 8;
     private static final int GPU_BUILD_MAX_CHUNKS_PER_FRAME = 96;
-    private static final long GPU_UPLOAD_BUDGET_BYTES = 8L * 1024L * 1024L;
+    private static final long GPU_UPLOAD_BUDGET_BYTES = 4L * 1024L * 1024L;
     private static final int MAX_PENDING_GPU_UPLOADS = 2;
     /** Avoid a map-open hitch when a large spiral completed while the screen was closed. */
     private static final int MAX_PRESENTATION_REVEALS_PER_FRAME = 8_192;
@@ -208,19 +198,17 @@ public final class Terrain3DRenderer {
     private static final int VANILLA_SURFACE_DEPTH_BLOCKS = 8;
     private static final int MAX_CACHED_PREVIEWS = 64;
     private static final int MAX_STRUCTURE_PREVIEW_BLOCKS_PER_FRAME = 6000;
-    private static final int CAVE_MIN_Y = -63;
-    private static final int CAVE_MAX_Y = 192;
     /** Per-chunk voxel caps used while baking (bounds memory of a single baked chunk). */
     private static final int MAX_CAVE_VOXELS_PER_CHUNK = 9_000;
     private static final int MAX_OBSERVED_CAVE_VOXELS_PER_CHUNK = 18_000;
     /** Chunk geometry bakes started per frame. Baking runs off the render thread. */
-    private static final int BAKES_PER_FRAME = 16;
-    private static final int MAX_IN_FLIGHT_BAKES = 64;
+    private static final int BAKES_PER_FRAME = 4;
+    private static final int MAX_IN_FLIGHT_BAKES = 12;
     /** Background rebakes are opportunistic; never let a world-scale cache turn
      *  a mode transition into a giant GUI-thread or heap workload. */
     private static final int MAX_PENDING_BACKGROUND_BAKES = 8_192;
-    private static final long MAX_BAKED_CACHE_BYTES = 1_024L * 1024L * 1024L;
-    private static final long TARGET_BAKED_CACHE_BYTES = 896L * 1024L * 1024L;
+    private static final long MAX_BAKED_CACHE_BYTES = 384L * 1024L * 1024L;
+    private static final long TARGET_BAKED_CACHE_BYTES = 320L * 1024L * 1024L;
     private static final int BAKED_CACHE_TRIM_CANDIDATES = 8_192;
     /** Prevent a broken worldgen/atlas from turning diagnostics into an unbounded log. */
     private static final int MAX_TERRAIN_DIAGNOSTIC_KEYS = 16_384;
@@ -257,8 +245,7 @@ public final class Terrain3DRenderer {
         thread.setPriority(Thread.MIN_PRIORITY);
         return thread;
     }, new ThreadPoolExecutor.AbortPolicy());
-    private static final int BAKE_THREADS = Math.max(2,
-        Math.min(4, Runtime.getRuntime().availableProcessors() / 2));
+    private static final int BAKE_THREADS = 2;
     private final ThreadPoolExecutor bakeExecutor = new ThreadPoolExecutor(
         BAKE_THREADS, BAKE_THREADS, 30L, TimeUnit.SECONDS,
         new ArrayBlockingQueue<>(MAX_IN_FLIGHT_BAKES), runnable -> {
@@ -328,7 +315,16 @@ public final class Terrain3DRenderer {
     private int gpuCameraChunkX = Integer.MIN_VALUE;
     private int gpuCameraChunkZ = Integer.MIN_VALUE;
     /** Cutaway used by the current cave GPU window, retained to refresh only nearby batches. */
-    private CaveCutaway gpuCaveCutaway;
+    private int cameraVoxelX = Integer.MIN_VALUE, cameraVoxelY, cameraVoxelZ;
+    private long cameraVoxelGeneration = Long.MIN_VALUE, cameraVoxelRevision = Long.MIN_VALUE;
+    private ChunkData cameraVoxelSource;
+    private boolean cameraInsideSolid;
+    private boolean cameraBelowSurface;
+    private final Set<WorkKey> cameraVolumeRequests = ConcurrentHashMap.newKeySet();
+    private final ExecutorService cameraVolumeExecutor = Executors.newSingleThreadExecutor(r -> {
+        Thread thread = new Thread(r,"Seed Explorer Camera Volume");
+        thread.setDaemon(true); thread.setPriority(Thread.MIN_PRIORITY); return thread;
+    });
     private int gpuVisibleRadius = -1;
     private int gpuWindowAnchorX = Integer.MIN_VALUE;
     private int gpuWindowAnchorZ = Integer.MIN_VALUE;
@@ -408,6 +404,13 @@ public final class Terrain3DRenderer {
     private final java.util.ArrayDeque<long[]> cameraCoverageChunks = new java.util.ArrayDeque<>();
     private final java.util.ArrayDeque<long[]> cameraLodChunks = new java.util.ArrayDeque<>();
     private final java.util.ArrayDeque<long[]> cameraExactChunks = new java.util.ArrayDeque<>();
+    private final java.util.ArrayDeque<long[]> focusExactChunks = new java.util.ArrayDeque<>();
+    private final Set<Long> focusPriorityKeys = ConcurrentHashMap.newKeySet();
+    private final TerrainPresentationFrontier focusPresentationFrontier =
+        new TerrainPresentationFrontier();
+    private final Set<Long> priorityRevealedChunks = ConcurrentHashMap.newKeySet();
+    private volatile FocusPriorityRequest requestedFocusPriority;
+    private long focusPriorityGeneration = Long.MIN_VALUE;
     /** Quickly establishes one-sample-per-chunk terrain across the broad map. */
     private final TerrainStreamingCursor coverageCursor = new TerrainStreamingCursor();
     /** Follows coverage and upgrades it to the requested near/mid detail. */
@@ -463,8 +466,13 @@ public final class Terrain3DRenderer {
     /** Invalidates pending work and releases all cached world and mesh data. */
     public void reset() {
         worldGeneration++;
+        cameraInsideSolid = false;
+        cameraVoxelGeneration = Long.MIN_VALUE;
         pendingChunks.clear();
         clearCameraQueues();
+        requestedFocusPriority = null;
+        clearFocusPriorityWork();
+        priorityRevealedChunks.clear();
         coverageCursor.reset();
         detailCursor.reset();
         pendingDetailCoordinate = null;
@@ -803,6 +811,8 @@ public final class Terrain3DRenderer {
         int centerChunkZ = (int) Math.floor(camera.targetZ() / CHUNK_SIZE);
 
         int dimension = context.dimension();
+        if (inspectionStructure == null) clearStructureTerrainPriority();
+        else prioritizeStructureTerrain(inspectionStructure);
         prepare(seed, dimension, camera.targetX(), camera.targetZ());
         // Texture construction uploads to the GPU. Always do it on the render
         // thread before a background bake reads atlas regions, otherwise a first
@@ -820,7 +830,8 @@ public final class Terrain3DRenderer {
         // mode. Only the explicit Underground toggle selects cave geometry; using
         // the orbit eye height here made mountains turn the default view into a
         // sparse underground shell with black gaps.
-        boolean caveView = undergroundView;
+        updateCameraVoxel(camera, seed, dimension);
+        boolean caveView = undergroundView || cameraInsideSolid || cameraBelowSurface;
         TerrainFocusTarget inspectionTarget = inspectionStructure == null
             ? null : structureFocusTarget(inspectionStructure);
 
@@ -926,6 +937,31 @@ public final class Terrain3DRenderer {
         int centerChunkX = (int) Math.floor(centerBlockX / CHUNK_SIZE);
         int centerChunkZ = (int) Math.floor(centerBlockZ / CHUNK_SIZE);
         return prepareWindow(seed, dimension, centerChunkX, centerChunkZ);
+    }
+
+    /**
+     * Gives structure inspection an exact center-out terrain lane. The request is
+     * intentionally independent of the animated camera target, so clicking a
+     * distant structure begins preparing its surroundings immediately.
+     */
+    public synchronized void prioritizeStructureTerrain(GeneratedStructure structure) {
+        if (structure == null) {
+            clearStructureTerrainPriority();
+            return;
+        }
+        FocusPriorityRequest requested = new FocusPriorityRequest(
+            structure.startChunkX, structure.startChunkZ);
+        if (requested.equals(requestedFocusPriority)
+            && focusPriorityGeneration == worldGeneration) return;
+        requestedFocusPriority = requested;
+        rebuildFocusPriority();
+        lastStreamPulseNanos = 0L;
+    }
+
+    /** Releases structure-first generation and resumes the normal camera stream. */
+    public synchronized void clearStructureTerrainPriority() {
+        requestedFocusPriority = null;
+        clearFocusPriorityWork();
     }
 
     public synchronized BulkLoadStatus bulkLoad(long seed, int dimension,
@@ -1070,6 +1106,8 @@ public final class Terrain3DRenderer {
                 queuedBackgroundBakes.clear();
                 pendingExactUpgrades.clear();
                 queuedExactUpgrades.clear();
+                clearFocusPriorityWork();
+                priorityRevealedChunks.clear();
                 pendingNaturalFeatures.clear();
                 queuedNaturalFeatures.clear();
                 naturalFeatureQueueCenterX = Integer.MIN_VALUE;
@@ -1101,7 +1139,10 @@ public final class Terrain3DRenderer {
             lastCenterChunkZ = centerChunkZ;
             rebuildNaturalFeatureQueue(centerChunkX, centerChunkZ);
         }
+        reconcileFocusPriority();
+        drainFocusPresentationReveals();
         submitStreamingChunks(seed, dimension, centerChunkX, centerChunkZ);
+        drainFocusPresentationReveals();
         submitNaturalFeatureUpgrades(seed, dimension, centerChunkX, centerChunkZ);
         submitPreparedBakes(seed, dimension, centerChunkX, centerChunkZ);
         saveStreamState(seed, dimension, false);
@@ -1233,6 +1274,77 @@ public final class Terrain3DRenderer {
         }
     }
 
+    private void reconcileFocusPriority() {
+        if (requestedFocusPriority == null) {
+            clearFocusPriorityWork();
+        } else if (focusPriorityGeneration != worldGeneration) {
+            rebuildFocusPriority();
+        }
+    }
+
+    private void rebuildFocusPriority() {
+        clearFocusPriorityWork();
+        FocusPriorityRequest requested = requestedFocusPriority;
+        if (requested == null) return;
+        for (TerrainStreamingCursor.Coordinate coordinate : focusPriorityCoordinates(
+            requested.chunkX(), requested.chunkZ())) {
+            long key = ChunkPos.pack(coordinate.chunkX(), coordinate.chunkZ());
+            focusPriorityKeys.add(key);
+            focusPresentationFrontier.sequenceFor(key);
+            if (needsGeneration(chunkCache.get(key), 1)) {
+                focusExactChunks.addLast(work(key, coordinate, 1));
+            } else {
+                focusPresentationFrontier.markReady(key);
+            }
+        }
+        focusPriorityGeneration = worldGeneration;
+    }
+
+    private void clearFocusPriorityWork() {
+        focusExactChunks.clear();
+        focusPriorityKeys.clear();
+        focusPresentationFrontier.reset();
+        focusPriorityGeneration = Long.MIN_VALUE;
+    }
+
+    private void drainFocusPresentationReveals() {
+        Long key;
+        boolean changed = false;
+        while ((key = focusPresentationFrontier.pollNewlyRevealed()) != null) {
+            priorityRevealedChunks.add(key);
+            int chunkX = ChunkPos.getX(key);
+            int chunkZ = ChunkPos.getZ(key);
+            invalidateGpuBatchForChunk(chunkX, chunkZ, true);
+            changed = true;
+        }
+        if (changed) chunkRevision.incrementAndGet();
+    }
+
+    private boolean isTerrainPresented(long key) {
+        return priorityRevealedChunks.contains(key) || presentationFrontier.isRevealed(key);
+    }
+
+    static int focusExactRadiusChunks() {
+        return FOCUS_EXACT_RADIUS_CHUNKS;
+    }
+
+    static List<TerrainStreamingCursor.Coordinate> focusPriorityCoordinates(int centerChunkX,
+                                                                            int centerChunkZ) {
+        int side = FOCUS_EXACT_RADIUS_CHUNKS * 2 + 1;
+        List<TerrainStreamingCursor.Coordinate> coordinates = new ArrayList<>(side * side);
+        TerrainStreamingCursor cursor = new TerrainStreamingCursor();
+        while (true) {
+            TerrainStreamingCursor.Coordinate coordinate = cursor.next(centerChunkX, centerChunkZ);
+            if (coordinate.ring() > FOCUS_EXACT_RADIUS_CHUNKS) break;
+            coordinates.add(coordinate);
+        }
+        return List.copyOf(coordinates);
+    }
+
+    static boolean focusPriorityBlocksNormalWork(int pendingFocusChunks) {
+        return pendingFocusChunks > 0;
+    }
+
     private static long[] work(long key, TerrainStreamingCursor.Coordinate coordinate, int step) {
         return new long[]{key, coordinate.chunkX(), coordinate.chunkZ(), step};
     }
@@ -1256,7 +1368,7 @@ public final class Terrain3DRenderer {
      */
     private void submitStreamingChunks(long seed, int dimension,
                                        int centerChunkX, int centerChunkZ) {
-        if (streamStateLoading) return;
+        if (streamStateLoading && focusExactChunks.isEmpty()) return;
         long now = System.nanoTime();
         int throttle = bulkLoading ? 0 : performanceThrottle;
         long pulseNanos = bulkLoading ? BULK_STREAM_PULSE_NANOS
@@ -1270,8 +1382,39 @@ public final class Terrain3DRenderer {
             : MAX_STREAM_POSITIONS_EXAMINED_PER_PULSE;
         int reservedCoverageSlot = Math.max(0, maximumInFlight - 1);
 
-        boolean interactiveCoverageComplete = cameraCoverageChunks.isEmpty()
-            && cameraLodChunks.isEmpty() && inFlightChunks.isEmpty();
+        int focusBudget = bulkLoading ? 0 : TerrainLodPolicy.adaptiveBackgroundBudget(
+            COVERAGE_SUBMISSIONS_PER_PULSE, throttle, 1);
+        int focusExamined = 0;
+        int focusExaminedLimit = focusExactChunks.size();
+        while (focusBudget > 0 && inFlightChunks.size() < maximumInFlight
+            && focusExamined++ < focusExaminedLimit && !focusExactChunks.isEmpty()) {
+            long[] focus = focusExactChunks.pollFirst();
+            long key = focus[0];
+            ChunkData current = chunkCache.get(key);
+            if (!needsGeneration(current, 1)) {
+                focusPresentationFrontier.markReady(key);
+                continue;
+            }
+            WorkKey workKey = new WorkKey(seed, dimension, key, worldGeneration);
+            if (chunkGenerationFailures.getOrDefault(workKey, 0)
+                >= MAX_CHUNK_GENERATION_RETRIES) {
+                focusPresentationFrontier.markReady(key);
+                continue;
+            }
+            // A coarse request may already own this WorkKey. Keep the exact item
+            // queued; it will take the newly freed slot on the next pulse.
+            if (inFlightChunks.contains(workKey)) {
+                focusExactChunks.addLast(focus);
+                continue;
+            }
+            if (submitChunkGeneration(seed, dimension, (int) focus[1], (int) focus[2], 1)) {
+                focusBudget--;
+            }
+            focusExactChunks.addLast(focus);
+        }
+        if (!bulkLoading && focusPriorityBlocksNormalWork(focusExactChunks.size())) return;
+
+        boolean interactiveCoverageComplete = cameraExactChunks.isEmpty();
         int exactBudget = bulkLoading ? BULK_EXACT_UPGRADES_PER_PULSE
             : interactiveCoverageComplete ? TerrainLodPolicy.adaptiveBackgroundBudget(
                 COVERAGE_SUBMISSIONS_PER_PULSE, throttle, 1) : 0;
@@ -1303,6 +1446,7 @@ public final class Terrain3DRenderer {
                     && (desiredStep != 1 || isExactSurface(current)))) continue;
             if (submitChunkGeneration(seed, dimension, (int) priority[1], (int) priority[2],
                 desiredStep)) priorityBudget--;
+            else {cameraQueue.addFirst(priority);break;}
         }
         int retryBudget = bulkLoading ? BULK_RETRY_SUBMISSIONS_PER_PULSE
             : TerrainLodPolicy.adaptiveBackgroundBudget(
@@ -1403,11 +1547,9 @@ public final class Terrain3DRenderer {
     }
 
     private java.util.ArrayDeque<long[]> activeCameraQueue() {
-        if (!cameraCoverageChunks.isEmpty()) return cameraCoverageChunks;
-        // Do not let a finer job overtake coarse work that is already executing.
-        if (!inFlightChunks.isEmpty()) return null;
-        if (!cameraLodChunks.isEmpty()) return cameraLodChunks;
         if (!cameraExactChunks.isEmpty()) return cameraExactChunks;
+        if (!cameraLodChunks.isEmpty()) return cameraLodChunks;
+        if (!cameraCoverageChunks.isEmpty()) return cameraCoverageChunks;
         return null;
     }
 
@@ -1525,7 +1667,7 @@ public final class Terrain3DRenderer {
             }
                 chunkCache.put(key, restored);
                 trimChunkCacheToBudgetLocked(lastCenterChunkX, lastCenterChunkZ);
-                if (presentationFrontier.isRevealed(key)) {
+                if (isTerrainPresented(key)) {
                     invalidateGpuBatchForChunk(restored.chunkX, restored.chunkZ);
                 }
                 return true;
@@ -1590,6 +1732,78 @@ public final class Terrain3DRenderer {
         }
     }
 
+    /** Whole-voxel state with a small boundary dead band prevents mode chatter. */
+    private void updateCameraVoxel(FreeCamera3D camera, long seed, int dimension) {
+        int x = (int)Math.floor(camera.eyeX()), y = (int)Math.floor(camera.eyeY()), z = (int)Math.floor(camera.eyeZ());
+        long key = ChunkPos.pack(Math.floorDiv(x, CHUNK_SIZE), Math.floorDiv(z, CHUNK_SIZE));
+        ChunkData chunk = chunkCache.get(key);
+        long revision = geometryRevisions.getOrDefault(key, 0L);
+        boolean sameWorld = cameraVoxelGeneration == worldGeneration;
+        if (!sameWorld) { cameraInsideSolid = false; cameraBelowSurface = false; }
+        if (sameWorld && x == cameraVoxelX && y == cameraVoxelY && z == cameraVoxelZ
+            && chunk == cameraVoxelSource && revision == cameraVoxelRevision) return;
+        if (sameWorld && chunk == cameraVoxelSource && revision == cameraVoxelRevision
+            && withinVoxelDeadBand(camera.eyeX(),camera.eyeY(),camera.eyeZ(),cameraVoxelX,cameraVoxelY,cameraVoxelZ)) return;
+        // Never run worldgen synchronously for a camera query. Exact predicted
+        // volumes already used by a cave bake are retained on their ChunkData.
+        Boolean opaque = null;
+        if (chunk != null) {
+            int lx = Math.floorMod(x, CHUNK_SIZE), lz = Math.floorMod(z, CHUNK_SIZE);
+            if (chunk.observedSnapshot != null) {
+                BlockState state=snapshotBlock(chunk.observedSnapshot,lx,y,lz);
+                if (state!=null) opaque=state.isSolidRender();
+            } else if (chunk.visibilityOpacity != null) opaque=opaqueAt(chunk.visibilityOpacity,lx,y,lz);
+        }
+        if (opaque == null) {
+            if (chunk != null && chunk.observedSnapshot == null) requestCameraVolume(seed,dimension,key,chunk);
+            return; // Retry when the asynchronous exact volume arrives.
+        }
+        cameraVoxelX=x; cameraVoxelY=y; cameraVoxelZ=z; cameraVoxelGeneration=worldGeneration;
+        cameraVoxelSource=chunk; cameraVoxelRevision=revision;
+        cameraInsideSolid=opaque;
+        int localIndex=Math.floorMod(z,CHUNK_SIZE)*CHUNK_SIZE+Math.floorMod(x,CHUNK_SIZE);
+        int surface=chunk.observedSnapshot!=null
+            ? chunk.observedSnapshot.surfaceY(Math.floorMod(x,CHUNK_SIZE),Math.floorMod(z,CHUNK_SIZE))
+            : chunk.heights[localIndex];
+        cameraBelowSurface = y < surface;
+    }
+
+    private void requestCameraVolume(long seed,int dimension,long key,ChunkData chunk) {
+        WorkKey work=new WorkKey(seed,dimension,key,worldGeneration);
+        if (!cameraVolumeRequests.isEmpty() || !cameraVolumeRequests.add(work)) return;
+        cameraVolumeExecutor.execute(() -> {
+            try {
+                if (!isCurrent(work)) return;
+                ChunkAccess blocks=carvedTerrain(seed,dimension).getChunk(new ChunkPos(chunk.chunkX,chunk.chunkZ));
+                if (isCurrent(work) && chunkCache.get(key)==chunk) chunk.visibilityOpacity=opaqueVoxels(blocks);
+            } finally { cameraVolumeRequests.remove(work); }
+        });
+    }
+
+    /** Fixed 12 KiB occupancy mask; never retain whole vanilla chunks in the surface cache. */
+    private static long[] opaqueVoxels(ChunkAccess blocks) {
+        long[] mask=new long[384*256/64];
+        BlockPos.MutableBlockPos pos=new BlockPos.MutableBlockPos();
+        int bx=blocks.getPos().getMinBlockX(), bz=blocks.getPos().getMinBlockZ();
+        for(int y=Math.max(-64,blocks.getMinY());y<=Math.min(319,blocks.getMaxY());y++)
+            for(int z=0;z<16;z++)for(int x=0;x<16;x++)
+                if(blocks.getBlockState(pos.set(bx+x,y,bz+z)).isSolidRender()) {
+                    int index=((y+64)<<8)|(z<<4)|x; mask[index>>>6]|=1L<<(index&63);
+                }
+        return mask;
+    }
+
+    private static boolean opaqueAt(long[] mask,int x,int y,int z) {
+        if(y < -64 || y >=320) return false;
+        int index=((y+64)<<8)|(z<<4)|x;
+        return (mask[index>>>6]&(1L<<(index&63)))!=0;
+    }
+
+    static boolean withinVoxelDeadBand(double x,double y,double z,int vx,int vy,int vz) {
+        double epsilon=0.015;
+        return x>=vx-epsilon&&x<vx+1+epsilon&&y>=vy-epsilon&&y<vy+1+epsilon&&z>=vz-epsilon&&z<vz+1+epsilon;
+    }
+
     private TerrainRenderStats renderPersistentTerrain(FreeCamera3D camera, long seed,
                                                         int dimension, int centerChunkX,
                                                         int centerChunkZ, boolean caveView,
@@ -1597,18 +1811,18 @@ public final class Terrain3DRenderer {
                                                         BlockTextureAtlas atlas,
                                                         TerrainFocusTarget inspectionTarget) {
         long started = System.nanoTime();
-        // Structure orbit uses the same camera-to-target tunnel as the cave
-        // view so nearby terrain cannot cover the selected preview while it
-        // rotates.
-        CaveCutaway requestedCutaway = (caveView || inspectionTarget != null)
-            ? CaveCutaway.at(camera, inspectionTarget) : null;
+        // Surface structure inspection keeps the terrain and exterior intact.
+        // Nether caves are viewed from inside: removing nearby geometry deletes
+        // the lava banks, floor and walls visible from the same in-world camera.
+        // Spectator visibility uses exposed, outward-wound faces. No sphere or
+        // camera-to-target tunnel removes real cave walls, ledges or floors.
         if (!caveView) drainPresentationReveals();
-        ensureGpuBatchWindow(camera, centerChunkX, centerChunkZ, caveView, textureDebugView,
-            requestedCutaway);
+        ensureGpuBatchWindow(camera, centerChunkX, centerChunkZ, caveView, textureDebugView);
         processPendingGpuUploads();
-        continueGpuBatchBuild(camera, seed, dimension, caveView, textureDebugView, requestedCutaway);
+        continueGpuBatchBuild(camera, seed, dimension, caveView, textureDebugView);
 
-        int renderedBatches = renderGpuBatches(SeedExplorerRenderPipelines.WORLD_TEXTURED,
+        int renderedBatches = renderGpuBatches(caveView
+            ? SeedExplorerRenderPipelines.CAVE_TEXTURED : SeedExplorerRenderPipelines.WORLD_TEXTURED,
             atlas, camera, TerrainGpuLayer.SOLID);
         renderGpuBatches(SeedExplorerRenderPipelines.WORLD_TEXTURED_CUTOUT,
             atlas, camera, TerrainGpuLayer.CUTOUT);
@@ -1658,31 +1872,18 @@ public final class Terrain3DRenderer {
     }
 
     private void updateBakeConcurrency() {
-        int desired = performanceThrottle <= 0 ? BAKE_THREADS
-            : performanceThrottle == 1 ? Math.max(1, BAKE_THREADS / 2) : 1;
-        if (bakeExecutor.getCorePoolSize() == desired
-            && bakeExecutor.getMaximumPoolSize() == desired) return;
-        if (desired > bakeExecutor.getMaximumPoolSize()) {
-            bakeExecutor.setMaximumPoolSize(desired);
-            bakeExecutor.setCorePoolSize(desired);
-        } else {
-            bakeExecutor.setCorePoolSize(desired);
-            bakeExecutor.setMaximumPoolSize(desired);
-        }
+        // Admission budgets already respond to frame time. Resizing the pool
+        // repeatedly destroyed worker-local vanilla caches and caused GC spikes.
     }
 
     private void ensureGpuBatchWindow(FreeCamera3D camera, int centerChunkX, int centerChunkZ,
-                                      boolean caveView, boolean textureDebugView,
-                                      CaveCutaway requestedCutaway) {
+                                      boolean caveView, boolean textureDebugView) {
         boolean modeChanged = caveView != gpuCaveView
             || textureDebugView != gpuTextureDebugView;
-        boolean cutawayChanged = (caveView || requestedCutaway != null || gpuCaveCutaway != null)
-            && !CaveCutaway.sameBucket(gpuCaveCutaway, requestedCutaway);
         int radius = caveView ? CAVE_RENDER_RADIUS_CHUNKS : renderDistanceChunks(camera);
         boolean windowChanged = gpuCameraChunkX == Integer.MIN_VALUE
             || Math.abs(centerChunkX - gpuCameraChunkX) >= 4
             || Math.abs(centerChunkZ - gpuCameraChunkZ) >= 4
-            || cutawayChanged
             || radius != gpuVisibleRadius
             || (!caveView && (streamAnchorChunkX != gpuWindowAnchorX
                 || streamAnchorChunkZ != gpuWindowAnchorZ));
@@ -1708,14 +1909,6 @@ public final class Terrain3DRenderer {
             addGpuBatchSquare(visible, centerChunkX, centerChunkZ, Math.min(radius, RENDER_DIST), batchSize);
         }
         visibleGpuBatchKeys = Set.copyOf(visible);
-
-        if (cutawayChanged && !modeChanged) {
-            // Only the batches touched by the old or new inspection bubble need
-            // replacement. Keeping the rest of the cave window resident avoids a
-            // full mesh churn every time the camera crosses a 16-block cell.
-            activeGpuBuild = null;
-            refreshCaveCutawayBatches(gpuCaveCutaway, requestedCutaway);
-        }
 
         for (var iterator = gpuBatches.entrySet().iterator(); iterator.hasNext();) {
             Map.Entry<Long, TerrainGpuBatch> entry = iterator.next();
@@ -1774,31 +1967,9 @@ public final class Terrain3DRenderer {
 
         gpuCameraChunkX = centerChunkX;
         gpuCameraChunkZ = centerChunkZ;
-        gpuCaveCutaway = requestedCutaway;
         gpuVisibleRadius = radius;
         gpuWindowAnchorX = streamAnchorChunkX;
         gpuWindowAnchorZ = streamAnchorChunkZ;
-    }
-
-    private void refreshCaveCutawayBatches(CaveCutaway previous, CaveCutaway current) {
-        for (long key : visibleGpuBatchKeys) {
-            if (!caveCutawayAffectsBatch(previous, key, gpuBatchSize(gpuCaveView))
-                && !caveCutawayAffectsBatch(current, key, gpuBatchSize(gpuCaveView))) continue;
-            gpuBatchRevisions.put(key, nextGpuBatchRevision.incrementAndGet());
-            queueGpuBatchPriority(key);
-        }
-    }
-
-    private static boolean caveCutawayAffectsBatch(CaveCutaway cutaway, long key, int batchSize) {
-        if (cutaway == null) return false;
-        int baseChunkX = ChunkPos.getX(key) * batchSize;
-        int baseChunkZ = ChunkPos.getZ(key) * batchSize;
-        for (int dx = 0; dx < batchSize; dx++) {
-            for (int dz = 0; dz < batchSize; dz++) {
-                if (cutaway.affectsChunk(baseChunkX + dx, baseChunkZ + dz)) return true;
-            }
-        }
-        return false;
     }
 
     private static void addGpuBatchSquare(Set<Long> destination, int centerChunkX,
@@ -1831,7 +2002,7 @@ public final class Terrain3DRenderer {
             for (int dz = 0; dz < batchSize; dz++) {
                 long chunkKey = ChunkPos.pack(baseChunkX + dx, baseChunkZ + dz);
                 if (chunkCache.containsKey(chunkKey)
-                    && (gpuCaveView || presentationFrontier.isRevealed(chunkKey))) return true;
+                    && (gpuCaveView || isTerrainPresented(chunkKey))) return true;
             }
         }
         return false;
@@ -1847,7 +2018,7 @@ public final class Terrain3DRenderer {
                 long chunkKey = ChunkPos.pack(baseChunkX + dx, baseChunkZ + dz);
                 ChunkData chunk = chunkCache.get(chunkKey);
                 if (chunk == null) continue;
-                if (!presentationFrontier.isRevealed(chunkKey)) continue;
+                if (!isTerrainPresented(chunkKey)) continue;
                 int sourceStep = sampleStep(camera, chunk);
                 int displayStep = sourceStep;
                 if (sourceStep == 1 && isExactSurface(chunk)) {
@@ -1870,14 +2041,13 @@ public final class Terrain3DRenderer {
     }
 
     private void continueGpuBatchBuild(FreeCamera3D camera, long seed, int dimension,
-                                       boolean caveView, boolean textureDebugView,
-                                       CaveCutaway caveCutaway) {
+                                       boolean caveView, boolean textureDebugView) {
         if (activeGpuBuild == null) {
             if (gpuUploadPackingJobs.get() + pendingGpuUploads.size()
                 >= MAX_PENDING_GPU_UPLOADS) return;
             Long key = pollGpuBatch();
             if (key == null) return;
-            activeGpuBuild = beginGpuBuild(key, camera, caveView, caveCutaway);
+            activeGpuBuild = beginGpuBuild(key, camera, caveView);
         }
 
         TerrainGpuBuild build = activeGpuBuild;
@@ -1920,11 +2090,6 @@ public final class Terrain3DRenderer {
     }
 
     private TerrainGpuBuild beginGpuBuild(long key, FreeCamera3D camera, boolean caveView) {
-        return beginGpuBuild(key, camera, caveView, null);
-    }
-
-    private TerrainGpuBuild beginGpuBuild(long key, FreeCamera3D camera, boolean caveView,
-                                          CaveCutaway caveCutaway) {
         int batchSize = gpuBatchSize(caveView);
         int baseChunkX = ChunkPos.getX(key) * batchSize;
         int baseChunkZ = ChunkPos.getZ(key) * batchSize;
@@ -1933,7 +2098,7 @@ public final class Terrain3DRenderer {
             for (int dz = 0; dz < batchSize; dz++) {
                 long chunkKey = ChunkPos.pack(baseChunkX + dx, baseChunkZ + dz);
                 ChunkData chunk = chunkCache.get(chunkKey);
-                if (!caveView && !presentationFrontier.isRevealed(chunkKey)) continue;
+                if (!caveView && !isTerrainPresented(chunkKey)) continue;
                 if (chunk != null) chunks.add(chunk);
             }
         }
@@ -1958,7 +2123,7 @@ public final class Terrain3DRenderer {
         BakingSink fluid = new BakingSink();
         return new TerrainGpuBuild(key, gpuBatchRevisions.getOrDefault(key, 0L),
             chunks, solid, cutout, fluid, requestedSteps, lodSignature,
-            minimumVertices, caveCutaway);
+            minimumVertices);
     }
 
     private int requestedDisplayStep(FreeCamera3D camera, ChunkData chunk,
@@ -2003,11 +2168,10 @@ public final class Terrain3DRenderer {
                 && submitBake(seed, dimension, chunk, camera, textureDebugView, includeCaves)) {
                 submitted = 1;
             }
-            // An empty cave region must not become final just because every
-            // worker slot was occupied when it was first visited. The completed
-            // bake will also invalidate this batch, but this retry covers a
-            // temporarily exhausted admission budget and retained old bakes.
-            if (caveView && submitted == 0) queueGpuBatchPriority(build.key());
+            // A placeholder must not become final just because every worker
+            // slot was occupied when this batch was visited. Retry surfaces as
+            // well as caves; background warmup may only supply a coarser LOD.
+            if (sourceReady && submitted == 0) queueGpuBatchPriority(build.key());
         }
 
         if (baked == null) {
@@ -2015,16 +2179,9 @@ public final class Terrain3DRenderer {
             if (!caveView) {
                 int fallbackStep = fallbackDisplayStep(requestedDataStep,
                     requestedDisplayStep, vertexBudget);
-                BakingSink fallbackSolid = build.caveCutaway() == null
-                    ? build.solid() : new BakingSink();
-                int vertices = renderMinimumSurfaceFallback(fallbackSolid,
+                int vertices = renderMinimumSurfaceFallback(build.solid(),
                     build.fluid(), chunk, dimension, requestedDataStep,
                     fallbackStep, vertexBudget);
-                if (fallbackSolid != build.solid()) {
-                    int filtered = build.solid().appendFiltered(fallbackSolid.finish(),
-                        build.caveCutaway());
-                    vertices = filtered;
-                }
                 if (vertices > 0) {
                     build.addVertices(vertices);
                     build.incrementRenderedChunks();
@@ -2038,13 +2195,11 @@ public final class Terrain3DRenderer {
         if (caveView) {
             int vertices = baked.caveVertexCount();
             if (vertices > 0 && vertices <= vertexBudget) {
-                // Cave meshes stay camera-independent in the bake cache. Filtering
-                // their quads here makes a moving focus corridor cheap: no carver or
-                // block resampling is needed as the orbit advances.
-                int visibleVertices = build.solid().appendFiltered(
-                    baked.caveSolid(), build.caveCutaway());
-                build.addVertices(visibleVertices);
-                if (visibleVertices > 0) build.incrementRenderedChunks();
+                // Keep complete exposed boundaries; outward winding and the GPU
+                // select visible faces without changing cached geometry.
+                build.solid().append(baked.caveSolid());
+                build.addVertices(vertices);
+                build.incrementRenderedChunks();
             }
             return submitted;
         }
@@ -2067,18 +2222,8 @@ public final class Terrain3DRenderer {
             if (naturalVertices > 0 && !includeNatural) {
                 naturalFeatureBudgetSkips.incrementAndGet();
             }
-            // During a structure orbit, remove terrain quads in the same
-            // camera-to-target tunnel used by the cave shell. This keeps the
-            // preview readable without changing the persistent terrain bake.
-            if (build.caveCutaway() != null) {
-                build.solid().appendFiltered(selected.solid(), build.caveCutaway());
-                if (includeNatural) {
-                    naturalTarget.appendFiltered(baked.naturalSolid(), build.caveCutaway());
-                }
-            } else {
-                build.solid().append(selected.solid());
-                if (includeNatural) naturalTarget.append(baked.naturalSolid());
-            }
+            build.solid().append(selected.solid());
+            if (includeNatural) naturalTarget.append(baked.naturalSolid());
             build.fluid().append(selected.fluid());
             build.addVertices(selected.vertexCount()
                 + (includeNatural ? naturalVertices : 0));
@@ -2095,15 +2240,9 @@ public final class Terrain3DRenderer {
         }
         int fallbackStep = fallbackDisplayStep(requestedDataStep,
             requestedDisplayStep, vertexBudget);
-        BakingSink fallbackSolid = build.caveCutaway() == null
-            ? build.solid() : new BakingSink();
-        int vertices = renderMinimumSurfaceFallback(fallbackSolid,
+        int vertices = renderMinimumSurfaceFallback(build.solid(),
             build.fluid(), chunk, dimension, requestedDataStep,
             fallbackStep, vertexBudget);
-        if (fallbackSolid != build.solid()) {
-            vertices = build.solid().appendFiltered(fallbackSolid.finish(),
-                build.caveCutaway());
-        }
         if (vertices > 0) {
             build.addVertices(vertices);
             build.incrementRenderedChunks();
@@ -2500,6 +2639,7 @@ public final class Terrain3DRenderer {
         int drained = 0;
         while (drained < MAX_PRESENTATION_REVEALS_PER_FRAME
             && (chunkKey = presentationFrontier.pollNewlyRevealed()) != null) {
+            priorityRevealedChunks.remove(chunkKey);
             batches.add(ChunkPos.pack(
                 Math.floorDiv(ChunkPos.getX(chunkKey), GPU_BATCH_SIZE_CHUNKS),
                 Math.floorDiv(ChunkPos.getZ(chunkKey), GPU_BATCH_SIZE_CHUNKS)));
@@ -2544,7 +2684,6 @@ public final class Terrain3DRenderer {
         displayedSurfaceSteps.clear();
         gpuCameraChunkX = Integer.MIN_VALUE;
         gpuCameraChunkZ = Integer.MIN_VALUE;
-        gpuCaveCutaway = null;
         gpuVisibleRadius = -1;
         gpuWindowAnchorX = Integer.MIN_VALUE;
         gpuWindowAnchorZ = Integer.MIN_VALUE;
@@ -2601,6 +2740,7 @@ public final class Terrain3DRenderer {
         for (ChunkData chunk : candidates) {
             long key = ChunkPos.pack(chunk.chunkX, chunk.chunkZ);
             if (chunkCache.remove(key, chunk)) {
+                priorityRevealedChunks.remove(key);
                 removed = true;
             }
         }
@@ -2639,11 +2779,12 @@ public final class Terrain3DRenderer {
             long bytes = baked.estimatedBytes() - (previous == null ? 0 : previous.estimatedBytes());
             bakedCacheBytes.addAndGet(bytes);
             boolean presentationVisible = gpuCaveView
-                || presentationFrontier.isRevealed(key);
+                || isTerrainPresented(key);
             if (presentationVisible
                 && TerrainLodPolicy.bakeAffectsActiveView(gpuCaveView, baked.cavesIncluded())) {
                 invalidateGpuBatchForChunk(baked.chunkX(), baked.chunkZ(),
-                    gpuCaveView && baked.cavesIncluded());
+                    focusPriorityKeys.contains(key)
+                        || gpuCaveView && baked.cavesIncluded());
             } else if (presentationVisible && gpuCaveView) {
                 // A surface bake already running at the mode switch may have held
                 // this chunk's work key. Revisit its region after that work ends so
@@ -2835,6 +2976,17 @@ public final class Terrain3DRenderer {
 
         int budget = TerrainLodPolicy.adaptiveBackgroundBudget(
             2, performanceThrottle, 1);
+        // The FIFO may contain thousands of distant warmup jobs. Reserve its
+        // admission for missing camera-neighbor detail before draining that work.
+        for(int ring=0;ring<=2&&budget>0;ring++) {
+            for(int dz=-ring;dz<=ring&&budget>0;dz++)for(int dx=-ring;dx<=ring&&budget>0;dx++) {
+                if(Math.max(Math.abs(dx),Math.abs(dz))!=ring)continue;
+                long key=ChunkPos.pack(centerChunkX+dx,centerChunkZ+dz);
+                ChunkData local=chunkCache.get(key);BakedChunk localBake=bakedCache.get(key);
+                if(local==null||!isExactSurface(local)||localBake!=null&&localBake.hasSurfaceLod(1))continue;
+                if(submitBake(seed,dimension,local,1,false,local.observedAt,false))budget--;
+            }
+        }
         int examined = 0;
         int maximumExamined = 128;
         while (budget > 0 && examined++ < maximumExamined) {
@@ -2850,9 +3002,14 @@ public final class Terrain3DRenderer {
             int desiredStep = generationStepForDistance(distance);
             if (desiredStep == 1 && !isExactSurface(chunk)) continue;
             if (chunk.generatedStep > desiredStep) continue;
-            int step = isExactSurface(chunk) ? TerrainLodPolicy.EXACT_DISPLAY_MAX_STEP
+            // Nearby exact bakes must contain the step-1 mesh requested by the
+            // camera. A step-8 warmup used to replace/refuse that detail forever,
+            // mixing opaque water placeholders with completed translucent tiles.
+            int step = isExactSurface(chunk)
+                ? (distance <= CAMERA_EXACT_RING_CHUNKS ? 1 : TerrainLodPolicy.EXACT_DISPLAY_MAX_STEP)
                 : Math.max(chunk.generatedStep, desiredStep);
             BakedChunk baked = bakedCache.get(key);
+            if(baked!=null&&baked.step()<step)step=baked.step();
             boolean includeCaves = TerrainLodPolicy.shouldPrebakeUndergroundGeometry(
                 dimension, distance, CAVE_RENDER_RADIUS_CHUNKS, isExactSurface(chunk));
             if (!isBakeStaleAtStep(baked, seed, dimension, chunk, step, false, includeCaves)) {
@@ -2987,6 +3144,10 @@ public final class Terrain3DRenderer {
             try {
                 ChunkData generated = generateChunkData(seed, dimension, cx, cz, generatedStep);
                 boolean retained = storeGeneratedChunk(workKey, key, generated);
+                if (isCurrent(workKey) && focusPriorityKeys.contains(key)
+                    && !needsGeneration(chunkCache.get(key), 1)) {
+                    focusPresentationFrontier.markReady(key);
+                }
                 if (isCurrent(workKey) && chunkCache.containsKey(key)
                     && presentationFrontier.hasSequence(key)) {
                     presentationFrontier.markReady(key);
@@ -3083,8 +3244,9 @@ public final class Terrain3DRenderer {
             if (!bulkLoading) {
                 invalidateBakedDependencies(generated.chunkX, generated.chunkZ,
                     generated.observedSnapshot != null);
-                if (presentationFrontier.isRevealed(key)) {
-                    invalidateGpuBatchForChunk(generated.chunkX, generated.chunkZ);
+                if (isTerrainPresented(key)) {
+                    invalidateGpuBatchForChunk(generated.chunkX, generated.chunkZ,
+                        focusPriorityKeys.contains(key));
                 }
             }
             long completedRegion = streamRegionKey(generated.chunkX, generated.chunkZ);
@@ -3111,7 +3273,9 @@ public final class Terrain3DRenderer {
     /** The detail step a chunk's geometry should be baked at, given the camera. */
     private int bakeStep(FreeCamera3D camera, ChunkData chunk) {
         int dataStep = sampleStep(camera, chunk);
-        return Math.max(displayStep(camera, chunk, dataStep), chunk.generatedStep);
+        int requested=Math.max(displayStep(camera, chunk, dataStep), chunk.generatedStep);
+        BakedChunk current=bakedCache.get(ChunkPos.pack(chunk.chunkX,chunk.chunkZ));
+        return current==null?requested:Math.max(chunk.generatedStep,Math.min(requested,current.step()));
     }
 
     private int displayStep(FreeCamera3D camera, ChunkData chunk, int dataStep) {
@@ -3123,7 +3287,7 @@ public final class Terrain3DRenderer {
 
     private static int minimumVisibleSurfaceVertices(ChunkData chunk, int requestedDataStep) {
         return hasSurfaceData(chunk)
-            ? TerrainLodPolicy.minimumSurfaceVertexReserve(requestedDataStep) : 0;
+            ? requestedDataStep==1?2*TerrainLodPolicy.EXACT_FALLBACK_TOP_VERTICES:80 : 0;
     }
 
     /**
@@ -3148,7 +3312,7 @@ public final class Terrain3DRenderer {
         if (baked.geometryRevision() != geometryRevisions.getOrDefault(
             ChunkPos.pack(chunk.chunkX, chunk.chunkZ), 0L)) return true;
         if (!baked.hasSurfaceLod(step)) return true;
-        if (requireCaves && dimension != 1) {
+        if (requireCaves) {
             if (!baked.cavesIncluded()
                 || baked.caveStep() != undergroundSampleStepFor(chunk, baked.step())) return true;
         }
@@ -3231,7 +3395,7 @@ public final class Terrain3DRenderer {
                                  boolean textureDebugView, long observedAt,
                                  boolean includeCaves, boolean includeNaturalFeatures,
                                  long geometryRevision) {
-        BakingSink caveSolid = new BakingSink();
+        BakingSink caveSolid = new BakingSink(true);
         BakingSink naturalSolid = new BakingSink();
 
         ChunkData surfaceChunk = chunk;
@@ -3269,6 +3433,8 @@ public final class Terrain3DRenderer {
             // surface mesh so changing views never discards either representation.
             WorldgenEngine.TerrainAccessor terrain = terrainAccessor(seed, dimension);
             if (carved == null) carved = carvedTerrain(seed, dimension);
+            if (chunk.observedSnapshot == null && chunk.visibilityOpacity == null)
+                chunk.visibilityOpacity = opaqueVoxels(carved.getChunk(new ChunkPos(chunk.chunkX,chunk.chunkZ)));
             int voxelBudget = chunk.observedSnapshot == null
                 ? MAX_CAVE_VOXELS_PER_CHUNK : MAX_OBSERVED_CAVE_VOXELS_PER_CHUNK;
             renderUndergroundCaveShells(caveSolid, surfaceChunk, terrain, carved, dimension, caveStep,
@@ -3334,7 +3500,7 @@ public final class Terrain3DRenderer {
     private SurfaceSample resolveVanillaSurface(ChunkAccess chunk, int dimension, int worldX, int worldZ) {
         int minY = chunk.getMinY();
         int dimensionMaxY = dimension == -1
-            ? Math.min(chunk.getMaxY() - 1, TerrainMaterialPolicy.NETHER_ROOF_CUTOFF_Y - 1)
+            ? Math.min(chunk.getMaxY() - 1, TerrainMaterialPolicy.NETHER_SURFACE_SCAN_MAX_Y)
             : chunk.getMaxY() - 1;
         int heightmapY = chunk.getHeight(Heightmap.Types.WORLD_SURFACE_WG,
             Math.floorMod(worldX, CHUNK_SIZE), Math.floorMod(worldZ, CHUNK_SIZE));
@@ -3387,7 +3553,7 @@ public final class Terrain3DRenderer {
         if (slot.terrain == null || slot.seed != seed || slot.dimension != dimension) {
             slot.seed = seed;
             slot.dimension = dimension;
-            slot.terrain = new GeneratedTerrainHeightmap(seed, dimension, List.of(), false);
+            slot.terrain = new GeneratedTerrainHeightmap(seed, dimension, List.of(), false, 16);
         }
         return slot.terrain;
     }
@@ -3822,22 +3988,22 @@ public final class Terrain3DRenderer {
                 BlockState fluidState = chunk.fluidStates[index];
                 int fluidY = chunk.fluidHeights[index];
                 if (fluidState != null && fluidY > y) {
-                    TextureRegion fluidRegion = atlas.region(fluidState);
-                    if (fluidRegion != null && TerrainMaterialPolicy.renderAtlasMaterial(atlas.usesFallback(fluidState))) {
-                        RgbaColor fluidTint = textureTintAt(fluidState,
-                            wx + width * 0.5, fluidY, wz + depth * 0.5);
-                        RgbaColor transparentFluid = new RgbaColor(fluidTint.r, fluidTint.g, fluidTint.b, 150);
-                        fluidBuilder.ensureQuadCapacity();
-                        fluidBuilder.quad(
-                            fluidBuilder.vec3(wx, fluidY, wz).vec2(fluidRegion.x1, fluidRegion.y1).color(transparentFluid).next(),
-                            fluidBuilder.vec3(wx + width, fluidY, wz).vec2(fluidRegion.x2, fluidRegion.y1).color(transparentFluid).next(),
-                            fluidBuilder.vec3(wx + width, fluidY, wz + depth).vec2(fluidRegion.x2, fluidRegion.y2).color(transparentFluid).next(),
-                            fluidBuilder.vec3(wx, fluidY, wz + depth).vec2(fluidRegion.x1, fluidRegion.y2).color(transparentFluid).next()
-                        );
-                    }
+                    renderFluidTop(fluidBuilder,atlas,wx,fluidY,wz,width,depth,fluidState);
                 }
             }
         }
+    }
+
+    private void renderFluidTop(GeoSink sink,BlockTextureAtlas atlas,double x,double y,double z,
+                                int width,int depth,BlockState state) {
+        TextureRegion region=atlas.region(state);
+        if(region==null||atlas.usesFallback(state))return;
+        sink.ensureQuadCapacity();
+        sink.quad(
+            sink.vec3(x,y,z).vec2(region.x1,region.y1).color(fluidTintAt(state,x,y,z)).next(),
+            sink.vec3(x+width,y,z).vec2(region.x2,region.y1).color(fluidTintAt(state,x+width,y,z)).next(),
+            sink.vec3(x+width,y,z+depth).vec2(region.x2,region.y2).color(fluidTintAt(state,x+width,y,z+depth)).next(),
+            sink.vec3(x,y,z+depth).vec2(region.x1,region.y2).color(fluidTintAt(state,x,y,z+depth)).next());
     }
 
     /** Renders an inexpensive temporary terrain tile while its detailed mesh bakes. */
@@ -3858,27 +4024,29 @@ public final class Terrain3DRenderer {
                                              int requestedDataStep, int fallbackStep,
                                              int vertexBudget) {
         if (!hasSurfaceData(chunk)) return 0;
-        if (requestedDataStep != 1) {
-            return vertexBudget >= 4 && TerrainLodPolicy.permitsCoarsePlaceholder(requestedDataStep)
-                ? renderCoarsePlaceholder(solidBuilder, chunk, dimension, true) : 0;
-        }
-        if (!isExactSurface(chunk)
-            || fallbackStep < 1
-            || vertexBudget < TerrainLodPolicy.EXACT_FALLBACK_TOP_VERTICES) return 0;
+        if(fallbackStep<1 || vertexBudget<4)return 0;
 
         BlockTextureAtlas atlas = BlockTextureAtlas.get();
         int emitted = 0;
-        int step = fallbackStep;
+        int step = Math.max(fallbackStep,chunk.generatedStep);
         int baseX = chunk.chunkX * CHUNK_SIZE;
         int baseZ = chunk.chunkZ * CHUNK_SIZE;
         for (int dz = 0; dz < CHUNK_SIZE; dz += step) {
             for (int dx = 0; dx < CHUNK_SIZE; dx += step) {
                 SurfaceCell cell = representativeSurfaceCell(chunk, dx, dz, step, atlas);
                 if (cell == null) continue;
-                GeoSink target = isFluid(cell.state()) ? fluidBuilder : solidBuilder;
-                renderSurfaceTop(target, atlas, baseX + dx, cell.y() - 1, baseZ + dz,
-                    step, step, cell.state());
-                emitted += 4;
+                int index=dz*CHUNK_SIZE+dx;
+                BlockState solid=chunk.states[index];
+                boolean fluid=isFluid(cell.state());
+                int tiles=(step+BlockTextureAtlas.TILED_REPEAT_SPAN-1)/BlockTextureAtlas.TILED_REPEAT_SPAN;
+                int needed=4*tiles*tiles+(fluid?4:0);
+                if(emitted+needed>vertexBudget)return emitted;
+                if(fluid) {
+                    if(solid!=null&&!solid.isAir()&&!atlas.usesFallback(solid))
+                        renderSurfaceTop(solidBuilder,atlas,baseX+dx,chunk.heights[index]-1,baseZ+dz,step,step,solid);
+                    renderFluidTop(fluidBuilder,atlas,baseX+dx,cell.y(),baseZ+dz,step,step,cell.state());
+                } else renderSurfaceTop(solidBuilder,atlas,baseX+dx,cell.y()-1,baseZ+dz,step,step,cell.state());
+                emitted+=needed;
             }
         }
         emitted += renderExactFallbackSides(solidBuilder, chunk, atlas, step,
@@ -4481,7 +4649,7 @@ public final class Terrain3DRenderer {
             int localX = worldX - chunk.chunkX * CHUNK_SIZE;
             int localZ = worldZ - chunk.chunkZ * CHUNK_SIZE;
             if (localX >= 0 && localX < CHUNK_SIZE && localZ >= 0 && localZ < CHUNK_SIZE) {
-                return chunk.observedSnapshot.block(localX, y, localZ);
+                return snapshotBlock(chunk.observedSnapshot, localX, y, localZ);
             }
         }
         if (generatedBlocks == null || y < generatedBlocks.getMinY() || y >= generatedBlocks.getMaxY()) {
@@ -4516,7 +4684,6 @@ public final class Terrain3DRenderer {
         if (topRegion == null || !TerrainMaterialPolicy.renderAtlasMaterial(atlas.usesFallback(state))) return;
         // Sample the biome at the actual surface height. A fixed Y=64 lookup
         // made high plateaus and deep valleys inherit the wrong biome tint.
-        RgbaColor tint = textureTintAt(state, x + width * 0.5, y + 1.0, z + depth * 0.5);
         double x2 = x + width;
         double y2 = y + 1;
         double z2 = z + depth;
@@ -4538,10 +4705,10 @@ public final class Terrain3DRenderer {
                 double v2 = region.y1 + (region.y2 - region.y1) * tileDepth / repeatSpan;
                 builder.ensureQuadCapacity();
                 builder.quad(
-                    builder.vec3(tx, y2, tz).vec2(region.x1, region.y1).color(tint).next(),
-                    builder.vec3(tx + tileWidth, y2, tz).vec2(u2, region.y1).color(tint).next(),
-                    builder.vec3(tx + tileWidth, y2, tz + tileDepth).vec2(u2, v2).color(tint).next(),
-                    builder.vec3(tx, y2, tz + tileDepth).vec2(region.x1, v2).color(tint).next());
+                    builder.vec3(tx, y2, tz).vec2(region.x1, region.y1).color(textureTintAt(state,tx, y2, tz)).next(),
+                    builder.vec3(tx + tileWidth, y2, tz).vec2(u2, region.y1).color(textureTintAt(state,tx + tileWidth, y2, tz)).next(),
+                    builder.vec3(tx + tileWidth, y2, tz + tileDepth).vec2(u2, v2).color(textureTintAt(state,tx + tileWidth, y2, tz + tileDepth)).next(),
+                    builder.vec3(tx, y2, tz + tileDepth).vec2(region.x1, v2).color(textureTintAt(state,tx, y2, tz + tileDepth)).next());
             }
         }
     }
@@ -4818,7 +4985,19 @@ public final class Terrain3DRenderer {
         return y == 0 ? (lastDimension == 1 ? 80.0 : 68.0) : y + 8;
     }
 
-    /** Exact preview bounds when available, terrain-height fallback while loading. */
+    /** Do not resolve a new screen against the previous world's preview cache. */
+    public TerrainFocusTarget structureFocusTarget(GeneratedStructure structure, long seed, int dimension) {
+        return seed == lastSeed && dimension == lastDimension ? structureFocusTarget(structure) : null;
+    }
+
+    public boolean structureFocusUnavailable(GeneratedStructure structure, long seed, int dimension) {
+        if (structure == null || structure.y != GeneratedStructure.UNKNOWN_Y
+            || seed != lastSeed || dimension != lastDimension) return false;
+        StructurePreviewModel model = previewCache.get(previewKey(seed, dimension, structure));
+        return model != null && model.isEmpty();
+    }
+
+    /** Exact preview bounds or a known structure Y; null while its position is unresolved. */
     public TerrainFocusTarget structureFocusTarget(GeneratedStructure structure) {
         if (structure == null) return null;
         PreviewKey key = previewKey(lastSeed, lastDimension, structure);
@@ -4830,6 +5009,10 @@ public final class Terrain3DRenderer {
             }
             submitPreviewJobs(List.of(structure), lastSeed, lastDimension);
         }
+        return resolvedStructureFocusTarget(structure, model);
+    }
+
+    static TerrainFocusTarget resolvedStructureFocusTarget(GeneratedStructure structure, StructurePreviewModel model) {
         if (model != null && !model.isEmpty()) {
             double spanX = model.maxX() - model.minX() + 1.0;
             double spanY = model.maxY() - model.minY() + 1.0;
@@ -4843,8 +5026,10 @@ public final class Terrain3DRenderer {
                 distance);
         }
 
-        double y = structure.y != GeneratedStructure.UNKNOWN_Y
-            ? structure.y + 2.0 : terrainSurfaceY(structure.x, structure.z, 64.0) + 4.0;
+        // A map marker's surface height is not its structure's height. Using it
+        // while previews load creates a surface stop followed by a second dive.
+        if (structure.y == GeneratedStructure.UNKNOWN_Y) return null;
+        double y = structure.y + 2.0;
         double distance = switch (structure.type) {
             case VILLAGE, MONUMENT, MANSION, ANCIENT_CITY, TRIAL_CHAMBER,
                  ABANDONED_CAMP,
@@ -4929,12 +5114,10 @@ public final class Terrain3DRenderer {
                 }
             }
             int step = previewStep(camera, structure);
-            boolean inspectInterior = sameStructure(structure, inspectionStructure);
             for (StructurePreviewModel.PreviewBlock block : model.blocks()) {
                 if (renderedBlocks >= MAX_STRUCTURE_PREVIEW_BLOCKS_PER_FRAME) return;
                 if (step > 1 && (Math.floorMod(block.x(), step) != 0 || Math.floorMod(block.z(), step) != 0)) continue;
                 if (!undergroundView && isPreviewBlockBuried(block, step)) continue;
-                if (inspectInterior && isInspectionShellBlock(block, model, camera, step)) continue;
                 BlockState state = block.state();
                 if (state == null || state.isAir()) continue;
                 boolean baked = renderBakedPreviewBlock(vanillaBuilder, block.x(), block.y(), block.z(),
@@ -4946,25 +5129,6 @@ public final class Terrain3DRenderer {
                 renderedBlocks++;
             }
         }
-    }
-
-    /** In focus mode the outside-facing roof/walls are omitted, leaving floors and rooms visible. */
-    private static boolean isInspectionShellBlock(StructurePreviewModel.PreviewBlock block,
-                                                   StructurePreviewModel model,
-                                                   FreeCamera3D camera, int step) {
-        int margin = Math.max(1, step);
-        boolean hasEnclosedHeight = model.maxY() - model.minY() >= 4;
-        boolean onRoof = hasEnclosedHeight && block.y() >= model.maxY() - margin;
-        if (onRoof) return true;
-        boolean onBoundary = block.x() <= model.minX() + margin
-            || block.x() >= model.maxX() - margin
-            || block.z() <= model.minZ() + margin
-            || block.z() >= model.maxZ() - margin;
-        if (!onBoundary) return false;
-        // In inspection mode the whole outside shell is omitted, not just the
-        // wall facing the current camera. Keeping the lowest layer preserves
-        // the structure floor while every orbit angle sees the rooms clearly.
-        return block.y() > model.minY() + margin;
     }
 
     private static boolean sameStructure(GeneratedStructure first, GeneratedStructure second) {
@@ -5730,17 +5894,58 @@ public final class Terrain3DRenderer {
         boolean water = state != null && state.is(Blocks.WATER);
         if (!grass && !water) return base;
         try {
-            var biome = WorldgenEngine.getBiomeHolder(lastSeed, lastDimension,
-                (int) Math.floor(x), (int) Math.floor(y), (int) Math.floor(z));
-            if (biome != null && biome.value() != null) {
-                int rgb = water ? biome.value().getWaterColor()
-                    : biome.value().getGrassColor(x, z);
-                return new RgbaColor((rgb >>> 16) & 0xFF, (rgb >>> 8) & 0xFF, rgb & 0xFF, base.a);
+            int gx=(int)Math.floor(x/4.0),gz=(int)Math.floor(z/4.0),by=(int)Math.floor(y/4.0)*4;
+            double fx=x/4.0-gx,fz=z/4.0-gz;
+            int[] colors={biomeTintGrid(water,gx,by,gz),biomeTintGrid(water,gx+1,by,gz),
+                biomeTintGrid(water,gx,by,gz+1),biomeTintGrid(water,gx+1,by,gz+1)};
+            int rgb=0;
+            for(int shift:new int[]{0,8,16}) {
+                double top=((colors[0]>>>shift)&255)*(1-fx)+((colors[1]>>>shift)&255)*fx;
+                double bottom=((colors[2]>>>shift)&255)*(1-fx)+((colors[3]>>>shift)&255)*fx;
+                rgb|=(int)Math.round(top*(1-fz)+bottom*fz)<<shift;
             }
-        } catch (Throwable ignored) {
-            // Keep the neutral texture if a bootstrap biome is unavailable.
-        }
+            return new RgbaColor((rgb>>>16)&255,(rgb>>>8)&255,rgb&255,base.a);
+        } catch(Throwable ignored) { }
         return base;
+    }
+
+    private record TintKey(long seed,int dimension,boolean water,int gx,int y,int gz) { }
+
+    private RgbaColor fluidTintAt(BlockState state,double x,double y,double z) {
+        RgbaColor tint=textureTintAt(state,x,y,z);
+        if(state.is(Blocks.LAVA))return new RgbaColor(tint.r,tint.g,tint.b,255);
+        int bx=(int)Math.floor(x),bz=(int)Math.floor(z);
+        ChunkData source=chunkCache.get(ChunkPos.pack(Math.floorDiv(bx,16),Math.floorDiv(bz,16)));
+        int bottom=source==null?(int)y-32:source.heights[Math.floorMod(bz,16)*16+Math.floorMod(bx,16)];
+        // Vanilla water attenuates the seabed with depth. Constant alpha exposed
+        // distant coarse seabed edges as pale patches and dark stair-step gaps.
+        double depth=Math.max(0,y-bottom);
+        int alpha=(int)Math.round(150+105*(1-Math.exp(-depth/10.0)));
+        return new RgbaColor(tint.r,tint.g,tint.b,alpha);
+    }
+    // Render-thread placeholders reuse worker-resolved colors without doing
+    // synchronous biome lookup; bounded synchronized access only wraps map ops.
+    private final Map<TintKey,Integer> biomeTintCache=java.util.Collections.synchronizedMap(
+        new java.util.LinkedHashMap<>(512,.75f,true) {
+            @Override protected boolean removeEldestEntry(Map.Entry<TintKey,Integer> entry) {return size()>32768;}
+        });
+
+    private int biomeTintGrid(boolean water,int gx,int y,int gz) {
+        TintKey key=new TintKey(lastSeed,lastDimension,water,gx,y,gz);
+        var cache=biomeTintCache;Integer saved=cache.get(key);if(saved!=null)return saved;
+        // Coarse placeholders run on the render thread. Never make their tint
+        // block on biome/worldgen locks; completed worker bakes replace them.
+        if (Thread.currentThread().getName().equals("Render thread")) return water?0x3F76E4:0x91BD59;
+        int r=0,g=0,b=0,count=0;
+        for(int dz=-1;dz<=1;dz++)for(int dx=-1;dx<=1;dx++) {
+            int x=gx*4+dx*2,z=gz*4+dz*2;
+            var biome=WorldgenEngine.getBiomeHolder(lastSeed,lastDimension,x,y,z);
+            if(biome==null)continue;
+            int color=water?biome.value().getWaterColor():biome.value().getGrassColor(x,z);
+            r+=(color>>>16)&255;g+=(color>>>8)&255;b+=color&255;count++;
+        }
+        int rgb=count==0?(water?0x3F76E4:0x91BD59):(r/count<<16)|(g/count<<8)|(b/count);
+        cache.put(key,rgb);return rgb;
     }
 
     /** Grass side textures already contain their brown dirt base and must not be
@@ -5777,7 +5982,7 @@ public final class Terrain3DRenderer {
 
     /** Finds the highest exposed base-density surface below the Nether roof band. */
     private SurfaceSample resolveNetherSurface(WorldgenEngine.TerrainAccessor terrain, int wx, int wz) {
-        for (int y = TerrainMaterialPolicy.NETHER_ROOF_CUTOFF_Y - 1; y > 0; y--) {
+        for (int y = TerrainMaterialPolicy.NETHER_SURFACE_SCAN_MAX_Y; y > 0; y--) {
             BlockState state = terrain.block(wx, y, wz);
             if (state == null || state.isAir()) continue;
             BlockState above = terrain.block(wx, y + 1, wz);
@@ -5873,8 +6078,9 @@ public final class Terrain3DRenderer {
         // Cave openings are often only one or two blocks tall. Skipping vertical
         // layers made whole passages disappear even when X/Z used a coarse LOD.
         int yStep = 1;
+        if (dimension == -1) step = 1;
         int footprint = Math.max(1, Math.min(step, CHUNK_SIZE));
-        int minY = dimension == -1 ? 1 : CAVE_MIN_Y;
+        int minY = dimension == 0 ? -64 : 0;
         // Coarse surface cache entries only fill the sampled cells in heights[].
         // Cave shells deliberately run at one-block resolution, so using that
         // sparse array as a surface limit skipped nearly every X/Z column. The
@@ -5888,13 +6094,13 @@ public final class Terrain3DRenderer {
             for (int dz = 0; dz < CHUNK_SIZE; dz += step) {
                 int index = dz * CHUNK_SIZE + dx;
                 int surfaceY = chunk.observedSnapshot != null
-                    ? chunk.heights[index]
+                    ? chunk.observedSnapshot.surfaceY(dx,dz)
                     : carvedChunk != null
                         ? carvedChunk.getHeight(Heightmap.Types.WORLD_SURFACE_WG, dx, dz) + 1
                         : chunk.heights[index];
                 int maxY = dimension == -1
                     ? TerrainMaterialPolicy.NETHER_ROOF_CUTOFF_Y - 1
-                    : Math.min(CAVE_MAX_Y, surfaceY - 2);
+                    : Math.min(dimension == 1 ? 255 : 319, surfaceY);
                 if (chunk.observedSnapshot != null) {
                     minY = Math.max(minY, chunk.observedSnapshot.minY());
                     maxY = Math.min(maxY, chunk.observedSnapshot.maxY() - 1);
@@ -5906,7 +6112,19 @@ public final class Terrain3DRenderer {
                 for (int y = minY; y <= maxY; y += yStep) {
                     if (rendered >= remainingBudget) return rendered;
                     BlockState state = sampleBlock(terrain, carved, chunk, dx, y, dz, wx, wz);
-                    if (state == null || state.isAir() || isFluid(state)) continue;
+                    if (state == null || state.isAir()) continue;
+                    // Lava is opaque and belongs in the depth-writing cave mesh.
+                    // The old fluid exclusion removed the entire Nether lava sea.
+                    // Sample every block so a coarse solid LOD cannot bridge shores.
+                    if (state.is(Blocks.LAVA)) {
+                        int exposure = lavaExposure(terrain, carved, chunk, dx, y, dz, wx, wz);
+                        if (exposure != 0) {
+                            renderCaveFaces(builder, atlas, wx, y, wz, state, 1, 1, exposure);
+                            rendered++;
+                        }
+                        continue;
+                    }
+                    if (isFluid(state)) continue;
                     if (!TerrainMaterialPolicy.includeCaveSample(dimension, y, blockId(state))) continue;
                     int width = Math.min(footprint, CHUNK_SIZE - dx);
                     int depth = Math.min(footprint, CHUNK_SIZE - dz);
@@ -5922,17 +6140,40 @@ public final class Terrain3DRenderer {
         return rendered;
     }
 
+    /** Fluid faces border actual air; adjacent lava must never create internal faces. */
+    private int lavaExposure(WorldgenEngine.TerrainAccessor terrain, GeneratedTerrainHeightmap carved,
+                             ChunkData chunk, int localX, int y, int localZ, int worldX, int worldZ) {
+        int mask = 0;
+        if (isCaveFluidBoundary(sampleBlock(terrain, carved, chunk, localX, y + 1, localZ, worldX, worldZ))) mask |= FACE_TOP;
+        if (isCaveFluidBoundary(sampleBlock(terrain, carved, chunk, localX, y - 1, localZ, worldX, worldZ))) mask |= FACE_BOTTOM;
+        if (isCaveFluidBoundary(sampleBlock(terrain, carved, chunk, localX - 1, y, localZ, worldX - 1, worldZ))) mask |= FACE_WEST;
+        if (isCaveFluidBoundary(sampleBlock(terrain, carved, chunk, localX + 1, y, localZ, worldX + 1, worldZ))) mask |= FACE_EAST;
+        if (isCaveFluidBoundary(sampleBlock(terrain, carved, chunk, localX, y, localZ - 1, worldX, worldZ - 1))) mask |= FACE_NORTH;
+        if (isCaveFluidBoundary(sampleBlock(terrain, carved, chunk, localX, y, localZ + 1, worldX, worldZ + 1))) mask |= FACE_SOUTH;
+        return mask;
+    }
+
+    static boolean isCaveFluidBoundary(BlockState neighbor) {
+        return neighbor != null && neighbor.isAir();
+    }
+
+    static boolean caveFaceExposed(BlockState state, BlockState neighbor, net.minecraft.core.Direction direction) {
+        return state != null && neighbor != null
+            && net.minecraft.world.level.block.Block.shouldRenderFace(state, neighbor, direction);
+    }
+
     private int caveExposure(WorldgenEngine.TerrainAccessor terrain, GeneratedTerrainHeightmap carved,
                              ChunkData chunk,
                              int localX, int y, int localZ, int worldX, int worldZ) {
         int neighbor = TerrainMaterialPolicy.exposureNeighborDistance();
+        BlockState state = sampleBlock(terrain, carved, chunk, localX, y, localZ, worldX, worldZ);
         int mask = 0;
-        if (isAirLike(sampleBlock(terrain, carved, chunk, localX, y + neighbor, localZ, worldX, worldZ))) mask |= FACE_TOP;
-        if (isAirLike(sampleBlock(terrain, carved, chunk, localX, y - neighbor, localZ, worldX, worldZ))) mask |= FACE_BOTTOM;
-        if (isAirLike(sampleBlock(terrain, carved, chunk, localX - neighbor, y, localZ, worldX - neighbor, worldZ))) mask |= FACE_WEST;
-        if (isAirLike(sampleBlock(terrain, carved, chunk, localX + neighbor, y, localZ, worldX + neighbor, worldZ))) mask |= FACE_EAST;
-        if (isAirLike(sampleBlock(terrain, carved, chunk, localX, y, localZ - neighbor, worldX, worldZ - neighbor))) mask |= FACE_NORTH;
-        if (isAirLike(sampleBlock(terrain, carved, chunk, localX, y, localZ + neighbor, worldX, worldZ + neighbor))) mask |= FACE_SOUTH;
+        if (caveFaceExposed(state, sampleBlock(terrain, carved, chunk, localX, y + neighbor, localZ, worldX, worldZ), net.minecraft.core.Direction.UP)) mask |= FACE_TOP;
+        if (caveFaceExposed(state, sampleBlock(terrain, carved, chunk, localX, y - neighbor, localZ, worldX, worldZ), net.minecraft.core.Direction.DOWN)) mask |= FACE_BOTTOM;
+        if (caveFaceExposed(state, sampleBlock(terrain, carved, chunk, localX - neighbor, y, localZ, worldX - neighbor, worldZ), net.minecraft.core.Direction.WEST)) mask |= FACE_WEST;
+        if (caveFaceExposed(state, sampleBlock(terrain, carved, chunk, localX + neighbor, y, localZ, worldX + neighbor, worldZ), net.minecraft.core.Direction.EAST)) mask |= FACE_EAST;
+        if (caveFaceExposed(state, sampleBlock(terrain, carved, chunk, localX, y, localZ - neighbor, worldX, worldZ - neighbor), net.minecraft.core.Direction.NORTH)) mask |= FACE_NORTH;
+        if (caveFaceExposed(state, sampleBlock(terrain, carved, chunk, localX, y, localZ + neighbor, worldX, worldZ + neighbor), net.minecraft.core.Direction.SOUTH)) mask |= FACE_SOUTH;
         return mask;
     }
 
@@ -6020,12 +6261,12 @@ public final class Terrain3DRenderer {
         int sampledChunkZ = Math.floorDiv(worldZ, CHUNK_SIZE);
         ChunkData sampled = chunkCache.get(ChunkPos.pack(sampledChunkX, sampledChunkZ));
         if (sampled != null && sampled.observedSnapshot != null) {
-            return sampled.observedSnapshot.block(Math.floorMod(worldX, CHUNK_SIZE), y,
+            return snapshotBlock(sampled.observedSnapshot, Math.floorMod(worldX, CHUNK_SIZE), y,
                 Math.floorMod(worldZ, CHUNK_SIZE));
         }
         if (chunk.observedSnapshot != null && localX >= 0 && localX < CHUNK_SIZE
             && localZ >= 0 && localZ < CHUNK_SIZE) {
-            return chunk.observedSnapshot.block(localX, y, localZ);
+            return snapshotBlock(chunk.observedSnapshot, localX, y, localZ);
         }
         if (carved != null) {
             try {
@@ -6035,6 +6276,14 @@ public final class Terrain3DRenderer {
             }
         }
         return terrain.block(worldX, y, worldZ);
+    }
+
+    /** Complete observed snapshots store air sparsely; outside their volume remains unknown. */
+    static BlockState snapshotBlock(LiveChunkSnapshot snapshot, int localX, int y, int localZ) {
+        if (localX < 0 || localX >= CHUNK_SIZE || localZ < 0 || localZ >= CHUNK_SIZE
+            || y < snapshot.minY() || y >= snapshot.maxY()) return null;
+        BlockState state = snapshot.block(localX, y, localZ);
+        return state == null ? Blocks.AIR.defaultBlockState() : state;
     }
 
     private boolean isAirLike(BlockState state) {
@@ -6056,12 +6305,13 @@ public final class Terrain3DRenderer {
         // Minecraft's terrain shader normally supplies face and sky lighting.
         // This independent map mesh has no chunk lightmap, so retain a generous
         // ambient term and directional face light while keeping the cave shell opaque.
-        RgbaColor topTint = caveLightTint(topBase, 0.92);
-        RgbaColor bottomTint = caveLightTint(sideBase, 0.38);
-        RgbaColor northTint = caveLightTint(sideBase, 0.62);
-        RgbaColor eastTint = caveLightTint(sideBase, 0.54);
-        RgbaColor southTint = caveLightTint(sideBase, 0.76);
-        RgbaColor westTint = caveLightTint(sideBase, 0.68);
+        boolean emissive = state.is(Blocks.LAVA);
+        RgbaColor topTint = caveLightTint(topBase, emissive ? 1.0 : 0.92);
+        RgbaColor bottomTint = caveLightTint(sideBase, emissive ? 1.0 : 0.38);
+        RgbaColor northTint = caveLightTint(sideBase, emissive ? 1.0 : 0.62);
+        RgbaColor eastTint = caveLightTint(sideBase, emissive ? 1.0 : 0.54);
+        RgbaColor southTint = caveLightTint(sideBase, emissive ? 1.0 : 0.76);
+        RgbaColor westTint = caveLightTint(sideBase, emissive ? 1.0 : 0.68);
         double x2 = x + width;
         double y2 = y + TerrainMaterialPolicy.caveFaceHeight();
         double z2 = z + depth;
@@ -6216,6 +6466,7 @@ public final class Terrain3DRenderer {
         private final short[] fluidHeights;
         private final BlockState[] fluidStates;
         private final LiveChunkSnapshot observedSnapshot;
+        private volatile long[] visibilityOpacity;
         private final long observedAt;
         private final int generatedStep;
         private final TerrainAccuracy accuracy;
@@ -6245,9 +6496,11 @@ public final class Terrain3DRenderer {
 
         private ChunkData withNaturalDecorations(
             List<GeneratedTerrainHeightmap.NaturalDecorationBlock> decorations) {
-            return new ChunkData(chunkX, chunkZ, copyHeights(), states.clone(),
+            ChunkData updated = new ChunkData(chunkX, chunkZ, copyHeights(), states.clone(),
                 copyFluidHeights(), fluidStates.clone(), observedSnapshot, observedAt,
                 generatedStep, accuracy, decorations, true);
+            updated.visibilityOpacity = visibilityOpacity;
+            return updated;
         }
 
         private static short[] compactHeights(int[] source) {
@@ -6273,6 +6526,9 @@ public final class Terrain3DRenderer {
     }
 
     private record WorkKey(long seed, int dimension, long chunkKey, long generation) {
+    }
+
+    private record FocusPriorityRequest(int chunkX, int chunkZ) {
     }
 
     private static final class TerrainAccessorSlot {
@@ -6391,7 +6647,6 @@ public final class Terrain3DRenderer {
         private final BakingSink fluid;
         private final Map<Long, Integer> requestedSteps;
         private final long lodSignature;
-        private final CaveCutaway caveCutaway;
         private final Map<Long, Integer> displayedSteps = new java.util.HashMap<>();
         private int nextChunk;
         private int renderedChunks;
@@ -6404,7 +6659,7 @@ public final class Terrain3DRenderer {
         TerrainGpuBuild(long key, long revision, List<ChunkData> chunks,
                         BakingSink solid, BakingSink cutout, BakingSink fluid,
                         Map<Long, Integer> requestedSteps, long lodSignature,
-                        long remainingMinimumVertices, CaveCutaway caveCutaway) {
+                        long remainingMinimumVertices) {
             this.key = key;
             this.revision = revision;
             this.chunks = chunks;
@@ -6414,7 +6669,6 @@ public final class Terrain3DRenderer {
             this.requestedSteps = requestedSteps;
             this.lodSignature = lodSignature;
             this.remainingMinimumVertices = remainingMinimumVertices;
-            this.caveCutaway = caveCutaway;
         }
 
         long key() { return key; }
@@ -6425,7 +6679,6 @@ public final class Terrain3DRenderer {
         BakingSink fluid() { return fluid; }
         Map<Long, Integer> requestedSteps() { return requestedSteps; }
         long lodSignature() { return lodSignature; }
-        CaveCutaway caveCutaway() { return caveCutaway; }
         Map<Long, Integer> displayedSteps() { return displayedSteps; }
         int nextChunk() { return nextChunk; }
         void nextChunk(int nextChunk) { this.nextChunk = nextChunk; }
@@ -6486,6 +6739,10 @@ public final class Terrain3DRenderer {
 
         private int[] quads = new int[384];
         private int qcount; // number of ints written (4 per quad)
+        private final boolean reverseWinding;
+
+        private BakingSink() { this(false); }
+        private BakingSink(boolean reverseWinding) { this.reverseWinding = reverseWinding; }
 
         // Pending vertex attributes between vec3()/vec2()/color()/next().
         private float pxT, pyT, pzT, uT, vT;
@@ -6520,7 +6777,10 @@ public final class Terrain3DRenderer {
 
         @Override public void quad(int i1, int i2, int i3, int i4) {
             if (qcount + 4 > quads.length) quads = java.util.Arrays.copyOf(quads, quads.length * 2);
-            quads[qcount] = i1; quads[qcount + 1] = i2; quads[qcount + 2] = i3; quads[qcount + 3] = i4;
+            quads[qcount] = i1;
+            quads[qcount + 1] = reverseWinding ? i4 : i2;
+            quads[qcount + 2] = i3;
+            quads[qcount + 3] = reverseWinding ? i2 : i4;
             qcount += 4;
         }
 
@@ -6554,60 +6814,6 @@ public final class Terrain3DRenderer {
 
             ensureQuadArrayCapacity(qcount + geometry.quads().length);
             for (int index : geometry.quads()) quads[qcount++] = vertexBase + index;
-        }
-
-        int appendFiltered(BakedGeometry geometry, CaveCutaway cutaway) {
-            if (geometry == null || geometry.isEmpty()) return 0;
-            if (cutaway == null) {
-                int appended = geometry.px().length;
-                append(geometry);
-                return appended;
-            }
-
-            int appended = 0;
-            int[] sourceQuads = geometry.quads();
-            for (int q = 0; q < sourceQuads.length; q += 4) {
-                int i1 = sourceQuads[q];
-                int i2 = sourceQuads[q + 1];
-                int i3 = sourceQuads[q + 2];
-                int i4 = sourceQuads[q + 3];
-                double centerX = (geometry.px()[i1] + geometry.px()[i2]
-                    + geometry.px()[i3] + geometry.px()[i4]) * 0.25;
-                double centerY = (geometry.py()[i1] + geometry.py()[i2]
-                    + geometry.py()[i3] + geometry.py()[i4]) * 0.25;
-                double centerZ = (geometry.pz()[i1] + geometry.pz()[i2]
-                    + geometry.pz()[i3] + geometry.pz()[i4]) * 0.25;
-                if (cutaway.withinCutaway(centerX, centerY, centerZ)
-                    || cutaway.withinCutaway(geometry.px()[i1], geometry.py()[i1], geometry.pz()[i1])
-                    || cutaway.withinCutaway(geometry.px()[i2], geometry.py()[i2], geometry.pz()[i2])
-                    || cutaway.withinCutaway(geometry.px()[i3], geometry.py()[i3], geometry.pz()[i3])
-                    || cutaway.withinCutaway(geometry.px()[i4], geometry.py()[i4], geometry.pz()[i4])) continue;
-
-                ensureVertexCapacity(vcount + 4);
-                ensureQuadArrayCapacity(qcount + 4);
-                int destinationBase = vcount;
-                copyVertex(geometry, i1);
-                copyVertex(geometry, i2);
-                copyVertex(geometry, i3);
-                copyVertex(geometry, i4);
-                quads[qcount++] = destinationBase;
-                quads[qcount++] = destinationBase + 1;
-                quads[qcount++] = destinationBase + 2;
-                quads[qcount++] = destinationBase + 3;
-                appended += 4;
-            }
-            return appended;
-        }
-
-        private void copyVertex(BakedGeometry source, int index) {
-            px[vcount] = source.px()[index];
-            py[vcount] = source.py()[index];
-            pz[vcount] = source.pz()[index];
-            u[vcount] = source.u()[index];
-            v[vcount] = source.v()[index];
-            rgba[vcount] = source.rgba()[index];
-            light[vcount] = source.light()[index];
-            vcount++;
         }
 
         private void ensureVertexCapacity(int required) {
@@ -6795,7 +7001,7 @@ public final class Terrain3DRenderer {
         }
 
         int caveVertexCount() {
-            return dimension != 1 ? caveSolid.px().length : 0;
+            return caveSolid.px().length;
         }
 
         long estimatedBytes() {
@@ -6809,90 +7015,4 @@ public final class Terrain3DRenderer {
         new float[0], new float[0], new float[0], new float[0], new float[0],
         new int[0], new int[0], new int[0]);
 
-    /**
-     * Camera-local cutaway identity used while assembling cave GPU batches. The
-     * canonical baked cave mesh remains complete, so orbit movement only replaces
-     * the small set of batches touched by the old or new cutaway.
-     */
-    private record CaveCutaway(int bucketX, int bucketY, int bucketZ,
-                               double centerX, double centerY, double centerZ,
-                               double targetX, double targetY, double targetZ,
-                               int targetChunkX, int targetChunkZ,
-                               boolean focused) {
-        static CaveCutaway at(FreeCamera3D camera,
-                              TerrainFocusTarget inspectionTarget) {
-            double x = camera.eyeX();
-            double y = camera.eyeY();
-            double z = camera.eyeZ();
-            boolean focused = inspectionTarget != null;
-            int bucketSize = focused ? CAVE_FOCUS_CUTAWAY_BUCKET_BLOCKS
-                : CAVE_CUTAWAY_BUCKET_BLOCKS;
-            int bucketX = Math.floorDiv((int) Math.floor(x), bucketSize);
-            int bucketY = Math.floorDiv((int) Math.floor(y), bucketSize);
-            int bucketZ = Math.floorDiv((int) Math.floor(z), bucketSize);
-            double centerX = bucketX * (double) bucketSize + bucketSize * 0.5;
-            double centerY = bucketY * (double) bucketSize + bucketSize * 0.5;
-            double centerZ = bucketZ * (double) bucketSize + bucketSize * 0.5;
-            double targetX = focused ? inspectionTarget.x() : centerX;
-            double targetY = focused ? inspectionTarget.y() : centerY;
-            double targetZ = focused ? inspectionTarget.z() : centerZ;
-            return new CaveCutaway(bucketX, bucketY, bucketZ, centerX, centerY, centerZ,
-                targetX, targetY, targetZ,
-                Math.floorDiv((int) Math.floor(targetX), CHUNK_SIZE),
-                Math.floorDiv((int) Math.floor(targetZ), CHUNK_SIZE), focused);
-        }
-
-        static boolean sameBucket(CaveCutaway first, CaveCutaway second) {
-            return first == second || (first != null && second != null
-                && first.bucketX == second.bucketX
-                && first.bucketY == second.bucketY
-                && first.bucketZ == second.bucketZ
-                && first.targetChunkX == second.targetChunkX
-                && first.targetChunkZ == second.targetChunkZ
-                && first.focused == second.focused);
-        }
-
-        boolean withinCutaway(double x, double y, double z) {
-            double dx = x - centerX;
-            double dy = y - centerY;
-            double dz = z - centerZ;
-            if (dx * dx + dy * dy + dz * dz
-                <= (double) CAVE_CUTAWAY_RADIUS_BLOCKS * CAVE_CUTAWAY_RADIUS_BLOCKS) return true;
-            return focused && distanceToSegmentSquared(x, y, z) <=
-                (double) CAVE_FOCUS_CORRIDOR_RADIUS_BLOCKS * CAVE_FOCUS_CORRIDOR_RADIUS_BLOCKS;
-        }
-
-        boolean affectsChunk(int chunkX, int chunkZ) {
-            double minX = chunkX * (double) CHUNK_SIZE;
-            double minZ = chunkZ * (double) CHUNK_SIZE;
-            double maxX = minX + CHUNK_SIZE;
-            double maxZ = minZ + CHUNK_SIZE;
-            double horizontalPadding = focused ? CAVE_FOCUS_CORRIDOR_RADIUS_BLOCKS
-                : CAVE_CUTAWAY_RADIUS_BLOCKS;
-            double segmentMinX = Math.min(centerX, targetX) - horizontalPadding;
-            double segmentMaxX = Math.max(centerX, targetX) + horizontalPadding;
-            double segmentMinZ = Math.min(centerZ, targetZ) - horizontalPadding;
-            double segmentMaxZ = Math.max(centerZ, targetZ) + horizontalPadding;
-            return maxX >= segmentMinX && minX <= segmentMaxX
-                && maxZ >= segmentMinZ && minZ <= segmentMaxZ;
-        }
-
-        private double distanceToSegmentSquared(double x, double y, double z) {
-            double vx = targetX - centerX;
-            double vy = targetY - centerY;
-            double vz = targetZ - centerZ;
-            double lengthSq = vx * vx + vy * vy + vz * vz;
-            if (lengthSq <= 1.0e-6) return Double.POSITIVE_INFINITY;
-            double t = ((x - centerX) * vx + (y - centerY) * vy + (z - centerZ) * vz)
-                / lengthSq;
-            t = Math.max(0.0, Math.min(1.0, t));
-            double closestX = centerX + vx * t;
-            double closestY = centerY + vy * t;
-            double closestZ = centerZ + vz * t;
-            double dx = x - closestX;
-            double dy = y - closestY;
-            double dz = z - closestZ;
-            return dx * dx + dy * dy + dz * dz;
-        }
-    }
 }

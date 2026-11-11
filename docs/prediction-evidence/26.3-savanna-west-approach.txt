@@ -1,0 +1,88 @@
+Seed Explorer 26.3 prediction oracle
+created=2026-11-11T01:24:01.051228500Z
+requestedSeeds=1 requestedDimensions=0 includeTypes=village_savanna omitTypes=<none> explicitStarts=1:-16:-435 firstChunk=-19:-435
+locateRadiusChunks=384 windowRadiusChunks=96 queryAttempts=1 predictedSamples=1 dungeonRadiusChunks=4 caseTimeoutTicks=1200 skipLoot=false
+
+SEED 1
+RUNTIME requestedSeed=1 actualSeed=1 serverVersion=26.3 requestedPreset=minecraft:normal requestedStructures=true
+DIMENSION 0
+STRUCTURE_REGISTRY count=52
+  INVENTORY minecraft:abandoned_camp_bamboo_jungle type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_birch_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_cherry_grove type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_dappled_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_flower_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_meadow type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_birch_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_pine_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_spruce_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_pale_garden type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_savanna type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_snowy_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_sparse_jungle type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_swamp type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_windswept_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_wooded_badlands type=ABANDONED_CAMP
+  INVENTORY minecraft:ancient_city type=ANCIENT_CITY
+  INVENTORY minecraft:bastion_remnant type=BASTION
+  INVENTORY minecraft:buried_treasure type=TREASURE
+  INVENTORY minecraft:desert_pyramid type=DESERT_PYRAMID
+  INVENTORY minecraft:end_city type=END_CITY
+  INVENTORY minecraft:fortress type=FORTRESS
+  INVENTORY minecraft:igloo type=IGLOO
+  INVENTORY minecraft:jungle_pyramid type=JUNGLE_TEMPLE
+  INVENTORY minecraft:mansion type=MANSION
+  INVENTORY minecraft:mineshaft type=MINESHAFT
+  INVENTORY minecraft:mineshaft_mesa type=MINESHAFT
+  INVENTORY minecraft:monument type=MONUMENT
+  INVENTORY minecraft:nether_fossil type=NETHER_FOSSIL
+  INVENTORY minecraft:ocean_ruin_cold type=OCEAN_RUIN
+  INVENTORY minecraft:ocean_ruin_warm type=OCEAN_RUIN
+  INVENTORY minecraft:pillager_outpost type=OUTPOST
+  INVENTORY minecraft:ruined_portal type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_desert type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_jungle type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_mountain type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_nether type=NETHER_RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_ocean type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_swamp type=RUINED_PORTAL
+  INVENTORY minecraft:shipwreck type=SHIPWRECK
+  INVENTORY minecraft:shipwreck_beached type=SHIPWRECK
+  INVENTORY minecraft:stronghold type=STRONGHOLD
+  INVENTORY minecraft:swamp_hut type=WITCH_HUT
+  INVENTORY minecraft:trail_ruins type=TRAIL_RUINS
+  INVENTORY minecraft:trial_chambers type=TRIAL_CHAMBER
+  INVENTORY minecraft:village_desert type=VILLAGE
+  INVENTORY minecraft:village_plains type=VILLAGE
+  INVENTORY minecraft:village_savanna type=VILLAGE
+  INVENTORY minecraft:village_snowy type=VILLAGE
+  INVENTORY minecraft:village_taiga type=VILLAGE
+OBSERVATION RUNNING seed=1 dimension=0 id=minecraft:village_savanna
+OBSERVATION initial layout MATCH seed=1 structure=minecraft:village_savanna start=[-16, -435] pieces=160
+OBSERVATION container ACTUAL seed=1 structure=minecraft:village_savanna start=[-16, -435] positions=[BlockPos{x=-244, y=83, z=-7020}] tables=[minecraft:chests/village/village_butcher] lootSeeds=[1091771587167011175] stacks=[minecraft:wheatx1 enchantments={} damage=null potion=null stew=null, minecraft:wheatx1 enchantments={} damage=null potion=null stew=null] unrepresented=[]
+OBSERVATION container ACTUAL seed=1 structure=minecraft:village_savanna start=[-16, -435] positions=[BlockPos{x=-230, y=80, z=-6966}] tables=[minecraft:chests/village/village_mason] lootSeeds=[1139965658739161883] stacks=[minecraft:stone_bricksx1 enchantments={} damage=null potion=null stew=null] unrepresented=[]
+OBSERVATION container ACTUAL seed=1 structure=minecraft:village_savanna start=[-16, -435] positions=[BlockPos{x=-275, y=94, z=-6945}] tables=[minecraft:chests/village/village_cartographer] lootSeeds=[-3784636997899882953] stacks=[minecraft:breadx1 enchantments={} damage=null potion=null stew=null, minecraft:mapx1 enchantments={} damage=null potion=null stew=null, minecraft:mapx1 enchantments={} damage=null potion=null stew=null, minecraft:mapx1 enchantments={} damage=null potion=null stew=null, minecraft:mapx1 enchantments={} damage=null potion=null stew=null, minecraft:paperx1 enchantments={} damage=null potion=null stew=null, minecraft:paperx1 enchantments={} damage=null potion=null stew=null, minecraft:paperx1 enchantments={} damage=null potion=null stew=null, minecraft:paperx1 enchantments={} damage=null potion=null stew=null, minecraft:paperx2 enchantments={} damage=null potion=null stew=null] unrepresented=[]
+OBSERVATION container ACTUAL seed=1 structure=minecraft:village_savanna start=[-16, -435] positions=[BlockPos{x=-271, y=91, z=-6956}] tables=[minecraft:chests/village/village_savanna_house] lootSeeds=[-5738277090587463668] stacks=[minecraft:acacia_saplingx1 enchantments={} damage=null potion=null stew=null, minecraft:acacia_saplingx1 enchantments={} damage=null potion=null stew=null, minecraft:tall_grassx1 enchantments={} damage=null potion=null stew=null, minecraft:wheat_seedsx1 enchantments={} damage=null potion=null stew=null, minecraft:wheat_seedsx1 enchantments={} damage=null potion=null stew=null] unrepresented=[]
+OBSERVATION container ACTUAL seed=1 structure=minecraft:village_savanna start=[-16, -435] positions=[BlockPos{x=-238, y=72, z=-6930}] tables=[minecraft:chests/village/village_savanna_house] lootSeeds=[-4929962542573050225] stacks=[minecraft:acacia_saplingx1 enchantments={} damage=null potion=null stew=null, minecraft:acacia_saplingx1 enchantments={} damage=null potion=null stew=null, minecraft:acacia_saplingx1 enchantments={} damage=null potion=null stew=null, minecraft:wheat_seedsx1 enchantments={} damage=null potion=null stew=null, minecraft:wheat_seedsx1 enchantments={} damage=null potion=null stew=null, minecraft:wheat_seedsx1 enchantments={} damage=null potion=null stew=null] unrepresented=[]
+OBSERVATION container ACTUAL seed=1 structure=minecraft:village_savanna start=[-16, -435] positions=[BlockPos{x=-302, y=102, z=-6917}] tables=[minecraft:chests/village/village_savanna_house] lootSeeds=[2571546462940672192] stacks=[minecraft:acacia_saplingx1 enchantments={} damage=null potion=null stew=null, minecraft:short_grassx1 enchantments={} damage=null potion=null stew=null, minecraft:tall_grassx1 enchantments={} damage=null potion=null stew=null] unrepresented=[]
+OBSERVATION container MATCH seed=1 structure=minecraft:village_savanna positions=[BlockPos{x=-302, y=102, z=-6917}] tables=[minecraft:chests/village/village_savanna_house] lootSeeds=[2571546462940672192] stacks=[minecraft:acacia_saplingx1 enchantments={} damage=null potion=null stew=null, minecraft:short_grassx1 enchantments={} damage=null potion=null stew=null, minecraft:tall_grassx1 enchantments={} damage=null potion=null stew=null]
+OBSERVATION container MATCH seed=1 structure=minecraft:village_savanna positions=[BlockPos{x=-275, y=94, z=-6945}] tables=[minecraft:chests/village/village_cartographer] lootSeeds=[-3784636997899882953] stacks=[minecraft:breadx1 enchantments={} damage=null potion=null stew=null, minecraft:mapx1 enchantments={} damage=null potion=null stew=null, minecraft:mapx1 enchantments={} damage=null potion=null stew=null, minecraft:mapx1 enchantments={} damage=null potion=null stew=null, minecraft:mapx1 enchantments={} damage=null potion=null stew=null, minecraft:paperx1 enchantments={} damage=null potion=null stew=null, minecraft:paperx1 enchantments={} damage=null potion=null stew=null, minecraft:paperx1 enchantments={} damage=null potion=null stew=null, minecraft:paperx1 enchantments={} damage=null potion=null stew=null, minecraft:paperx2 enchantments={} damage=null potion=null stew=null]
+OBSERVATION container MATCH seed=1 structure=minecraft:village_savanna positions=[BlockPos{x=-271, y=91, z=-6956}] tables=[minecraft:chests/village/village_savanna_house] lootSeeds=[-5738277090587463668] stacks=[minecraft:acacia_saplingx1 enchantments={} damage=null potion=null stew=null, minecraft:acacia_saplingx1 enchantments={} damage=null potion=null stew=null, minecraft:tall_grassx1 enchantments={} damage=null potion=null stew=null, minecraft:wheat_seedsx1 enchantments={} damage=null potion=null stew=null, minecraft:wheat_seedsx1 enchantments={} damage=null potion=null stew=null]
+OBSERVATION container MATCH seed=1 structure=minecraft:village_savanna positions=[BlockPos{x=-244, y=83, z=-7020}] tables=[minecraft:chests/village/village_butcher] lootSeeds=[1091771587167011175] stacks=[minecraft:wheatx1 enchantments={} damage=null potion=null stew=null, minecraft:wheatx1 enchantments={} damage=null potion=null stew=null]
+OBSERVATION container MATCH seed=1 structure=minecraft:village_savanna positions=[BlockPos{x=-238, y=72, z=-6930}] tables=[minecraft:chests/village/village_savanna_house] lootSeeds=[-4929962542573050225] stacks=[minecraft:acacia_saplingx1 enchantments={} damage=null potion=null stew=null, minecraft:acacia_saplingx1 enchantments={} damage=null potion=null stew=null, minecraft:acacia_saplingx1 enchantments={} damage=null potion=null stew=null, minecraft:wheat_seedsx1 enchantments={} damage=null potion=null stew=null, minecraft:wheat_seedsx1 enchantments={} damage=null potion=null stew=null, minecraft:wheat_seedsx1 enchantments={} damage=null potion=null stew=null]
+OBSERVATION container MATCH seed=1 structure=minecraft:village_savanna positions=[BlockPos{x=-230, y=80, z=-6966}] tables=[minecraft:chests/village/village_mason] lootSeeds=[1139965658739161883] stacks=[minecraft:stone_bricksx1 enchantments={} damage=null potion=null stew=null]
+PROGRESS seed=1 id=minecraft:village_savanna actual=1 predicted=1 missed=0 extra=0 actualChests=6 predictedChests=6 missedChests=0 extraChests=0 lootMismatch=0 modeledLootMatch=6 metadataUnverified=0 layoutMatch=1 layoutMismatch=0 layoutUnverified=0
+  minecraft:village_savanna actual=1 predicted=1 missed=0 extra=0 actualChests=6 predictedChests=6 missedChests=0 extraChests=0 lootMismatch=0 modeledLootMatch=6 metadataUnverified=0 layoutMatch=1 layoutMismatch=0 layoutUnverified=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+
+STATUS COMPLETE
+FAILURES 0
+
+UNVERIFIED 6
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:village_savanna chest=[BlockPos{x=-302, y=102, z=-6917}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:village_savanna chest=[BlockPos{x=-275, y=94, z=-6945}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:village_savanna chest=[BlockPos{x=-271, y=91, z=-6956}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:village_savanna chest=[BlockPos{x=-244, y=83, z=-7020}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:village_savanna chest=[BlockPos{x=-238, y=72, z=-6930}]
+  modeled loot matched but exact flag is false seed=1 structure=minecraft:village_savanna chest=[BlockPos{x=-230, y=80, z=-6966}]

@@ -5,6 +5,7 @@
 
 package me.seedexplorer.addon.worldgen;
 
+import com.mojang.serialization.MapCodec;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderGetter;
@@ -28,6 +29,7 @@ import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.BiomeResolver;
 import net.minecraft.world.level.biome.BiomeSource;
 import net.minecraft.world.level.biome.Biomes;
+import net.minecraft.world.level.biome.Climate;
 import net.minecraft.world.level.biome.FeatureSorter;
 import net.minecraft.world.level.biome.MultiNoiseBiomeSource;
 import net.minecraft.world.level.biome.MultiNoiseBiomeSourceParameterList;
@@ -61,6 +63,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
+import java.util.stream.Stream;
 
 /**
  * Predicts worldgen data from a seed using vanilla Minecraft worldgen classes.
@@ -81,6 +84,15 @@ public final class WorldgenEngine {
     private static volatile StructureStateCache overworldStructureState;
     private static volatile StructureStateCache netherStructureState;
     private static volatile StructureStateCache endStructureState;
+    private static final Object RING_POSITIONS_LOCK = new Object();
+    private static final Map<RingPositionsKey, List<ChunkPos>> RING_POSITIONS =
+        new LinkedHashMap<>(16, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(
+                Map.Entry<RingPositionsKey, List<ChunkPos>> eldest) {
+                return size() > 16;
+            }
+        };
 
     private WorldgenEngine() {
     }
@@ -255,13 +267,16 @@ public final class WorldgenEngine {
         };
         LevelHeightAccessor heights = LevelHeightAccessor.create(
             view.noiseSettings().minY(), view.noiseSettings().height());
+        RegistryAccess offlineAccess = OfflineWorldgenResources.registryAccess();
+        BiomeSource structureBiomeSource = new TaggedBiomeSource(view.biomeSource(),
+            offlineAccess.lookupOrThrow(Registries.BIOME));
 
         return structure.value().generate(
             structure,
             levelKey,
-            OfflineWorldgenResources.registryAccess(),
+            offlineAccess,
             view.chunkGenerator(),
-            view.biomeSource(),
+            structureBiomeSource,
             view.randomState().createClimateSampler(SamplerContext.EMPTY_UNCACHED),
             view.randomState(),
             OfflineWorldgenResources.structureTemplateManager(),
@@ -272,9 +287,7 @@ public final class WorldgenEngine {
             biome -> {
                 if (biomeAlreadyValidated) return true;
                 try {
-                    boolean result = structureKey.equals(BuiltinStructures.STRONGHOLD)
-                        ? biomeSetContains(structure.value().biomes(), biome)
-                        : structure.value().biomes().contains(biome);
+                    boolean result = biomeSetContains(structure.value().biomes(), biome);
                     if (!result) {
                         if (DEBUG) {
                             biome.unwrapKey().ifPresent(key ->
@@ -330,7 +343,8 @@ public final class WorldgenEngine {
                         && (biomeId.equals("minecraft:bamboo_jungle")
                             || biomeId.equals("minecraft:jungle")
                             || biomeId.equals("minecraft:sparse_jungle"));
-                    boolean isValid = isDesertForPyramid || isStronghold || isOutpost || isTreasure || isMineshaft || isShipwreck || isShipwreckBeached || isJungleTemple;
+                    boolean isValid = isDesertForPyramid || isStronghold || isOutpost || isTreasure
+                        || isMineshaft || isShipwreck || isShipwreckBeached || isJungleTemple;
                     if (!isValid && (structureKey.equals(BuiltinStructures.DESERT_PYRAMID)
                         || structureKey.equals(BuiltinStructures.STRONGHOLD)
                         || structureKey.equals(BuiltinStructures.PILLAGER_OUTPOST)
@@ -388,6 +402,12 @@ public final class WorldgenEngine {
     /** Returns concentric-ring structure positions (strongholds) for the given seed. */
     public static List<ChunkPos> ringPositions(long seed, int dimension,
                                                   ResourceKey<StructureSet> structureSetKey) {
+        RingPositionsKey cacheKey = new RingPositionsKey(seed, dimension, structureSetKey);
+        synchronized (RING_POSITIONS_LOCK) {
+            List<ChunkPos> cached = RING_POSITIONS.get(cacheKey);
+            if (cached != null) return cached;
+        }
+
         ChunkGeneratorStructureState state;
         try {
             state = structureState(seed, dimension);
@@ -397,16 +417,26 @@ public final class WorldgenEngine {
         var lookup = vanillaLookup().lookupOrThrow(Registries.STRUCTURE_SET);
         var holder = lookup.getOrThrow(structureSetKey);
         var placement = holder.value().placement();
+        List<ChunkPos> computed = List.of();
         if (placement instanceof ConcentricRingsStructurePlacement rings) {
             if (state != null) {
                 try {
                     List<ChunkPos> positions = state.getRingPositionsFor(rings);
-                    if (positions != null && !positions.isEmpty()) return positions;
+                    if (positions != null && !positions.isEmpty()) {
+                        computed = List.copyOf(positions);
+                    }
                 } catch (Throwable ignored) {}
             }
-            return computeRingPositionsDirect(seed, dimension, rings);
+            if (computed.isEmpty()) {
+                computed = List.copyOf(computeRingPositionsDirect(seed, dimension, rings));
+            }
         }
-        return List.of();
+        synchronized (RING_POSITIONS_LOCK) {
+            List<ChunkPos> raced = RING_POSITIONS.get(cacheKey);
+            if (raced != null) return raced;
+            RING_POSITIONS.put(cacheKey, computed);
+            return computed;
+        }
     }
 
     /**
@@ -493,7 +523,7 @@ public final class WorldgenEngine {
      * Resolve named sets through that registry and compare identifiers because
      * the biome source and copied registry use different Holder owners.
      */
-    private static boolean biomeSetContains(HolderSet<Biome> set, Holder<Biome> biome) {
+    static boolean biomeSetContains(HolderSet<Biome> set, Holder<Biome> biome) {
         try {
             if (set.isBound() && set.contains(biome)) return true;
         } catch (UnsupportedOperationException ignored) {
@@ -833,5 +863,43 @@ public final class WorldgenEngine {
     }
 
     private record StructureStateCache(long seed, ChunkGeneratorStructureState state) {
+    }
+
+    private record RingPositionsKey(long seed, int dimension,
+                                    ResourceKey<StructureSet> structureSet) {
+    }
+
+    /** Rebinds datagen biome holders to the tag-aware offline registry without
+     * changing the underlying biome values or climate sampling. */
+    private static final class TaggedBiomeSource extends BiomeSource {
+        private final BiomeSource delegate;
+        private final HolderGetter<Biome> taggedBiomes;
+
+        private TaggedBiomeSource(BiomeSource delegate, HolderGetter<Biome> taggedBiomes) {
+            this.delegate = delegate;
+            this.taggedBiomes = taggedBiomes;
+        }
+
+        @Override
+        protected MapCodec<? extends BiomeSource> codec() {
+            return MultiNoiseBiomeSource.CODEC;
+        }
+
+        @Override
+        protected Stream<Holder<Biome>> collectPossibleBiomes() {
+            return delegate.possibleBiomes().stream().map(this::rebind);
+        }
+
+        @Override
+        public BiomeResolver createResolver(Climate.Sampler sampler) {
+            BiomeResolver resolver = delegate.createResolver(sampler);
+            return (quartX, quartY, quartZ) ->
+                rebind(resolver.getNoiseBiome(quartX, quartY, quartZ));
+        }
+
+        private Holder<Biome> rebind(Holder<Biome> biome) {
+            return biome.unwrapKey().flatMap(taggedBiomes::get).<Holder<Biome>>map(holder -> holder)
+                .orElse(biome);
+        }
     }
 }

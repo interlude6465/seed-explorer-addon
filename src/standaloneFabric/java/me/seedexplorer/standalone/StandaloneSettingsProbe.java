@@ -10,8 +10,8 @@ public final class StandaloneSettingsProbe {
 
     public static void main(String[] args) throws Exception {
         StandaloneSeedExplorerSettingsScreen.validateDefinitions();
-        require(StandaloneSeedExplorerSettingsScreen.settingCount() == 32,
-            "native settings no longer match the 32-control Meteor module contract");
+        require(StandaloneSeedExplorerSettingsScreen.settingCount() == 36,
+            "native settings must retain the 32 original controls and four cracking controls");
 
         Path directory = Files.createTempDirectory("seed-explorer-settings-");
         Path path = directory.resolve("seed-explorer.properties");
@@ -38,9 +38,20 @@ public final class StandaloneSettingsProbe {
                 "reset removed persisted waypoints");
             reloaded.selectProfile("server:a");
             reloaded.setSeed(0L);
+            reloaded.setMapDimension(-1);
+            reloaded.setMapStructureFilters(-1, java.util.Set.of("BASTION", "FORTRESS"));
+            reloaded.setMapStructureFilters(0, java.util.Set.of("VILLAGE"));
+            reloaded.save();
+            var mapReload = StandaloneSeedExplorerConfig.load(path);
+            mapReload.selectProfile("server:a");
+            require(mapReload.mapDimension(0) == -1
+                && mapReload.mapStructureFilters(-1).equals(java.util.Set.of("BASTION", "FORTRESS"))
+                && mapReload.mapStructureFilters(0).equals(java.util.Set.of("VILLAGE")),
+                "map selections lost on restart or crossed dimensions");
             reloaded.setStructureVisible("VILLAGE", false);
             reloaded.toggleCompleted(0, "VILLAGE", 12, -34);
             reloaded.selectProfile("server:b");
+            require(reloaded.mapStructureFilters(-1).isEmpty(), "map selections leaked across worlds");
             require(!reloaded.hasSeed(), "new server inherited another server's seed");
             require(reloaded.structureVisible("VILLAGE"), "structure filter leaked across servers");
             require(!reloaded.completed(0, "VILLAGE", 12, -34), "completion leaked across servers");
@@ -58,7 +69,7 @@ public final class StandaloneSettingsProbe {
             require(restarted.hasSeed() && restarted.seed() == 0L, "zero seed lost after restart");
             require(!restarted.structureVisible("VILLAGE"), "visibility lost after restart/reset");
             require(restarted.completed(0, "VILLAGE", 12, -34), "completion lost after restart/reset");
-            System.out.println("Standalone settings probe: PASS (32 controls)");
+            System.out.println("Standalone settings probe: PASS (36 controls)");
         } finally {
             Files.deleteIfExists(path);
             Files.deleteIfExists(directory);

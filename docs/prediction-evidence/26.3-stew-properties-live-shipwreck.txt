@@ -1,0 +1,73 @@
+Seed Explorer 26.3 prediction oracle
+created=2026-11-11T01:32:38.107747300Z
+requestedSeeds=-7046029254386353131 requestedDimensions=0 includeTypes=shipwreck omitTypes=shipwreck_beached explicitStarts=-7046029254386353131:752:967 firstChunk=<default>
+locateRadiusChunks=384 windowRadiusChunks=96 queryAttempts=1 predictedSamples=1 dungeonRadiusChunks=4 caseTimeoutTicks=1200 skipLoot=false
+
+SEED -7046029254386353131
+RUNTIME requestedSeed=-7046029254386353131 actualSeed=-7046029254386353131 serverVersion=26.3 requestedPreset=minecraft:normal requestedStructures=true
+DIMENSION 0
+STRUCTURE_REGISTRY count=52
+  INVENTORY minecraft:abandoned_camp_bamboo_jungle type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_birch_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_cherry_grove type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_dappled_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_flower_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_meadow type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_birch_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_pine_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_old_growth_spruce_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_pale_garden type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_savanna type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_snowy_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_sparse_jungle type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_swamp type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_taiga type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_windswept_forest type=ABANDONED_CAMP
+  INVENTORY minecraft:abandoned_camp_wooded_badlands type=ABANDONED_CAMP
+  INVENTORY minecraft:ancient_city type=ANCIENT_CITY
+  INVENTORY minecraft:bastion_remnant type=BASTION
+  INVENTORY minecraft:buried_treasure type=TREASURE
+  INVENTORY minecraft:desert_pyramid type=DESERT_PYRAMID
+  INVENTORY minecraft:end_city type=END_CITY
+  INVENTORY minecraft:fortress type=FORTRESS
+  INVENTORY minecraft:igloo type=IGLOO
+  INVENTORY minecraft:jungle_pyramid type=JUNGLE_TEMPLE
+  INVENTORY minecraft:mansion type=MANSION
+  INVENTORY minecraft:mineshaft type=MINESHAFT
+  INVENTORY minecraft:mineshaft_mesa type=MINESHAFT
+  INVENTORY minecraft:monument type=MONUMENT
+  INVENTORY minecraft:nether_fossil type=NETHER_FOSSIL
+  INVENTORY minecraft:ocean_ruin_cold type=OCEAN_RUIN
+  INVENTORY minecraft:ocean_ruin_warm type=OCEAN_RUIN
+  INVENTORY minecraft:pillager_outpost type=OUTPOST
+  INVENTORY minecraft:ruined_portal type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_desert type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_jungle type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_mountain type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_nether type=NETHER_RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_ocean type=RUINED_PORTAL
+  INVENTORY minecraft:ruined_portal_swamp type=RUINED_PORTAL
+  INVENTORY minecraft:shipwreck type=SHIPWRECK
+  INVENTORY minecraft:shipwreck_beached type=SHIPWRECK
+  INVENTORY minecraft:stronghold type=STRONGHOLD
+  INVENTORY minecraft:swamp_hut type=WITCH_HUT
+  INVENTORY minecraft:trail_ruins type=TRAIL_RUINS
+  INVENTORY minecraft:trial_chambers type=TRIAL_CHAMBER
+  INVENTORY minecraft:village_desert type=VILLAGE
+  INVENTORY minecraft:village_plains type=VILLAGE
+  INVENTORY minecraft:village_savanna type=VILLAGE
+  INVENTORY minecraft:village_snowy type=VILLAGE
+  INVENTORY minecraft:village_taiga type=VILLAGE
+OBSERVATION RUNNING seed=-7046029254386353131 dimension=0 id=minecraft:shipwreck
+OBSERVATION initial layout MATCH seed=-7046029254386353131 structure=minecraft:shipwreck start=[752, 967] pieces=1
+OBSERVATION container ACTUAL seed=-7046029254386353131 structure=minecraft:shipwreck start=[752, 967] positions=[BlockPos{x=12037, y=42, z=15480}] tables=[minecraft:chests/shipwreck_supply] lootSeeds=[8220817990207311449] stacks=[minecraft:carrotx3 enchantments={} damage=null potion=null stew=null, minecraft:carrotx4 enchantments={} damage=null potion=null stew=null, minecraft:coalx1 enchantments={} damage=null potion=null stew=null, minecraft:coalx1 enchantments={} damage=null potion=null stew=null, minecraft:gunpowderx1 enchantments={} damage=null potion=null stew=null, minecraft:gunpowderx1 enchantments={} damage=null potion=null stew=null, minecraft:leather_bootsx1 enchantments={minecraft:mending=1} damage=null potion=null stew=null, minecraft:potatox1 enchantments={} damage=null potion=null stew=null, minecraft:potatox1 enchantments={} damage=null potion=null stew=null, minecraft:potatox1 enchantments={} damage=null potion=null stew=null, minecraft:potatox5 enchantments={} damage=null potion=null stew=null, minecraft:suspicious_stewx1 enchantments={} damage=null potion=null stew=[minecraft:jump_boost@180], minecraft:suspicious_stewx1 enchantments={} damage=null potion=null stew=[minecraft:jump_boost@200]] unrepresented=[]
+OBSERVATION container MATCH seed=-7046029254386353131 structure=minecraft:shipwreck positions=[BlockPos{x=12037, y=42, z=15480}] tables=[minecraft:chests/shipwreck_supply] lootSeeds=[8220817990207311449] stacks=[minecraft:carrotx3 enchantments={} damage=null potion=null stew=null, minecraft:carrotx4 enchantments={} damage=null potion=null stew=null, minecraft:coalx1 enchantments={} damage=null potion=null stew=null, minecraft:coalx1 enchantments={} damage=null potion=null stew=null, minecraft:gunpowderx1 enchantments={} damage=null potion=null stew=null, minecraft:gunpowderx1 enchantments={} damage=null potion=null stew=null, minecraft:leather_bootsx1 enchantments={minecraft:mending=1} damage=null potion=null stew=null, minecraft:potatox1 enchantments={} damage=null potion=null stew=null, minecraft:potatox1 enchantments={} damage=null potion=null stew=null, minecraft:potatox1 enchantments={} damage=null potion=null stew=null, minecraft:potatox5 enchantments={} damage=null potion=null stew=null, minecraft:suspicious_stewx1 enchantments={} damage=null potion=null stew=[minecraft:jump_boost@180], minecraft:suspicious_stewx1 enchantments={} damage=null potion=null stew=[minecraft:jump_boost@200]]
+PROGRESS seed=-7046029254386353131 id=minecraft:shipwreck actual=1 predicted=1 missed=0 extra=0 actualChests=1 predictedChests=1 missedChests=0 extraChests=0 lootMismatch=0 modeledLootMatch=1 metadataUnverified=0 layoutMatch=1 layoutMismatch=0 layoutUnverified=0
+  minecraft:shipwreck actual=1 predicted=1 missed=0 extra=0 actualChests=1 predictedChests=1 missedChests=0 extraChests=0 lootMismatch=0 modeledLootMatch=1 metadataUnverified=0 layoutMatch=1 layoutMismatch=0 layoutUnverified=0 exactLootMatch=0 observedUnique=0 observedAmbiguous=0
+
+STATUS COMPLETE
+FAILURES 0
+
+UNVERIFIED 1
+  modeled loot matched but exact flag is false seed=-7046029254386353131 structure=minecraft:shipwreck chest=[BlockPos{x=12037, y=42, z=15480}]

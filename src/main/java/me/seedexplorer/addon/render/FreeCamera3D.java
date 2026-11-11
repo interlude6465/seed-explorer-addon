@@ -185,6 +185,11 @@ public final class FreeCamera3D {
         verticalVelocity = 0.0;
     }
 
+    public void cancelAnimation() {
+        animating = false;
+        stopFlight();
+    }
+
     /** Places the camera once at a useful vantage point looking at a world position. */
     public void viewOf(double focusX, double focusY, double focusZ,
                        double distance, double pitchDeg, double yawDeg) {

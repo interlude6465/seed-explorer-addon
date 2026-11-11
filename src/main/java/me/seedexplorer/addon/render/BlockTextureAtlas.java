@@ -44,7 +44,9 @@ import java.util.Set;
  */
 public final class BlockTextureAtlas {
     private static final String ROOT = "/assets/meteor-seed-explorer/textures/blocks/";
-    private static final int MAX_ATLAS_WIDTH = 2048;
+    private static final int MAX_ATLAS_WIDTH = 4096;
+    private static final int MIP_LEVELS = 5;
+    private static final int SPRITE_GUTTER = 16;
     /** Two baked repetitions preserve block-scale texels with at most 2x2
      * quads for a full coarse chunk while keeping atlas startup memory bounded. */
     public static final int TILED_REPEAT_SPAN = 2;
@@ -615,16 +617,16 @@ public final class BlockTextureAtlas {
         int rowHeight = 0;
 
         for (LoadedImage image : images) {
-            if (rowWidth + image.width > MAX_ATLAS_WIDTH) {
+            if (rowWidth + alignSprite(image.width) + 2 * SPRITE_GUTTER > MAX_ATLAS_WIDTH) {
                 width = Math.max(width, rowWidth);
                 height += rowHeight;
                 rowWidth = 0;
                 rowHeight = 0;
             }
-            image.x = 1 + rowWidth;
-            image.y = 1 + height;
-            rowWidth += 1 + image.width + 1;
-            rowHeight = Math.max(rowHeight, 1 + image.height + 1);
+            image.x = SPRITE_GUTTER + rowWidth;
+            image.y = SPRITE_GUTTER + height;
+            rowWidth += alignSprite(image.width) + 2 * SPRITE_GUTTER;
+            rowHeight = Math.max(rowHeight, alignSprite(image.height) + 2 * SPRITE_GUTTER);
         }
         width = Math.max(width, rowWidth);
         height += rowHeight;
@@ -650,24 +652,21 @@ public final class BlockTextureAtlas {
         ((Buffer) buffer).rewind();
 
         GpuTextureResource texture = new GpuTextureResource(
-            width, height, GpuFormat.RGBA8_UNORM, FilterMode.NEAREST, FilterMode.NEAREST);
-        texture.upload(buffer);
+            width, height, GpuFormat.RGBA8_UNORM, FilterMode.LINEAR, FilterMode.NEAREST, MIP_LEVELS);
+        texture.uploadMipmapped(buffer,MIP_LEVELS);
         return texture;
     }
 
+    private static int alignSprite(int value) { return (value+15)&~15; }
+
     private static void duplicatePadding(ByteBuffer atlas, LoadedImage image, int atlasWidth) {
-        for (int x = 0; x < image.width; x++) {
-            copyPixel(image.buffer, x, 0, image.width, atlas, image.x + x, image.y - 1, atlasWidth);
-            copyPixel(image.buffer, x, image.height - 1, image.width, atlas, image.x + x, image.y + image.height, atlasWidth);
-        }
-        for (int y = 0; y < image.height; y++) {
-            copyPixel(image.buffer, 0, y, image.width, atlas, image.x - 1, image.y + y, atlasWidth);
-            copyPixel(image.buffer, image.width - 1, y, image.width, atlas, image.x + image.width, image.y + y, atlasWidth);
-        }
-        copyPixel(image.buffer, 0, 0, image.width, atlas, image.x - 1, image.y - 1, atlasWidth);
-        copyPixel(image.buffer, image.width - 1, 0, image.width, atlas, image.x + image.width, image.y - 1, atlasWidth);
-        copyPixel(image.buffer, 0, image.height - 1, image.width, atlas, image.x - 1, image.y + image.height, atlasWidth);
-        copyPixel(image.buffer, image.width - 1, image.height - 1, image.width, atlas, image.x + image.width, image.y + image.height, atlasWidth);
+        for(int y=-SPRITE_GUTTER;y<alignSprite(image.height)+SPRITE_GUTTER;y++)
+            for(int x=-SPRITE_GUTTER;x<alignSprite(image.width)+SPRITE_GUTTER;x++) {
+                if(x>=0&&x<image.width&&y>=0&&y<image.height)continue;
+                copyPixel(image.buffer,Math.max(0,Math.min(image.width-1,x)),
+                    Math.max(0,Math.min(image.height-1,y)),image.width,
+                    atlas,image.x+x,image.y+y,atlasWidth);
+            }
     }
 
     private static void copyPixel(ByteBuffer source, int sx, int sy, int sourceWidth,
